@@ -1,0 +1,1 @@
+export const GOOGLEAPI_DISTANCE_MATRIX = 'https://maps.googleapis.com/maps/api/distancematrix/json'

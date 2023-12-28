@@ -1,0 +1,1 @@
+type TVehicleType = 'FOUR_WHEELER' | 'SIX_WHEELER' | 'TEN_WHEELER' | 'TRAILER'
