@@ -1,0 +1,1 @@
+type TGenerateIDType = 'individual' | 'business' | 'driver' | 'admin' | 'tracking'

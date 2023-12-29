@@ -18,7 +18,7 @@ export function generateRandomNumberPattern(pattern = 'TT##########'): string {
     return trackingNumber;
 }
 
-export async function generateId(prefix: string, type: 'customer' | 'business' | 'driver' | 'admin' | 'invite' | 'tracking') {
+export async function generateId(prefix: string, type: TGenerateIDType) {
     const counter = await CouterModel.getNextCouter(type)
     const nowUTC = utcToZonedTime(new Date(), 'UTC')
     const datetime_id = format(nowUTC, 'yyMM')

@@ -1,6 +1,6 @@
 import { Resolver, Query, Mutation, Arg, Ctx, UseMiddleware } from 'type-graphql'
 import UserModel, { User } from '@models/user.model'
-import { RegisterInput } from '@inputs/user.input'
+import { RegisterInput, UpdateUserInput } from '@inputs/user.input'
 import bcrypt from 'bcrypt'
 import { AuthGuard } from '@guards/auth.guards'
 import { GraphQLContext } from '@configs/graphQL.config'
@@ -58,8 +58,8 @@ export default class UserResolver {
             email,
             password,
             user_type,
-            // Step 2
-            ...otherRegisterData
+            accept_policy_time,
+            accept_policy_version,
         } = data
 
         try {
@@ -74,28 +74,29 @@ export default class UserResolver {
                 throw new Error('User already exists')
             }
 
-            // TODO: 
             const number_prefix = user_type === 'business' ? 'BU' : 'CU'
             const user_number = await generateId(number_prefix, user_type)
-            const invite_code = await generateId('INV', 'invite')
-            const status = 'active'
-            const credit_limit = 20000 // Get default credit limit from config
+            const status: TUserStatus = 'active'
+            const validation_status: TUserValidationStatus = 'validating'
 
             const hashedPassword = await bcrypt.hash(password, 10)
             const user = new UserModel({
                 user_number,
-                email,
-                password: hashedPassword,
-                username,
                 user_type,
-                registration: platform,
-                invite_code,
+                username: email,
+                password: hashedPassword,
                 status,
-                credit_limit,
-                // Other register data
-                ...otherRegisterData
+                validation_status,
+                registration: platform,
+                is_verified_email: false,
+                is_verified_phone_number: false,
+                accept_policy_version,
+                accept_policy_time,
             })
+
             await user.save()
+
+            // TODO: user detail
 
             return user
         } catch (error) {

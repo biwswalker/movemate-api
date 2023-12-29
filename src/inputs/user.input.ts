@@ -93,6 +93,9 @@ export class RegisterInput {
 @InputType()
 export class UpdateUserInput {
 
+    @Field()
+    id: string
+
     @Field({ nullable: true })
     user_number: string
 
