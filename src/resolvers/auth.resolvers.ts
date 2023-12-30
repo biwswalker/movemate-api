@@ -21,7 +21,7 @@ export default class AuthResolver {
                 throw new Error('Invalid email or password')
             }
 
-            const token = generateAccessToken(user._id)
+            const token = generateAccessToken(user._id, user.user_role)
             ctx.res.cookie('access_token', token, { httpOnly: true })
 
             return {

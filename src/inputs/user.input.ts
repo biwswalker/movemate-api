@@ -5,13 +5,13 @@ export class RegisterInput {
     @Field()
     user_type: TUserType
 
-    @Field()
+    @Field({ nullable: true })
     username: string
 
     @Field()
     password: string
 
-    @Field()
+    @Field({ nullable: true })
     registration: TRegistration
 
     @Field()
@@ -74,7 +74,7 @@ export class RegisterInput {
     @Field({ nullable: true })
     corporate_branch: string
 
-    @Field()
+    @Field({ nullable: true })
     business_type: string
 
     @Field({ nullable: true })

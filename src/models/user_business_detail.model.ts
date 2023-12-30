@@ -3,7 +3,7 @@ import { prop as Property, getModelForClass } from '@typegoose/typegoose'
 import { IsEmail, IsNotEmpty, IsString } from 'class-validator'
 
 @ObjectType()
-export class BusinessUser {
+export class BusinessUserDetail {
     @Field(() => ID)
     readonly _id: string
 
@@ -95,6 +95,6 @@ export class BusinessUser {
 
 }
 
-const BusinessUserModel = getModelForClass(BusinessUser)
+const BusinessUserModel = getModelForClass(BusinessUserDetail)
 
 export default BusinessUserModel

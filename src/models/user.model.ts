@@ -1,7 +1,15 @@
 import { ObjectType, Field, ID } from 'type-graphql'
-import { prop as Property, getModelForClass } from '@typegoose/typegoose'
+import { prop as Property, Ref, getModelForClass } from '@typegoose/typegoose'
 import { IsNotEmpty, IsString, IsEnum } from 'class-validator'
 import bcrypt from 'bcrypt'
+import { IndividualUser } from './user_individual.model'
+import { BusinessUser } from './user_business.model'
+
+enum EUserRole {
+    CUSTOMER = 'customer',
+    ADMIN = 'admin',
+    DRIVER = 'driver',
+}
 
 enum EUserType {
     INDIVIDUAL = 'individual',
@@ -40,6 +48,12 @@ export class User {
     @IsNotEmpty()
     @Property({ enum: EUserType, default: EUserType.INDIVIDUAL, required: true })
     user_type: TUserType
+
+    @Field()
+    @IsEnum(EUserRole)
+    @IsNotEmpty()
+    @Property({ enum: EUserRole, default: EUserRole.CUSTOMER, required: true })
+    user_role: TUserRole
 
     @Field()
     @Property({ required: true, unique: true })
@@ -93,7 +107,7 @@ export class User {
 
     @Field()
     @Property({ required: true })
-    accept_policy_time: string
+    accept_policy_time: Date
 
     @Field()
     @Property({ default: Date.now })
@@ -102,6 +116,15 @@ export class User {
     @Field()
     @Property({ default: Date.now })
     updated_at: Date
+
+    // Relations
+    @Field(() => IndividualUser, { nullable: true })
+    @Property({ ref: () => IndividualUser })
+    individual_detail: Ref<IndividualUser>
+
+    @Field(() => BusinessUser, { nullable: true })
+    @Property({ ref: () => BusinessUser })
+    business_detail: Ref<BusinessUser>
 
     async validatePassword(password: string): Promise<boolean> {
         return bcrypt.compare(password, this.password)
