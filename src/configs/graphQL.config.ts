@@ -6,6 +6,7 @@ import AuthResolver from '@resolvers/auth.resolvers'
 import UserResolver from '@resolvers/user.resolvers'
 import ShipmentResolver from "@resolvers/shipment.resolvers";
 import MapsResolver from "@resolvers/maps.resolvers";
+import FileResolver from "@resolvers/file.resolvers";
 
 export interface GraphQLContext {
     req: Request
@@ -14,7 +15,7 @@ export interface GraphQLContext {
 
 export async function createGraphQLServer() {
     const schema = await buildSchema({
-        resolvers: [AuthResolver, UserResolver, ShipmentResolver, MapsResolver],
+        resolvers: [AuthResolver, UserResolver, ShipmentResolver, MapsResolver, FileResolver],
         authChecker: ({ context }: { context: GraphQLContext }) => {
             const userId = get(context, 'req.userId', '')
             return !!userId

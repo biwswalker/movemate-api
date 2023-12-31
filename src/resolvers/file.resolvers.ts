@@ -1,17 +1,18 @@
-import { Resolver, Query, UseMiddleware, Arg, Mutation } from 'type-graphql'
-import { AuthGuard } from '@guards/auth.guards'
-import { DistanceMatrix } from '@models/distanceMatrix.model'
-import { getDistanceMatrix } from '@services/maps/matrix'
+import { Resolver, Arg, Mutation } from 'type-graphql'
+import { GraphQLUpload, FileUpload } from 'graphql-upload'
 import { File } from '@models/file.model'
 
 @Resolver()
 export default class MapsResolver {
     @Mutation(() => File)
-    async file_upload(@Arg('file', () => GraphQLUpload) file: Express.Multer.File): Promise<File> {
+    async file_upload(@Arg('file', () => GraphQLUpload) file: FileUpload): Promise<FileUpload> {
+        const { filename, mimetype, encoding, createReadStream } = await file
+        console.log(`Received file: ${filename}, mimetype: ${mimetype}, encoding: ${encoding}`);
         return {
-            filename: file.filename,
-            mimetype: file.mimetype,
-            encoding: file.encoding,
-        };
+            filename,
+            mimetype,
+            encoding,
+            createReadStream
+        }
     }
 }

@@ -1,16 +1,17 @@
 import express from 'express'
 import dotenv from 'dotenv'
-import cookieParser from 'cookie-parser'
 import 'reflect-metadata'
 import { connectToMongoDB } from '@configs/mongodb.config'
 import { createGraphQLServer } from '@configs/graphQL.config'
+import { graphqlUploadExpress } from 'graphql-upload'
 
 dotenv.config()
 
 async function server() {
+
     const app = express()
     app.use(express.json())
-    app.use(cookieParser())
+    app.use(graphqlUploadExpress());
 
     await connectToMongoDB()
     const server = await createGraphQLServer()
