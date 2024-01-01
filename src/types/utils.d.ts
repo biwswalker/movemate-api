@@ -1,1 +1,1 @@
-type TGenerateIDType = 'individual' | 'business' | 'driver' | 'admin' | 'tracking'
+type TGenerateIDType = 'individual' | 'business' | 'driver' | 'admin' | 'tracking' | 'upload'

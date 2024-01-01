@@ -16,6 +16,9 @@ export class Couter {
     @Property({ required: true, default: 0 })
     tracking_counter: number
 
+    @Property({ required: true, default: 0 })
+    upload: number
+
     static async getNextCouter(type: TGenerateIDType): Promise<number> {
         const query_option = { upsert: true, new: true }
         if (type === 'individual') {
@@ -33,6 +36,9 @@ export class Couter {
         } else if (type === 'tracking') {
             const counter = await CouterModel.findOneAndUpdate({}, { $inc: { tracking_counter: 1 } }, query_option)
             return counter.tracking_counter
+        } else if (type === 'upload') {
+            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { upload: 1 } }, query_option)
+            return counter.upload
         }
         return 0
     }

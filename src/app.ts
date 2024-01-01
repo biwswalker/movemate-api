@@ -4,6 +4,7 @@ import 'reflect-metadata'
 import { connectToMongoDB } from '@configs/mongodb.config'
 import { createGraphQLServer } from '@configs/graphQL.config'
 import { graphqlUploadExpress } from 'graphql-upload'
+import { authenticateTokenAccessImage } from '@guards/auth.guards'
 
 dotenv.config()
 
@@ -11,7 +12,8 @@ async function server() {
 
     const app = express()
     app.use(express.json())
-    app.use(graphqlUploadExpress());
+    app.use(graphqlUploadExpress())
+    app.use('/public', authenticateTokenAccessImage, express.static('uploads'))
 
     await connectToMongoDB()
     const server = await createGraphQLServer()

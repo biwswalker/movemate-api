@@ -6,5 +6,6 @@ declare namespace NodeJS {
         DATABASE_URL: string
         DATABASE_NAME: string
         MAP_API_KEY: string
+        DOMAINNAME: string
     }
 }

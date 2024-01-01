@@ -130,8 +130,6 @@ export default class UserResolver {
                     break;
             }
 
-            console.log('user_detail...', user_detail)
-
             const hashedPassword = await bcrypt.hash(password, 10)
             const user = new UserModel({
                 user_number,

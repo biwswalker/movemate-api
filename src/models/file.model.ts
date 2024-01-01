@@ -9,5 +9,5 @@ export class File {
     mimetype: string
 
     @Field()
-    encoding: string
+    url: string
 }
