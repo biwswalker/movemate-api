@@ -13,7 +13,8 @@
       "@resolvers/*": ["resolvers/*"],
       "@guards/*": ["guards/*"],
       "@utils/*": ["utils/*"],
-      "@services/*": ["services/*"]
+      "@services/*": ["services/*"],
+      "@apis/*": ["apis/*"],
     },
     "target": "es6",
     "module": "Node16",

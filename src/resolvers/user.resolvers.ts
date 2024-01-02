@@ -8,6 +8,7 @@ import { AuthGuard } from '@guards/auth.guards'
 import { GraphQLContext } from '@configs/graphQL.config'
 import { get, isEmpty } from 'lodash'
 import { generateId } from '@utils/string.utils'
+import { email_sender } from '@utils/email.utils'
 
 @Resolver(User)
 export default class UserResolver {
@@ -149,10 +150,16 @@ export default class UserResolver {
 
             await user.save()
 
-            console.log('user', user)
-
-
-            // TODO: user detail
+            const email_transpoter = email_sender()
+            email_transpoter.sendMail({
+                from: process.env.GOOGLE_MAIL,
+                to: email,
+                subject: 'Welcome to MOVEMATE | Individual Account Verification',
+                template: 'register_individual',
+                context: {
+                    name: 'Biws',
+                }
+            })
 
             return user
         } catch (error) {
@@ -200,5 +207,4 @@ export default class UserResolver {
             return null;
         }
     }
-} IndividualUser
-BusinessUser
+}
