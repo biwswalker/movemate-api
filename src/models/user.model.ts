@@ -1,4 +1,4 @@
-import { ObjectType, Field, ID } from "type-graphql";
+import { ObjectType, Field, ID, Int } from "type-graphql";
 import { prop as Property, getModelForClass } from "@typegoose/typegoose";
 import { IsNotEmpty, IsString, IsEnum } from "class-validator";
 import bcrypt from "bcrypt";
@@ -90,9 +90,9 @@ export class User {
   @Property()
   is_verified_phone_number: boolean;
 
-  @Field()
+  @Field(type => Int)
   @Property({ required: true })
-  accept_policy_version: string;
+  accept_policy_version: number;
 
   @Field()
   @Property({ required: true })

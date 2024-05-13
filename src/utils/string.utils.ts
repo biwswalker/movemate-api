@@ -1,6 +1,6 @@
 import CouterModel from "@models/counter.model";
-import { format } from "date-fns";
-import { utcToZonedTime } from "date-fns-tz";
+// import { format } from "date-fns";
+// import { toZonedTime } from "date-fns-tz";
 import { padStart } from "lodash";
 
 export function generateRandomNumberPattern(pattern = 'TT##########'): string {

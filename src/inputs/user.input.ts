@@ -1,5 +1,5 @@
 import { IsEmail } from "class-validator";
-import { Field, InputType } from "type-graphql";
+import { Field, InputType, Int } from "type-graphql";
 
 @InputType()
 export class RegisterIndividualInput {
@@ -64,37 +64,31 @@ export class CreditPaymentInput {
   @Field(() => [String])
   financial_contact_emails: string[];
 
-  @Field({ nullable: true })
+  @Field()
   financial_address: string;
 
-  @Field({ nullable: true })
+  @Field()
   financial_postcode: string;
 
-  @Field({ nullable: true })
+  @Field()
   financial_province: string;
 
-  @Field({ nullable: true })
+  @Field()
   financial_district: string;
 
-  @Field({ nullable: true })
+  @Field()
   financial_sub_district: string;
 
-  @Field({ nullable: true })
-  billed_date: string;
-
-  @Field({ nullable: true })
-  billed_round: string;
-
-  @Field({ nullable: true })
+  @Field()
   accepted_first_credit_term_date: string;
 
-  @Field({ nullable: true })
+  @Field()
   business_registration_certificate_file_id: string;
 
-  @Field({ nullable: true })
+  @Field()
   copy_ID_authorized_signatory_file_id: string;
 
-  @Field({ nullable: true })
+  @Field()
   certificate_value_added_tax_refistration_file_id: string;
 }
 
@@ -106,13 +100,13 @@ export class RegisterBusinessInput {
   @Field()
   business_name: string;
 
-  @Field()
+  @Field({ nullable: true })
   business_branch: string;
 
   @Field()
   business_type: string;
 
-  @Field()
+  @Field({ nullable: true })
   business_type_other: string;
 
   @Field()
@@ -146,14 +140,14 @@ export class RegisterBusinessInput {
   @Field()
   accepted_edocument_date: Date;
 
-  @Field()
-  accepted_policies_version: string;
+  @Field(type => Int)
+  accepted_policies_version: number;
 
   @Field()
   accepted_policies_date: Date;
 
-  @Field()
-  accepted_term_condition_version: string;
+  @Field(type => Int)
+  accepted_term_condition_version: number;
 
   @Field()
   accepted_term_condition_date: Date;
@@ -176,8 +170,8 @@ export class RegisterInput {
   @Field({ nullable: true })
   remark: string;
 
-  @Field()
-  accept_policy_version: string;
+  @Field(type => Int)
+  accept_policy_version: number;
 
   @Field()
   accept_policy_time: string;
@@ -209,8 +203,8 @@ export class UpdateUserInput {
   @Field({ nullable: true })
   registration: TRegistration;
 
-  @Field({ nullable: true })
-  accept_policy_version: string;
+  @Field(type => Int, { nullable: true })
+  accept_policy_version: number;
 
   @Field({ nullable: true })
   accept_policy_time: string;

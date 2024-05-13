@@ -3,7 +3,6 @@ import { User } from '@models/user.model'
 import { AuthPayload } from '@payloads/user.payloads'
 import { generateAccessToken } from '@utils/auth.utils'
 import { GraphQLContext } from '@configs/graphQL.config'
-import { isEmpty } from 'lodash'
 
 @Resolver()
 export default class AuthResolver {
@@ -21,7 +20,7 @@ export default class AuthResolver {
                 throw new Error('Invalid email or password')
             }
 
-            const token = generateAccessToken(user._id, user.user_role)
+            const token = generateAccessToken(user._id)
             ctx.res.cookie('access_token', token, { httpOnly: true })
 
             return {

@@ -4,19 +4,22 @@ import { engine } from 'express-handlebars'
 import 'reflect-metadata'
 import { connectToMongoDB } from '@configs/mongodb.config'
 import { createGraphQLServer } from '@configs/graphQL.config'
-import { graphqlUploadExpress } from 'graphql-upload'
 import { authenticateTokenAccessImage } from '@guards/auth.guards'
 import initialGoogleOAuth from '@configs/google.config'
 import api_v1 from '@apis/v1'
+import { graphqlUploadExpress } from 'graphql-upload-ts'
 
 dotenv.config()
+
+const MaxUploadFileSize = 2 * 1024 * 1024
 
 async function server() {
 
     const app = express()
     app.use(express.json())
-    app.use(graphqlUploadExpress())
-    app.use('/public', authenticateTokenAccessImage, express.static('uploads'))
+    app.use(graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }))
+    app.use('/source', authenticateTokenAccessImage, express.static('uploads'))
+    app.use('/assets', express.static('assets'))
 
     app.engine('hbs', engine({ extname: '.hbs', defaultLayout: false }))
     app.set('view engine', 'hbs')

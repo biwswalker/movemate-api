@@ -1,4 +1,4 @@
-import { ObjectType, Field, ID } from "type-graphql";
+import { ObjectType, Field, ID, Int } from "type-graphql";
 import { prop as Property, getModelForClass } from "@typegoose/typegoose";
 import { IsEmail, IsNotEmpty, IsString, Length } from "class-validator";
 
@@ -22,15 +22,14 @@ export class BusinessCustomer {
   business_name: string;
 
   @Field({ nullable: true })
-  @IsString()
   @Property()
-  business_branch: string;
+  business_branch?: string;
 
   @Field()
   @Property({ required: true })
   business_type: string;
 
-  @Field()
+  @Field({ nullable: true })
   @Property()
   business_type_other: string;
 
@@ -84,18 +83,18 @@ export class BusinessCustomer {
   accepted_edocument_date: string;
 
   // Policies
-  @Field()
+  @Field(type => Int)
   @Property()
-  accepted_policies_version: string;
+  accepted_policies_version: number;
 
   @Field()
   @Property()
   accepted_policies_date: string;
 
   // Term and Conditions
-  @Field()
+  @Field(type => Int)
   @Property()
-  accepted_term_condition_version: string;
+  accepted_term_condition_version: number;
 
   @Field()
   @Property()

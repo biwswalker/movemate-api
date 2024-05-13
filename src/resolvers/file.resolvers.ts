@@ -1,5 +1,5 @@
 import { Resolver, Arg, Mutation, UseMiddleware, Ctx } from 'type-graphql'
-import { GraphQLUpload, FileUpload } from 'graphql-upload'
+import { GraphQLUpload, FileUpload } from 'graphql-upload-ts'
 import { File } from '@models/file.model'
 import { createWriteStream } from 'fs'
 import { AuthGuard } from '@guards/auth.guards'
@@ -29,9 +29,10 @@ export default class MapsResolver {
                 })
         })
 
-        const url = `${process.env.DOMAINNAME}/public/${final_filename}`
+        const url = `${process.env.DOMAINNAME}/source/${final_filename}`
 
         return {
+            file_id: generated_filename,
             url: url,
             mimetype,
             filename: final_filename

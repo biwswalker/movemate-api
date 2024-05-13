@@ -71,6 +71,12 @@ export class IndividualCustomer {
   @IsString()
   @Property()
   postcode: string;
+
+
+  @Field()
+  fullName(): string {
+    return `${this.firstname} ${this.lastname}`;
+  }
 }
 
 const IndividualCustomerModel = getModelForClass(IndividualCustomer);

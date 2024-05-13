@@ -1,10 +1,10 @@
-import { ObjectType, Field, ID } from "type-graphql";
+import { ObjectType, Field, ID, Int } from "type-graphql";
 import {
   prop as Property,
   Severity,
   getModelForClass,
 } from "@typegoose/typegoose";
-import { IsEmail, IsNotEmpty, IsString } from "class-validator";
+import { IsNotEmpty, IsString } from "class-validator";
 
 @ObjectType()
 export class BusinessCustomerCreditPayment {
@@ -53,33 +53,33 @@ export class BusinessCustomerCreditPayment {
   @Field({ nullable: true })
   @Property()
   financial_district: string;
-  
+
   @Field({ nullable: true })
   @Property()
   financial_sub_district: string;
-  
-  @Field({ nullable: true })
+
+  @Field(type => Int, { nullable: true })
   @Property()
   billed_date: number;
-  
-  @Field({ nullable: true })
+
+  @Field(type => Int, { nullable: true })
   @Property()
   billed_round: number;
-  
+
   @Field({ nullable: true })
   @Property()
   accepted_first_credit_term_date: Date;
-  
+
   // Files Path
   @Field({ nullable: true })
   @Property()
   business_registration_certificate_file_id: string;
-  
+
   // Files Path
   @Field({ nullable: true })
   @Property()
   copy_ID_authorized_signatory_file_id: string;
-  
+
   // Files
   @Field({ nullable: true })
   @Property()
