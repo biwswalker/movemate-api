@@ -8,6 +8,7 @@ import { authenticateTokenAccessImage } from '@guards/auth.guards'
 import initialGoogleOAuth from '@configs/google.config'
 import api_v1 from '@apis/v1'
 import { graphqlUploadExpress } from 'graphql-upload-ts'
+import bodyParser from 'body-parser'
 
 dotenv.config()
 
@@ -17,6 +18,7 @@ async function server() {
 
     const app = express()
     app.use(express.json())
+    app.use(bodyParser.urlencoded({ extended: false }))
     app.use(graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }))
     app.use('/source', authenticateTokenAccessImage, express.static('uploads'))
     app.use('/assets', express.static('assets'))

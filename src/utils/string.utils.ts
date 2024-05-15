@@ -3,7 +3,7 @@ import CouterModel from "@models/counter.model";
 // import { toZonedTime } from "date-fns-tz";
 import { padStart } from "lodash";
 
-export function generateRandomNumberPattern(pattern = 'TT##########'): string {
+export function generateRandomNumberPattern(pattern = 'MM##########'): string {
     let trackingNumber: string = '';
 
     for (let i = 0; i < pattern.length; i++) {

@@ -1,11 +1,9 @@
+import { File } from "@models/file.model";
 import { IsEmail } from "class-validator";
 import { Field, InputType, Int } from "type-graphql";
 
 @InputType()
 export class RegisterIndividualInput {
-  @Field()
-  user_type: TUserType;
-
   @Field()
   @IsEmail()
   email: string;
@@ -25,19 +23,19 @@ export class RegisterIndividualInput {
   @Field({ nullable: true })
   tax_id: string;
 
-  @Field()
+  @Field({ nullable: true })
   address: string;
 
-  @Field()
+  @Field({ nullable: true })
   province: string;
 
-  @Field()
+  @Field({ nullable: true })
   district: string;
 
-  @Field()
+  @Field({ nullable: true })
   sub_district: string;
 
-  @Field()
+  @Field({ nullable: true })
   postcode: string;
 }
 
@@ -45,6 +43,18 @@ export class RegisterIndividualInput {
 export class CashPaymentInput {
   @Field()
   accepted_ereceipt_date: Date;
+}
+
+@InputType()
+export class FileInput {
+  @Field()
+  file_id: string
+
+  @Field()
+  filename: string
+
+  @Field()
+  mimetype: string
 }
 
 @InputType()
@@ -82,14 +92,14 @@ export class CreditPaymentInput {
   @Field()
   accepted_first_credit_term_date: string;
 
-  @Field()
-  business_registration_certificate_file_id: string;
+  @Field(() => FileInput)
+  business_registration_certificate_file: FileInput;
 
-  @Field()
-  copy_ID_authorized_signatory_file_id: string;
+  @Field(() => FileInput)
+  copy_ID_authorized_signatory_file: FileInput;
 
-  @Field()
-  certificate_value_added_tax_refistration_file_id: string;
+  @Field(() => FileInput, { nullable: true })
+  certificate_value_added_tax_refistration_file: FileInput;
 }
 
 @InputType()

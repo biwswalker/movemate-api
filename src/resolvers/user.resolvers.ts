@@ -15,12 +15,14 @@ import { RegisterInput, UpdateUserInput } from "@inputs/user.input";
 import bcrypt from "bcrypt";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
-import { isEmpty } from "lodash";
+import { get, isEmpty, isEqual } from "lodash";
 import { generateId, generateRandomNumberPattern } from "@utils/string.utils";
 import { email_sender } from "@utils/email.utils";
 import imageToBase64 from 'image-to-base64'
 import { join, resolve } from 'path'
 import { SafeString } from 'handlebars'
+import { GraphQLError } from 'graphql'
+import FileModel from "@models/file.model";
 
 @Resolver(User)
 export default class UserResolver {
@@ -96,6 +98,43 @@ export default class UserResolver {
       const base64_image = await imageToBase64(join(resolve('.'), 'assets', 'email_logo.png'))
       const image_url = new SafeString(`data:image/png;base64,${base64_image}`)
 
+      // Exist email
+      const user_email = isEqual(user_type, 'individual') ? get(individual_detail, 'email', '') : isEqual(user_type, 'business') ? get(business_detail, 'business_email', '') : ''
+      const field_name = user_type === 'individual' ? 'email' : 'businessEmail'
+      if (user_email) {
+
+        const is_existing_email_with_individual = await CustomerIndividualModel.findOne({
+          email: user_email,
+        });
+        if (is_existing_email_with_individual) {
+          throw new GraphQLError('ไม่สามารถใช้อีเมลร่วมกับสมากชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ', {
+            extensions: {
+              code: 'ERROR_VALIDATION',
+              errors: [{ field: field_name, message: 'ไม่สามารถใช้อีเมลร่วมกับสมากชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ' }],
+            }
+          })
+        }
+
+        const is_existing_email_with_business = await BusinessCustomerModel.findOne({
+          business_email: user_email,
+        });
+        if (is_existing_email_with_business) {
+          throw new GraphQLError('อีเมลถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ', {
+            extensions: {
+              code: 'ERROR_VALIDATION',
+              errors: [{ field: field_name, message: 'อีเมลถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ' }],
+            }
+          })
+        }
+      } else {
+        throw new GraphQLError('ระบุอีเมล', {
+          extensions: {
+            code: 'ERROR_VALIDATION',
+            errors: [{ field: field_name, message: 'ระบุอีเมล' }],
+          }
+        })
+      }
+
       /**
        * Individual Customer Register
        */
@@ -153,20 +192,6 @@ export default class UserResolver {
           throw new Error("ข้อมูลไม่สมบูรณ์");
         }
 
-        const is_existing_email_with_individual = await CustomerIndividualModel.findOne({
-          email: business_detail.business_email,
-        });
-        if (is_existing_email_with_individual) {
-          throw new Error("ไม่สามารถใช้อีเมลร่วมกับสมากชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ");
-        }
-
-        const is_existing_email_with_business = await BusinessCustomerModel.findOne({
-          business_email: business_detail.business_email,
-        });
-        if (is_existing_email_with_business) {
-          throw new Error("อีเมลถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ");
-        }
-
         const user_number = await generateId("MMBU", user_type);
         const generated_password = generateRandomNumberPattern('MM##########').toLowerCase()
         const hashed_password = await bcrypt.hash(generated_password, 10);
@@ -197,7 +222,37 @@ export default class UserResolver {
           await cash_payment.save()
         } else if (business_detail.payment_method === 'credit' && business_detail.payment_credit_detail) {
           const default_credit_limit = 20000.00
-          const credit_detail = business_detail.payment_credit_detail
+          const { business_registration_certificate_file, copy_ID_authorized_signatory_file, certificate_value_added_tax_refistration_file, ...credit_detail } = business_detail.payment_credit_detail
+
+          // Upload document
+          if (business_registration_certificate_file) {
+            const brcf_model = new FileModel(business_registration_certificate_file)
+            await brcf_model.save()
+          } else {
+            throw new GraphQLError('กรุณาอัพโหลดเอกสาร สำเนาบัตรประชาชนผู้มีอำนาจลงนาม', {
+              extensions: {
+                code: 'ERROR_VALIDATION',
+                errors: [{ field: 'businessRegistrationCertificate', message: 'กรุณาอัพโหลดเอกสารสำเนาบัตรประชาชนผู้มีอำนาจลงนาม' }],
+              }
+            })
+          }
+          // Upload document
+          if (copy_ID_authorized_signatory_file) {
+            const cidasf_model = new FileModel(copy_ID_authorized_signatory_file)
+            await cidasf_model.save()
+          } else {
+            throw new GraphQLError('กรุณาอัพโหลดเอกสาร ภพ.20', {
+              extensions: {
+                code: 'ERROR_VALIDATION',
+                errors: [{ field: 'copyIDAuthorizedSignatory', message: 'กรุณาอัพโหลดเอกสาร ภพ.20' }],
+              }
+            })
+          }
+          // Upload document
+          if (certificate_value_added_tax_refistration_file) {
+            const catr_model = new FileModel(certificate_value_added_tax_refistration_file)
+            await catr_model.save()
+          }
           const credit_payment = new BusinessCustomerCreditPaymentModel({
             ...credit_detail,
             billed_date: 7, // TODO: get default
@@ -205,6 +260,15 @@ export default class UserResolver {
             user_number,
             credit_limit: default_credit_limit,
             credit_usage: 0,
+            ...(business_registration_certificate_file ? {
+              business_registration_certificate_file_id: business_registration_certificate_file.file_id,
+            } : {}),
+            ...(copy_ID_authorized_signatory_file ? {
+              copy_ID_authorized_signatory_file_id: copy_ID_authorized_signatory_file.file_id
+            } : {}),
+            ...(certificate_value_added_tax_refistration_file ? {
+              certificate_value_added_tax_refistration_file_id: certificate_value_added_tax_refistration_file.file_id
+            } : {}),
           })
           await credit_payment.save()
         } else {
@@ -237,7 +301,7 @@ export default class UserResolver {
 
       return null;
     } catch (error) {
-      throw new Error(error);
+      throw error
     }
   }
 
