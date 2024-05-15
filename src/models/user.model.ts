@@ -2,6 +2,7 @@ import { ObjectType, Field, ID, Int } from "type-graphql";
 import { prop as Property, getModelForClass } from "@typegoose/typegoose";
 import { IsNotEmpty, IsString, IsEnum } from "class-validator";
 import bcrypt from "bcrypt";
+import cryptoJs from "crypto-js";
 
 enum EUserType {
   INDIVIDUAL = "individual",
@@ -90,7 +91,7 @@ export class User {
   @Property()
   is_verified_phone_number: boolean;
 
-  @Field(type => Int)
+  @Field((type) => Int)
   @Property({ required: true })
   accept_policy_version: number;
 
@@ -107,7 +108,12 @@ export class User {
   updated_at: Date;
 
   async validatePassword(password: string): Promise<boolean> {
-    return bcrypt.compare(password, this.password);
+    const password_decryption = cryptoJs.AES.decrypt(
+      password,
+      process.env.MOVEMATE_SHARED_KEY
+    ).toString();
+    console.log(password, password_decryption, this.password)
+    return bcrypt.compare(password_decryption, this.password);
   }
 
   static async findByUsername(username: string): Promise<User | null> {

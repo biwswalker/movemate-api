@@ -3,6 +3,7 @@ import { User } from '@models/user.model'
 import { AuthPayload } from '@payloads/user.payloads'
 import { generateAccessToken } from '@utils/auth.utils'
 import { GraphQLContext } from '@configs/graphQL.config'
+import { GraphQLError } from 'graphql'
 
 @Resolver()
 export default class AuthResolver {
@@ -16,8 +17,10 @@ export default class AuthResolver {
         try {
             const user = await User.findByUsername(username)
 
+            console.log('user: ', user)
+
             if (!user || !user.validatePassword(password)) {
-                throw new Error('Invalid email or password')
+                throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
             }
 
             const token = generateAccessToken(user._id)
@@ -29,7 +32,7 @@ export default class AuthResolver {
             }
         } catch (error) {
             console.log(error)
-            throw new Error(error)
+            throw error
         }
     }
 

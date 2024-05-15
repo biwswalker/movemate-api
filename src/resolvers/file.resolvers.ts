@@ -31,8 +31,8 @@ export default class MapsResolver {
                         url
                     })
                 })
-                .on('error', (gg) => {
-                    console.log('error: ', gg)
+                .on('error', (error) => {
+                    console.log('error: ', error)
                     reject()
                 })
         })

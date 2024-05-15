@@ -11,5 +11,6 @@ declare namespace NodeJS {
         GOOGLE_SERVICE_ID: string
         GOOGLE_SERVICE_SECRET: string
         GOOGLE_SERVICE_REFRESH_TOKEN: string
+        MOVEMATE_SHARED_KEY: string
     }
 }
