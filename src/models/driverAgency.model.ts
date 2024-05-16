@@ -13,15 +13,15 @@ export class DriverAgency {
 
     @Field()
     @Property({ enum: [], default: ''}) // TODO:
-    employment_type: string
+    employmentType: string
 
     @Field()
     @Property({ default: Date.now })
-    created_at: Date
+    createdAt: Date
 
     @Field()
     @Property({ default: Date.now })
-    updated_at: Date
+    updatedAt: Date
 }
 
 const DriverAgencyModel = getModelForClass(DriverAgency)

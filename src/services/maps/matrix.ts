@@ -27,10 +27,10 @@ async function getDistanceMatrix(origin: string, destinations: string): Promise<
     try {
         const response = await Promise.resolve({
             status: "OK",
-            origin_addresses: [
+            originAddresses: [
                 origin
             ],
-            destination_addresses: [
+            destinationAddresses: [
                 destinations
             ],
             rows: [

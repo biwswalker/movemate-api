@@ -27,10 +27,10 @@ export class DistanceMatrix {
     status: string
 
     @Field(() => [String])
-    origin_addresses: string[]
+    originAddresses: string[]
 
     @Field(() => [String])
-    destination_addresses: string[]
+    destinationAddresses: string[]
 
     @Field(() => [DistanceMatrixElement])
     result: DistanceMatrixElement[]

@@ -11,34 +11,34 @@ export class BusinessCustomer {
   @IsString()
   @IsNotEmpty()
   @Property({ required: true, unique: true })
-  user_number: string;
+  userNumber: string;
 
   @Field()
   @Property({ enum: ["Co", "Part", "Pub", "other"], required: true })
-  business_titles: string;
+  businessTitle: string;
 
   @Field()
   @Property({ required: true })
-  business_name: string;
+  businessName: string;
 
   @Field({ nullable: true })
   @Property()
-  business_branch?: string;
+  businessBranch?: string;
 
   @Field()
   @Property({ required: true })
-  business_type: string;
+  businessType: string;
 
   @Field({ nullable: true })
   @Property()
-  business_type_other: string;
+  businessTypeOther: string;
 
   @Field()
   @IsString()
   @IsNotEmpty()
   @Length(13)
   @Property({ required: true })
-  tax_number: string;
+  taxNumber: string;
 
   @Field()
   @IsString()
@@ -57,7 +57,7 @@ export class BusinessCustomer {
   @Field()
   @IsString()
   @Property({ required: true })
-  sub_district: string;
+  subDistrict: string;
 
   @Field()
   @IsString()
@@ -66,39 +66,39 @@ export class BusinessCustomer {
 
   @Field()
   @Property({ required: true })
-  contact_number: string;
+  contactNumber: string;
 
   @Field()
   @IsEmail()
   @Property({ required: true })
-  business_email: string;
+  businessEmail: string;
 
   @Field()
   @Property({ enum: ["cash", "credit"], required: true })
-  payment_method: string;
+  paymentMethod: string;
 
   // E-Document
   @Field()
   @Property()
-  accepted_edocument_date: string;
+  acceptedEDocumentDate: Date;
 
   // Policies
   @Field(type => Int)
   @Property()
-  accepted_policies_version: number;
+  acceptedPoliciesVersion: number;
 
   @Field()
   @Property()
-  accepted_policies_date: string;
+  acceptedPoliciesDate: Date;
 
   // Term and Conditions
   @Field(type => Int)
   @Property()
-  accepted_term_condition_version: number;
+  acceptedTermConditionVersion: number;
 
   @Field()
   @Property()
-  accepted_term_condition_date: string;
+  acceptedTermConditionDate: Date;
 }
 
 const BusinessCustomerModel = getModelForClass(BusinessCustomer);

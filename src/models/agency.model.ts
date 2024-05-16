@@ -16,11 +16,11 @@ export class Agency {
 
     @Field()
     @Property({ default: Date.now })
-    created_at: Date
+    createdAt: Date
 
     @Field()
     @Property({ default: Date.now })
-    updated_at: Date
+    updatedAt: Date
 }
 
 const AgencyModel = getModelForClass(Agency)

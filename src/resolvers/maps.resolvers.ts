@@ -11,14 +11,14 @@ export default class MapsResolver {
     async distanceMatrix(@Arg('origin') lat: string, @Arg('destinations') destinations: string): Promise<DistanceMatrix> {
         try {
             const {
-                destination_addresses,
-                origin_addresses,
+                destinationAddresses,
+                originAddresses,
                 rows,
                 status,
             } = await getDistanceMatrix(lat, destinations)
             return {
-                destination_addresses,
-                origin_addresses,
+                destinationAddresses,
+                originAddresses,
                 status,
                 result: get(rows, '0.elements', []),
             }

@@ -11,7 +11,7 @@ export class IndividualCustomer {
   @IsString()
   @IsNotEmpty()
   @Property({ required: true, unique: true })
-  user_number: string;
+  userNumber: string;
 
   @Field()
   @IsEmail()
@@ -36,17 +36,17 @@ export class IndividualCustomer {
 
   @Field()
   @Property({ required: true })
-  phone_number: string;
+  phoneNumber: string;
 
   // @Field(() => [String])
   // @Property({ required: true, allowMixed: Severity.ALLOW })
-  // phone_numbers: string[]
+  // phoneNumbers: string[]
 
   @Field({ nullable: true })
   @IsString()
   @Length(13)
   @Property()
-  tax_id: string;
+  taxId: string;
 
   @Field({ nullable: true })
   @IsString()
@@ -65,7 +65,7 @@ export class IndividualCustomer {
   @Field({ nullable: true })
   @IsString()
   @Property()
-  sub_district: string;
+  subDistrict: string;
 
   @Field({ nullable: true })
   @IsString()

@@ -11,12 +11,12 @@ export class BusinessCustomerCashPayment {
   @IsString()
   @IsNotEmpty()
   @Property({ required: true, unique: true })
-  user_number: string;
+  userNumber: string;
 
   // Cash
   @Field()
   @Property()
-  accepted_ereceipt_date: string;
+  acceptedEReceiptDate: Date;
 }
 
 const BusinessCustomerCashPaymentModel = getModelForClass(

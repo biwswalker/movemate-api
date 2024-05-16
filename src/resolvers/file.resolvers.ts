@@ -25,7 +25,7 @@ export default class MapsResolver {
                 .pipe(createWriteStream(path))
                 .on('finish', async () => {
                     resolve({
-                        file_id: generated_filename,
+                        fileId: generated_filename,
                         filename: final_filename,
                         mimetype,
                         url

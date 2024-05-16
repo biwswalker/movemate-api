@@ -1,98 +1,97 @@
-import { ObjectType, Field, ID, Int } from "type-graphql";
+import { ObjectType, Field, ID, Int, Float } from "type-graphql";
 import {
   prop as Property,
+  Ref,
   Severity,
   getModelForClass,
 } from "@typegoose/typegoose";
 import { IsNotEmpty, IsString } from "class-validator";
+import { File } from "./file.model";
 
 @ObjectType()
 export class BusinessCustomerCreditPayment {
   @Field(() => ID)
   readonly _id: string;
 
-  @Field({ nullable: true })
+  @Field()
   @IsString()
   @IsNotEmpty()
   @Property({ required: true, unique: true })
-  user_number: string;
+  userNumber: string;
 
   // Credit
   @Field({ nullable: true })
-  @Property()
-  is_same_address: boolean;
+  @Property({ default: false })
+  isSameAddress: boolean;
 
-  @Field({ nullable: true })
-  @Property()
-  financial_firstname: string;
+  @Field()
+  @Property({ required: true })
+  financialFirstname: string;
 
-  @Field({ nullable: true })
-  @Property()
-  financial_lastname: string;
+  @Field()
+  @Property({ required: true })
+  financialLastname: string;
 
-  @Field({ nullable: true })
-  @Property()
-  financial_contact_number: string;
+  @Field()
+  @Property({ required: true })
+  financialContactNumber: string;
 
   @Field(() => [String])
   @Property({ required: true, allowMixed: Severity.ALLOW })
-  financial_contact_emails: string[];
+  financialContactEmails: string[];
+
+  @Field()
+  @Property({ required: true })
+  financialAddress: string;
+
+  @Field()
+  @Property({ required: true })
+  financialPostcode: string;
+
+  @Field()
+  @Property({ required: true })
+  financialProvince: string;
+
+  @Field()
+  @Property({ required: true })
+  financialDistrict: string;
+
+  @Field()
+  @Property({ required: true })
+  financialSubDistrict: string;
+
+  @Field(type => Int)
+  @Property({ required: true })
+  billedDate: number;
+
+  @Field(type => Int)
+  @Property({ required: true })
+  billedRound: number;
 
   @Field({ nullable: true })
   @Property()
-  financial_address: string;
+  acceptedFirstCredit_termDate: Date;
 
-  @Field({ nullable: true })
-  @Property()
-  financial_postcode: string;
+  @Field(() => File)
+  @Property({ ref: () => File })
+  businessRegistrationCertificateFile: Ref<File>;
 
-  @Field({ nullable: true })
-  @Property()
-  financial_province: string;
+  @Field(() => File)
+  @Property({ ref: () => File })
+  copyIDAuthorizedSignatoryFile: Ref<File>;
 
-  @Field({ nullable: true })
-  @Property()
-  financial_district: string;
-
-  @Field({ nullable: true })
-  @Property()
-  financial_sub_district: string;
-
-  @Field(type => Int, { nullable: true })
-  @Property()
-  billed_date: number;
-
-  @Field(type => Int, { nullable: true })
-  @Property()
-  billed_round: number;
-
-  @Field({ nullable: true })
-  @Property()
-  accepted_first_credit_term_date: Date;
-
-  // Files Path
-  @Field({ nullable: true })
-  @Property()
-  business_registration_certificate_file_id: string;
-
-  // Files Path
-  @Field({ nullable: true })
-  @Property()
-  copy_ID_authorized_signatory_file_id: string;
-
-  // Files
-  @Field({ nullable: true })
-  @Property()
-  certificate_value_added_tax_refistration_file_id: string;
+  @Field(() => File, { nullable: true })
+  @Property({ ref: () => File })
+  certificateValueAddedTaxRefistrationFile: Ref<File>
 
   // Credit
-  @Field({ nullable: true })
-  @Property()
-  credit_limit: string;
+  @Field(() => Float)
+  @Property({ required: true })
+  creditLimit: number;
 
-  @Field({ nullable: true })
-  @Property()
-  credit_usage: string;
+  @Field(() => Float)
+  @Property({ required: true })
+  creditUsage: number;
 }
 
 const BusinessCustomerCreditPaymentModel = getModelForClass(

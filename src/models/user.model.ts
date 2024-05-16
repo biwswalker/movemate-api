@@ -34,13 +34,13 @@ export class User {
   @IsString()
   @IsNotEmpty()
   @Property({ required: true, unique: true })
-  user_number: string;
+  userNumber: string;
 
   @Field()
   @IsEnum(EUserType)
   @IsNotEmpty()
   @Property({ enum: EUserType, default: EUserType.INDIVIDUAL, required: true })
-  user_type: TUserType;
+  userType: TUserType;
 
   @Field()
   @Property({ required: true, unique: true })
@@ -67,7 +67,7 @@ export class User {
     enum: EUserValidationStatus,
     default: EUserValidationStatus.PENDING,
   })
-  validation_status: TUserValidationStatus;
+  validationStatus: TUserValidationStatus;
 
   @Field()
   @IsEnum(ERegistration)
@@ -77,42 +77,41 @@ export class User {
 
   @Field({ nullable: true })
   @Property()
-  lastest_OTP: string;
+  lastestOTP: string;
 
   @Field({ nullable: true })
   @Property()
-  lastest_OTP_ref: string;
+  lastestOTPRef: string;
 
   @Field()
   @Property()
-  is_verified_email: boolean;
+  isVerifiedEmail: boolean;
 
   @Field()
   @Property()
-  is_verified_phone_number: boolean;
+  isVerifiedPhoneNumber: boolean;
 
   @Field((type) => Int)
   @Property({ required: true })
-  accept_policy_version: number;
+  acceptPolicyVersion: number;
 
   @Field()
   @Property({ required: true })
-  accept_policy_time: string;
+  acceptPolicyTime: string;
 
   @Field()
   @Property({ default: Date.now })
-  created_at: Date;
+  createdAt: Date;
 
   @Field()
   @Property({ default: Date.now })
-  updated_at: Date;
+  updatedAt: Date;
 
   async validatePassword(password: string): Promise<boolean> {
     const password_decryption = cryptoJs.AES.decrypt(
       password,
       process.env.MOVEMATE_SHARED_KEY
     ).toString();
-    console.log(password, password_decryption, this.password)
     return bcrypt.compare(password_decryption, this.password);
   }
 

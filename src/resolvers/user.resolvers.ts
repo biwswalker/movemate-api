@@ -5,6 +5,7 @@ import {
   Arg,
   Ctx,
   UseMiddleware,
+  AuthenticationError,
 } from "type-graphql";
 import UserModel, { User } from "@models/user.model";
 import CustomerIndividualModel from "@models/customerIndividual.model";
@@ -57,15 +58,15 @@ export default class UserResolver {
     try {
       const userId = ctx.req.user_id;
       if (!userId) {
-        throw new Error("User not found");
+        throw new AuthenticationError("ไม่พบผู้ใช้");
       }
       const user = await UserModel.findById(userId);
       if (!user) {
-        throw new Error("User not found");
+        throw new AuthenticationError("ไม่พบผู้ใช้");
       }
       return user;
     } catch (error) {
-      throw new Error("Failed to fetch user");
+      throw error
     }
   }
 
@@ -75,13 +76,13 @@ export default class UserResolver {
     @Ctx() ctx: GraphQLContext
   ): Promise<User> {
     const {
-      user_type,
+      userType,
       password,
       remark,
-      accept_policy_version,
-      accept_policy_time,
-      individual_detail,
-      business_detail,
+      acceptPolicyTime,
+      acceptPolicyVersion,
+      individualDetail,
+      businessDetail
     } = data;
 
     try {
@@ -92,37 +93,37 @@ export default class UserResolver {
       }
 
       // Prepare email sender
-      const email_transpoter = email_sender()
+      const emailTranspoter = email_sender()
 
       // Conver image path to base64 image
-      const base64_image = await imageToBase64(join(resolve('.'), 'assets', 'email_logo.png'))
-      const image_url = new SafeString(`data:image/png;base64,${base64_image}`)
+      const base64Image = await imageToBase64(join(resolve('.'), 'assets', 'email_logo.png'))
+      const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`)
 
       // Exist email
-      const user_email = isEqual(user_type, 'individual') ? get(individual_detail, 'email', '') : isEqual(user_type, 'business') ? get(business_detail, 'business_email', '') : ''
-      const field_name = user_type === 'individual' ? 'email' : 'businessEmail'
-      if (user_email) {
+      const userEmail = isEqual(userType, 'individual') ? get(individualDetail, 'email', '') : isEqual(userType, 'business') ? get(businessDetail, 'businessEmail', '') : ''
+      const fieldName = userType === 'individual' ? 'email' : 'businessEmail'
+      if (userEmail) {
 
-        const is_existing_email_with_individual = await CustomerIndividualModel.findOne({
-          email: user_email,
+        const isExistingEmailWithIndividual = await CustomerIndividualModel.findOne({
+          email: userEmail,
         });
-        if (is_existing_email_with_individual) {
+        if (isExistingEmailWithIndividual) {
           throw new GraphQLError('ไม่สามารถใช้อีเมลร่วมกับสมากชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ', {
             extensions: {
               code: 'ERROR_VALIDATION',
-              errors: [{ field: field_name, message: 'ไม่สามารถใช้อีเมลร่วมกับสมากชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ' }],
+              errors: [{ field: fieldName, message: 'ไม่สามารถใช้อีเมลร่วมกับสมากชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ' }],
             }
           })
         }
 
-        const is_existing_email_with_business = await BusinessCustomerModel.findOne({
-          business_email: user_email,
+        const isExistingEmailWithBusiness = await BusinessCustomerModel.findOne({
+          businessEmail: userEmail,
         });
-        if (is_existing_email_with_business) {
+        if (isExistingEmailWithBusiness) {
           throw new GraphQLError('อีเมลถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ', {
             extensions: {
               code: 'ERROR_VALIDATION',
-              errors: [{ field: field_name, message: 'อีเมลถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ' }],
+              errors: [{ field: fieldName, message: 'อีเมลถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ' }],
             }
           })
         }
@@ -130,7 +131,7 @@ export default class UserResolver {
         throw new GraphQLError('ระบุอีเมล', {
           extensions: {
             code: 'ERROR_VALIDATION',
-            errors: [{ field: field_name, message: 'ระบุอีเมล' }],
+            errors: [{ field: fieldName, message: 'ระบุอีเมล' }],
           }
         })
       }
@@ -138,46 +139,46 @@ export default class UserResolver {
       /**
        * Individual Customer Register
        */
-      if (user_type === "individual" && individual_detail) {
-        const is_existing_email = await CustomerIndividualModel.findOne({
-          email: individual_detail.email,
+      if (userType === "individual" && individualDetail) {
+        const isExistingEmail = await CustomerIndividualModel.findOne({
+          email: individualDetail.email,
         });
-        if (is_existing_email) {
+        if (isExistingEmail) {
           throw new Error("อีเมลถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ");
         }
-        const user_number = await generateId("MMIN", user_type);
-        const hashed_password = await bcrypt.hash(password, 10);
+        const userNumber = await generateId("MMIN", userType);
+        const hashedPassword = await bcrypt.hash(password, 10);
         const user = new UserModel({
-          user_number,
-          user_type,
-          username: individual_detail.email,
-          password: hashed_password,
+          userNumber,
+          userType,
+          username: individualDetail.email,
+          password: hashedPassword,
           remark,
           registration: platform,
-          is_verified_email: false,
-          is_verified_phone_number: false,
-          accept_policy_version,
-          accept_policy_time,
+          isVerifiedEmail: false,
+          isVerifiedPhoneNumber: false,
+          acceptPolicyVersion,
+          acceptPolicyTime,
         });
-        const individual_customer = new CustomerIndividualModel({
-          user_number,
-          ...individual_detail,
+        const individualCustomer = new CustomerIndividualModel({
+          userNumber,
+          ...individualDetail,
         });
 
         await user.save();
-        await individual_customer.save();
+        await individualCustomer.save();
         // Email sender
-        await email_transpoter.sendMail({
+        await emailTranspoter.sendMail({
           from: process.env.GOOGLE_MAIL,
-          to: individual_detail.email,
+          to: individualDetail.email,
           subject: 'ยืนยันการสมัครสมาชิก Movemate!',
           template: 'register_individual',
           context: {
-            fullname: individual_customer.fullName(),
-            username: individual_detail.email,
-            logo: image_url,
-            activate_link: `https://api.movemateth.com/activate/customer/${user_number}`,
-            movemate_link: `https://www.movemateth.com`,
+            fullname: individualCustomer.fullName(),
+            username: individualDetail.email,
+            logo: imageUrl,
+            activateLink: `https://api.movemateth.com/activate/customer/${userNumber}`,
+            movemateLink: `https://www.movemateth.com`,
           }
         })
 
@@ -187,48 +188,48 @@ export default class UserResolver {
       /**
        * Business Customer Register
        */
-      if (user_type === "business" && business_detail) {
-        if (!business_detail) {
+      if (userType === "business" && businessDetail) {
+        if (!businessDetail) {
           throw new Error("ข้อมูลไม่สมบูรณ์");
         }
 
-        const user_number = await generateId("MMBU", user_type);
-        const generated_password = generateRandomNumberPattern('MM##########').toLowerCase()
-        const hashed_password = await bcrypt.hash(generated_password, 10);
+        const userNumber = await generateId("MMBU", userType);
+        const generatedPassword = generateRandomNumberPattern('MM##########').toLowerCase()
+        const hashedPassword = await bcrypt.hash(generatedPassword, 10);
         const user = new UserModel({
-          user_number,
-          user_type,
-          username: user_number,
-          password: hashed_password,
+          userNumber,
+          userType,
+          username: userNumber,
+          password: hashedPassword,
           remark,
           registration: platform,
-          is_verified_email: false,
-          is_verified_phone_number: false,
-          accept_policy_version,
-          accept_policy_time,
+          isVerifiedEmail: false,
+          isVerifiedPhoneNumber: false,
+          acceptPolicyVersion,
+          acceptPolicyTime,
         });
 
         const business = new BusinessCustomerModel({
-          ...business_detail,
-          user_number,
+          ...businessDetail,
+          userNumber,
         })
 
-        if (business_detail.payment_method === 'cash' && business_detail.payment_cash_detail) {
-          const cash_detail = business_detail.payment_cash_detail
-          const cash_payment = new BusinessCustomerCashPaymentModel({
-            user_number,
-            accepted_ereceipt_date: cash_detail.accepted_ereceipt_date
+        if (businessDetail.paymentMethod === 'cash' && businessDetail.paymentCashDetail) {
+          const cashDetail = businessDetail.paymentCashDetail
+          const cashPayment = new BusinessCustomerCashPaymentModel({
+            userNumber,
+            acceptedEreceiptDate: cashDetail.acceptedEReceiptDate
           })
-          await cash_payment.save()
-        } else if (business_detail.payment_method === 'credit' && business_detail.payment_credit_detail) {
-          const default_credit_limit = 20000.00
-          const { business_registration_certificate_file, copy_ID_authorized_signatory_file, certificate_value_added_tax_refistration_file, ...credit_detail } = business_detail.payment_credit_detail
+          await cashPayment.save()
+        } else if (businessDetail.paymentMethod === 'credit' && businessDetail.paymentCreditDetail) {
+          // TODO: Get default config
+          const _defaultCreditLimit = 20000.00
+          const _billedDate = 1
+          const _billedRound = 15
+          const { businessRegistrationCertificateFile, copyIDAuthorizedSignatoryFile, certificateValueAddedTaxRegistrationFile, ...creditDetail } = businessDetail.paymentCreditDetail
 
           // Upload document
-          if (business_registration_certificate_file) {
-            const brcf_model = new FileModel(business_registration_certificate_file)
-            await brcf_model.save()
-          } else {
+          if (!businessRegistrationCertificateFile) {
             throw new GraphQLError('กรุณาอัพโหลดเอกสาร สำเนาบัตรประชาชนผู้มีอำนาจลงนาม', {
               extensions: {
                 code: 'ERROR_VALIDATION',
@@ -236,41 +237,36 @@ export default class UserResolver {
               }
             })
           }
-          // Upload document
-          if (copy_ID_authorized_signatory_file) {
-            const cidasf_model = new FileModel(copy_ID_authorized_signatory_file)
-            await cidasf_model.save()
-          } else {
-            throw new GraphQLError('กรุณาอัพโหลดเอกสาร ภพ.20', {
+          if (!copyIDAuthorizedSignatoryFile) {
+            throw new GraphQLError('กรุณาอัพโหลดเอกสาร สำเนาบัตรประชาชนผู้มีอำนาจลงนาม', {
               extensions: {
                 code: 'ERROR_VALIDATION',
-                errors: [{ field: 'copyIDAuthorizedSignatory', message: 'กรุณาอัพโหลดเอกสาร ภพ.20' }],
+                errors: [{ field: 'copyIDAuthorizedSignatory', message: 'กรุณาอัพโหลดเอกสาร สำเนาบัตรประชาชนผู้มีอำนาจลงนาม' }],
               }
             })
           }
-          // Upload document
-          if (certificate_value_added_tax_refistration_file) {
-            const catr_model = new FileModel(certificate_value_added_tax_refistration_file)
-            await catr_model.save()
+          const businessRegisCertFileModel = new FileModel(businessRegistrationCertificateFile)
+          const copyIDAuthSignatoryFileModel = new FileModel(copyIDAuthorizedSignatoryFile)
+          const certValueAddedTaxRegisFileModel = certificateValueAddedTaxRegistrationFile ? new FileModel(certificateValueAddedTaxRegistrationFile) : null
+
+          await businessRegisCertFileModel.save()
+          await copyIDAuthSignatoryFileModel.save()
+          if (certValueAddedTaxRegisFileModel) {
+            await certValueAddedTaxRegisFileModel.save()
           }
-          const credit_payment = new BusinessCustomerCreditPaymentModel({
-            ...credit_detail,
-            billed_date: 7, // TODO: get default
-            billed_round: 15, // TODO: get default
-            user_number,
-            credit_limit: default_credit_limit,
-            credit_usage: 0,
-            ...(business_registration_certificate_file ? {
-              business_registration_certificate_file_id: business_registration_certificate_file.file_id,
-            } : {}),
-            ...(copy_ID_authorized_signatory_file ? {
-              copy_ID_authorized_signatory_file_id: copy_ID_authorized_signatory_file.file_id
-            } : {}),
-            ...(certificate_value_added_tax_refistration_file ? {
-              certificate_value_added_tax_refistration_file_id: certificate_value_added_tax_refistration_file.file_id
-            } : {}),
+
+          const creditPayment = new BusinessCustomerCreditPaymentModel({
+            ...creditDetail,
+            billedDate: _billedDate,
+            billedRound: _billedRound,
+            creditLimit: _defaultCreditLimit,
+            userNumber,
+            creditUsage: 0,
+            businessRegistrationCertificateFile: businessRegisCertFileModel,
+            copyIDAuthorizedSignatoryFile: copyIDAuthSignatoryFileModel,
+            ...(certValueAddedTaxRegisFileModel ? { certificateValueAddedTaxRefistrationFile: certValueAddedTaxRegisFileModel } : {})
           })
-          await credit_payment.save()
+          await creditPayment.save()
         } else {
           throw new Error("ไม่พบข้อมูลการชำระ กรุณาติดต่อผู้ดูแลระบบ");
         }
@@ -278,20 +274,20 @@ export default class UserResolver {
         await business.save()
         await user.save();
 
-        if (business_detail.payment_method === 'cash') {
+        if (businessDetail.paymentMethod === 'cash') {
           // Email sender
-          await email_transpoter.sendMail({
+          await emailTranspoter.sendMail({
             from: process.env.GOOGLE_MAIL,
-            to: business_detail.business_email,
+            to: businessDetail.businessEmail,
             subject: 'ยืนยันการสมัครสมาชิก Movemate!',
             template: 'register_business',
             context: {
-              business_title: business_detail.business_titles,
-              business_name: business_detail.business_name,
-              username: user_number,
-              password: generated_password,
-              logo: image_url,
-              activate_link: `https://api.movemateth.com/activate/customer/${user_number}`,
+              business_title: businessDetail.businessTitle,
+              business_name: businessDetail.businessName,
+              username: userNumber,
+              password: generatedPassword,
+              logo: imageUrl,
+              activate_link: `https://api.movemateth.com/activate/customer/${userNumber}`,
               movemate_link: `https://www.movemateth.com`,
             }
           })
@@ -301,6 +297,7 @@ export default class UserResolver {
 
       return null;
     } catch (error) {
+      console.log(error)
       throw error
     }
   }

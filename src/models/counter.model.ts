@@ -2,19 +2,19 @@ import { prop as Property, getModelForClass } from '@typegoose/typegoose'
 
 export class Couter {
     @Property({ required: true, default: 0 })
-    customer_counter: number
+    customerCounter: number
 
     @Property({ required: true, default: 0 })
-    business_counter: number
+    businessCounter: number
 
     @Property({ required: true, default: 0 })
-    driver_counter: number
+    driverCounter: number
 
     @Property({ required: true, default: 0 })
-    admin_counter: number
+    adminCounter: number
 
     @Property({ required: true, default: 0 })
-    tracking_counter: number
+    trackingCounter: number
 
     @Property({ required: true, default: 0 })
     upload: number
@@ -22,20 +22,20 @@ export class Couter {
     static async getNextCouter(type: TGenerateIDType): Promise<number> {
         const query_option = { upsert: true, new: true }
         if (type === 'individual') {
-            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { customer_counter: 1 } }, query_option)
-            return counter.customer_counter
+            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { customerCounter: 1 } }, query_option)
+            return counter.customerCounter
         } else if (type === 'business') {
-            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { business_counter: 1 } }, query_option)
-            return counter.business_counter
+            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { businessCounter: 1 } }, query_option)
+            return counter.businessCounter
         } else if (type === 'driver') {
-            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { driver_counter: 1 } }, query_option)
-            return counter.driver_counter
+            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { driverCounter: 1 } }, query_option)
+            return counter.driverCounter
         } else if (type === 'admin') {
-            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { admin_counter: 1 } }, query_option)
-            return counter.admin_counter
+            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { adminCounter: 1 } }, query_option)
+            return counter.adminCounter
         } else if (type === 'tracking') {
-            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { tracking_counter: 1 } }, query_option)
-            return counter.tracking_counter
+            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { trackingCounter: 1 } }, query_option)
+            return counter.trackingCounter
         } else if (type === 'upload') {
             const counter = await CouterModel.findOneAndUpdate({}, { $inc: { upload: 1 } }, query_option)
             return counter.upload

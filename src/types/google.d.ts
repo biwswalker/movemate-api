@@ -1,7 +1,7 @@
 interface IDistanceMatrixResponse {
     status: string // If it is "OK," the request was successful.
-    origin_addresses: string[]
-    destination_addresses: string[]
+    originAddresses: string[]
+    destinationAddresses: string[]
     rows: IDistanceMatrixRow[]
 }
 

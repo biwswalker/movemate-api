@@ -3,7 +3,7 @@ import { ObjectType, Field } from 'type-graphql'
 @ObjectType()
 export class FileUploadPayload {
     @Field()
-    file_id: string
+    fileId: string
 
     @Field()
     filename: string

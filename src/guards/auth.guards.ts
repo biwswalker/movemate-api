@@ -1,8 +1,9 @@
-import { MiddlewareFn } from 'type-graphql'
+import { AuthenticationError, MiddlewareFn } from 'type-graphql'
 import { verifyAccessToken } from '@utils/auth.utils'
 import { GraphQLContext } from '@configs/graphQL.config'
 import UserModel from '@models/user.model'
 import { NextFunction, Request, Response } from 'express';
+import { TokenExpiredError } from 'jsonwebtoken';
 
 interface IAccountModel {
     findById(user_id: string): Promise<any>;
@@ -21,27 +22,29 @@ export const AuthGuard: MiddlewareFn<GraphQLContext> = async ({ context }, next)
 
     const authorization = req.headers['authorization']
     if (!authorization || !authorization.startsWith('Bearer ')) {
-        throw new Error('รหัสระบุตัวตนไม่สมบูรณ์')
+        throw new AuthenticationError('รหัสระบุตัวตนไม่สมบูรณ์')
     }
 
     try {
         const token = authorization.split(' ')[1];
         const decodedToken = verifyAccessToken(token)
         if (!decodedToken) {
-            throw new Error('รหัสระบุตัวตนไม่สมบูรณ์หรือหมดอายุ');
+            throw new AuthenticationError('รหัสระบุตัวตนไม่สมบูรณ์หรือหมดอายุ');
         }
         const user_id = decodedToken.user_id
         const user = await findUserById(UserModel, user_id);
 
         if (!user) {
-            throw new Error('ไม่พบผู้ใช้');
+            throw new AuthenticationError('ไม่พบผู้ใช้');
         }
 
         req.user_id = user_id
 
     } catch (error) {
-        console.log(error)
-        throw new Error('รหัสระบุตัวตนไม่สมบูรณ์')
+        if (error instanceof TokenExpiredError) {
+            throw new AuthenticationError('เซสชั่นหมดอายุ');
+        }
+        throw error
     }
 
     return next()
