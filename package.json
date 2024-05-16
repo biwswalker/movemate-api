@@ -58,8 +58,6 @@
     "typescript": "^5.4.5"
   },
   "pre-commit": [
-    "ts.check",
-    "build",
-    "add-build"
+    "ts.check"
   ]
 }
