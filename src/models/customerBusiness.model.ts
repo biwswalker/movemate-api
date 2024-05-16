@@ -99,6 +99,10 @@ export class BusinessCustomer {
   @Field()
   @Property()
   acceptedTermConditionDate: Date;
+
+  static async findByUserNumber(userNumber: string): Promise<BusinessCustomer | null> {
+    return BusinessCustomerModel.findOne({ userNumber });
+  }
 }
 
 const BusinessCustomerModel = getModelForClass(BusinessCustomer);

@@ -24,6 +24,8 @@ import { join, resolve } from 'path'
 import { SafeString } from 'handlebars'
 import { GraphQLError } from 'graphql'
 import FileModel from "@models/file.model";
+import { UserPayload } from "@payloads/user.payloads";
+import IndividualCustomerModel from "@models/customerIndividual.model";
 
 @Resolver(User)
 export default class UserResolver {
@@ -52,9 +54,9 @@ export default class UserResolver {
     }
   }
 
-  @Query(() => User)
+  @Query(() => UserPayload)
   @UseMiddleware(AuthGuard)
-  async me(@Ctx() ctx: GraphQLContext): Promise<User> {
+  async me(@Ctx() ctx: GraphQLContext): Promise<UserPayload> {
     try {
       const userId = ctx.req.user_id;
       if (!userId) {
@@ -64,17 +66,34 @@ export default class UserResolver {
       if (!user) {
         throw new AuthenticationError("ไม่พบผู้ใช้");
       }
-      return user;
+
+      if (user.userType === 'individual') {
+        const individualDetail = await IndividualCustomerModel.findByUserNumber(user.userNumber)
+        return {
+          user,
+          individualDetail
+        }
+      } else if (user.userType === 'business') {
+        const businessDetail = await BusinessCustomerModel.findByUserNumber(user.userNumber)
+        return {
+          user,
+          businessDetail
+        }
+      }
+      return {
+        user
+      };
     } catch (error) {
       throw error
     }
   }
 
-  @Mutation(() => User)
+
+  @Mutation(() => UserPayload)
   async register(
     @Arg("data") data: RegisterInput,
     @Ctx() ctx: GraphQLContext
-  ): Promise<User> {
+  ): Promise<UserPayload> {
     const {
       userType,
       password,
@@ -174,7 +193,7 @@ export default class UserResolver {
           subject: 'ยืนยันการสมัครสมาชิก Movemate!',
           template: 'register_individual',
           context: {
-            fullname: individualCustomer.fullName(),
+            fullname: individualCustomer.fullName,
             username: individualDetail.email,
             logo: imageUrl,
             activateLink: `https://api.movemateth.com/activate/customer/${userNumber}`,
@@ -182,7 +201,7 @@ export default class UserResolver {
           }
         })
 
-        return user;
+        return { user, individualDetail: individualCustomer };
       }
 
       /**
@@ -292,7 +311,7 @@ export default class UserResolver {
             }
           })
         }
-        return user;
+        return { user, businessDetail: business };
       }
 
       return null;

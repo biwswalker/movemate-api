@@ -1,5 +1,5 @@
 import { ObjectType, Field, ID } from "type-graphql";
-import { prop as Property, getModelForClass } from "@typegoose/typegoose";
+import { DocumentType, prop as Property, getModelForClass } from "@typegoose/typegoose";
 import { IsEmail, IsNotEmpty, IsString, Length } from "class-validator";
 
 @ObjectType()
@@ -72,10 +72,16 @@ export class IndividualCustomer {
   @Property()
   postcode: string;
 
-
   @Field()
-  fullName(): string {
-    return `${this.firstname} ${this.lastname}`;
+  @Property({
+    default: function ({ firstname, lastname }: DocumentType<IndividualCustomer>) {
+      return `${firstname} ${lastname}`;
+    }
+  })
+  fullName: string;
+
+  static async findByUserNumber(userNumber: string): Promise<IndividualCustomer | null> {
+    return IndividualCustomerModel.findOne({ userNumber });
   }
 }
 
