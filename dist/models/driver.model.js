@@ -87,7 +87,7 @@ __decorate([
 ], Driver.prototype, "vehicle", void 0);
 __decorate([
     (0, type_graphql_1.Field)(() => [String]),
-    (0, typegoose_1.prop)({ required: true }),
+    (0, typegoose_1.prop)({ required: true, allowMixed: typegoose_1.Severity.ALLOW }),
     __metadata("design:type", Array)
 ], Driver.prototype, "phone_numbers", void 0);
 __decorate([

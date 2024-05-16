@@ -1,5 +1,5 @@
 import { Field, ID, ObjectType } from "type-graphql"
-import { prop as Property, Ref, getModelForClass } from '@typegoose/typegoose'
+import { prop as Property, Ref, Severity, getModelForClass } from '@typegoose/typegoose'
 import { VehicleType } from "./vehicleType.model"
 @ObjectType()
 export class Vehicle {
@@ -7,7 +7,7 @@ export class Vehicle {
     readonly _id: string
 
     @Field(() => VehicleType)
-    @Property({ required: true })
+    @Property({ required: true, allowMixed: Severity.ALLOW })
     type: Ref<VehicleType>
 
     @Field()

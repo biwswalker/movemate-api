@@ -30,7 +30,7 @@ __decorate([
 ], VehicleType.prototype, "_id", void 0);
 __decorate([
     (0, type_graphql_1.Field)(() => vehicleCost_model_1.VehicleCost, { nullable: true }),
-    (0, typegoose_1.prop)(),
+    (0, typegoose_1.prop)({ allowMixed: typegoose_1.Severity.ALLOW }),
     __metadata("design:type", Object)
 ], VehicleType.prototype, "vehicle_cost", void 0);
 __decorate([

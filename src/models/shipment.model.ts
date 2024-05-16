@@ -87,11 +87,11 @@ export class Shipment {
     customer: Ref<User>
 
     @Field(() => VehicleType)
-    @Property({ required: true })
+    @Property({ required: true, allowMixed: Severity.ALLOW })
     vehicle_type: Ref<VehicleType>
 
     @Field(() => Driver, { nullable: true })
-    @Property()
+    @Property({ allowMixed: Severity.ALLOW })
     driver: Ref<Driver>
 
     @Field()

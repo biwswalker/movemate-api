@@ -1,5 +1,5 @@
 import { ObjectType, Field, ID } from 'type-graphql'
-import { prop as Property, Ref, getModelForClass } from '@typegoose/typegoose'
+import { prop as Property, Ref, Severity, getModelForClass } from '@typegoose/typegoose'
 import bcrypt from 'bcrypt'
 import { Vehicle } from './vehicle.model'
 import { DriverAgency } from './driverAgency.model'
@@ -45,7 +45,7 @@ export class Driver {
     vehicle: Ref<Vehicle>
 
     @Field(() => [String])
-    @Property({ required: true })
+    @Property({ required: true, allowMixed: Severity.ALLOW })
     phone_numbers: string[]
 
     @Field()

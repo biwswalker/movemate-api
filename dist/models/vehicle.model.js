@@ -22,7 +22,7 @@ __decorate([
 ], Vehicle.prototype, "_id", void 0);
 __decorate([
     (0, type_graphql_1.Field)(() => vehicleType_model_1.VehicleType),
-    (0, typegoose_1.prop)({ required: true }),
+    (0, typegoose_1.prop)({ required: true, allowMixed: typegoose_1.Severity.ALLOW }),
     __metadata("design:type", Object)
 ], Vehicle.prototype, "type", void 0);
 __decorate([

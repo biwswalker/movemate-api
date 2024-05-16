@@ -119,12 +119,12 @@ __decorate([
 ], Shipment.prototype, "customer", void 0);
 __decorate([
     (0, type_graphql_1.Field)(() => vehicleType_model_1.VehicleType),
-    (0, typegoose_1.prop)({ required: true }),
+    (0, typegoose_1.prop)({ required: true, allowMixed: typegoose_1.Severity.ALLOW }),
     __metadata("design:type", Object)
 ], Shipment.prototype, "vehicle_type", void 0);
 __decorate([
     (0, type_graphql_1.Field)(() => driver_model_1.Driver, { nullable: true }),
-    (0, typegoose_1.prop)(),
+    (0, typegoose_1.prop)({ allowMixed: typegoose_1.Severity.ALLOW }),
     __metadata("design:type", Object)
 ], Shipment.prototype, "driver", void 0);
 __decorate([
