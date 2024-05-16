@@ -9,6 +9,7 @@ import initialGoogleOAuth from '@configs/google.config'
 import api_v1 from '@apis/v1'
 import { graphqlUploadExpress } from 'graphql-upload-ts'
 import bodyParser from 'body-parser'
+import cors from 'cors'
 
 dotenv.config()
 
@@ -17,6 +18,7 @@ const MaxUploadFileSize = 2 * 1024 * 1024
 async function server() {
 
     const app = express()
+    app.use(cors())
     app.use(express.json())
     app.use(bodyParser.urlencoded({ extended: false }))
     app.use(graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }))
