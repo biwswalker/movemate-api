@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const email_utils_1 = require("@utils/email.utils");
+const email_utils_1 = require("../../utils/email.utils");
 const express_1 = require("express");
 const email_api = (0, express_1.Router)();
 email_api.get('/sample', (req, res) => __awaiter(void 0, void 0, void 0, function* () {

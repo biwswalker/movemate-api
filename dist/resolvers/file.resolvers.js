@@ -24,9 +24,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const type_graphql_1 = require("type-graphql");
 const graphql_upload_ts_1 = require("graphql-upload-ts");
 const fs_1 = require("fs");
-const string_utils_1 = require("@utils/string.utils");
+const string_utils_1 = require("../utils/string.utils");
 const path_1 = require("path");
-const file_payloads_1 = require("@payloads/file.payloads");
+const file_payloads_1 = require("../payloads/file.payloads");
 let MapsResolver = class MapsResolver {
     file_upload(file, ctx) {
         return __awaiter(this, void 0, void 0, function* () {

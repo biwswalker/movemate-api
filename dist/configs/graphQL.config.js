@@ -16,12 +16,12 @@ exports.createGraphQLServer = void 0;
 const type_graphql_1 = require("type-graphql");
 const apollo_server_express_1 = require("apollo-server-express");
 const lodash_1 = require("lodash");
-const auth_resolvers_1 = __importDefault(require("@resolvers/auth.resolvers"));
-const user_resolvers_1 = __importDefault(require("@resolvers/user.resolvers"));
-const shipment_resolvers_1 = __importDefault(require("@resolvers/shipment.resolvers"));
-const maps_resolvers_1 = __importDefault(require("@resolvers/maps.resolvers"));
-const file_resolvers_1 = __importDefault(require("@resolvers/file.resolvers"));
-const ping_resolvers_1 = __importDefault(require("@resolvers/ping.resolvers"));
+const auth_resolvers_1 = __importDefault(require("../resolvers/auth.resolvers"));
+const user_resolvers_1 = __importDefault(require("../resolvers/user.resolvers"));
+const shipment_resolvers_1 = __importDefault(require("../resolvers/shipment.resolvers"));
+const maps_resolvers_1 = __importDefault(require("../resolvers/maps.resolvers"));
+const file_resolvers_1 = __importDefault(require("../resolvers/file.resolvers"));
+const ping_resolvers_1 = __importDefault(require("../resolvers/ping.resolvers"));
 function createGraphQLServer() {
     return __awaiter(this, void 0, void 0, function* () {
         const schema = yield (0, type_graphql_1.buildSchema)({

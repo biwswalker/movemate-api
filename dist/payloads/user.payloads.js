@@ -11,9 +11,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthPayload = exports.UserPayload = void 0;
 const type_graphql_1 = require("type-graphql");
-const user_model_1 = require("@models/user.model");
-const customerIndividual_model_1 = require("@models/customerIndividual.model");
-const customerBusiness_model_1 = require("@models/customerBusiness.model");
+const user_model_1 = require("../models/user.model");
+const customerIndividual_model_1 = require("../models/customerIndividual.model");
+const customerBusiness_model_1 = require("../models/customerBusiness.model");
 let UserPayload = class UserPayload {
 };
 exports.UserPayload = UserPayload;

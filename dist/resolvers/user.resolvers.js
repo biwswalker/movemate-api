@@ -59,24 +59,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const type_graphql_1 = require("type-graphql");
-const user_model_1 = __importStar(require("@models/user.model"));
-const customerIndividual_model_1 = __importDefault(require("@models/customerIndividual.model"));
-const customerBusiness_model_1 = __importDefault(require("@models/customerBusiness.model"));
-const customerBusinessCashPayment_model_1 = __importDefault(require("@models/customerBusinessCashPayment.model"));
-const customerBusinessCreditPayment_model_1 = __importDefault(require("@models/customerBusinessCreditPayment.model"));
-const user_input_1 = require("@inputs/user.input");
+const user_model_1 = __importStar(require("../models/user.model"));
+const customerIndividual_model_1 = __importDefault(require("../models/customerIndividual.model"));
+const customerBusiness_model_1 = __importDefault(require("../models/customerBusiness.model"));
+const customerBusinessCashPayment_model_1 = __importDefault(require("../models/customerBusinessCashPayment.model"));
+const customerBusinessCreditPayment_model_1 = __importDefault(require("../models/customerBusinessCreditPayment.model"));
+const user_input_1 = require("../inputs/user.input");
 const bcrypt_1 = __importDefault(require("bcrypt"));
-const auth_guards_1 = require("@guards/auth.guards");
+const auth_guards_1 = require("../guards/auth.guards");
 const lodash_1 = require("lodash");
-const string_utils_1 = require("@utils/string.utils");
-const email_utils_1 = require("@utils/email.utils");
+const string_utils_1 = require("../utils/string.utils");
+const email_utils_1 = require("../utils/email.utils");
 const image_to_base64_1 = __importDefault(require("image-to-base64"));
 const path_1 = require("path");
 const handlebars_1 = require("handlebars");
 const graphql_1 = require("graphql");
-const file_model_1 = __importDefault(require("@models/file.model"));
-const user_payloads_1 = require("@payloads/user.payloads");
-const customerIndividual_model_2 = __importDefault(require("@models/customerIndividual.model"));
+const file_model_1 = __importDefault(require("../models/file.model"));
+const user_payloads_1 = require("../payloads/user.payloads");
+const customerIndividual_model_2 = __importDefault(require("../models/customerIndividual.model"));
 let UserResolver = class UserResolver {
     users() {
         return __awaiter(this, void 0, void 0, function* () {

@@ -14,8 +14,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authenticateTokenAccessImage = exports.AuthGuard = void 0;
 const type_graphql_1 = require("type-graphql");
-const auth_utils_1 = require("@utils/auth.utils");
-const user_model_1 = __importDefault(require("@models/user.model"));
+const auth_utils_1 = require("../utils/auth.utils");
+const user_model_1 = __importDefault(require("../models/user.model"));
 const jsonwebtoken_1 = require("jsonwebtoken");
 const findUserById = (Model, user_id) => __awaiter(void 0, void 0, void 0, function* () {
     const user = yield Model.findById(user_id);

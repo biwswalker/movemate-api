@@ -13,7 +13,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateId = exports.generateRandomNumberPattern = void 0;
-const counter_model_1 = __importDefault(require("@models/counter.model"));
+const counter_model_1 = __importDefault(require("../models/counter.model"));
 // import { format } from "date-fns";
 // import { toZonedTime } from "date-fns-tz";
 const lodash_1 = require("lodash");

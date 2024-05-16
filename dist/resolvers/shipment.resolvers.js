@@ -47,13 +47,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const auth_guards_1 = require("@guards/auth.guards");
-const payment_model_1 = __importStar(require("@models/payment.model"));
-const privilege_model_1 = __importDefault(require("@models/privilege.model"));
-const shipment_model_1 = __importStar(require("@models/shipment.model"));
-const shipmentPricing_model_1 = __importDefault(require("@models/shipmentPricing.model"));
-const user_model_1 = __importStar(require("@models/user.model"));
-const string_utils_1 = require("@utils/string.utils");
+const auth_guards_1 = require("../guards/auth.guards");
+const payment_model_1 = __importStar(require("../models/payment.model"));
+const privilege_model_1 = __importDefault(require("../models/privilege.model"));
+const shipment_model_1 = __importStar(require("../models/shipment.model"));
+const shipmentPricing_model_1 = __importDefault(require("../models/shipmentPricing.model"));
+const user_model_1 = __importStar(require("../models/user.model"));
+const string_utils_1 = require("../utils/string.utils");
 const lodash_1 = require("lodash");
 const type_graphql_1 = require("type-graphql");
 let ShipmentResolver = class ShipmentResolver {

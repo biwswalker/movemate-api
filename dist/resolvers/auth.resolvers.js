@@ -25,12 +25,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const type_graphql_1 = require("type-graphql");
-const user_model_1 = require("@models/user.model");
-const user_payloads_1 = require("@payloads/user.payloads");
-const auth_utils_1 = require("@utils/auth.utils");
+const user_model_1 = require("../models/user.model");
+const user_payloads_1 = require("../payloads/user.payloads");
+const auth_utils_1 = require("../utils/auth.utils");
 const graphql_1 = require("graphql");
-const customerIndividual_model_1 = __importDefault(require("@models/customerIndividual.model"));
-const customerBusiness_model_1 = __importDefault(require("@models/customerBusiness.model"));
+const customerIndividual_model_1 = __importDefault(require("../models/customerIndividual.model"));
+const customerBusiness_model_1 = __importDefault(require("../models/customerBusiness.model"));
 let AuthResolver = class AuthResolver {
     login(username, password, ctx) {
         return __awaiter(this, void 0, void 0, function* () {

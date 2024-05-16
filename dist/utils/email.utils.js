@@ -6,7 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.email_sender = void 0;
 const nodemailer_1 = require("nodemailer");
 const nodemailer_express_handlebars_1 = __importDefault(require("nodemailer-express-handlebars"));
-const google_config_1 = require("@configs/google.config");
+const google_config_1 = require("../configs/google.config");
 const path_1 = require("path");
 const email_sender = () => {
     const transporter = (0, nodemailer_1.createTransport)({

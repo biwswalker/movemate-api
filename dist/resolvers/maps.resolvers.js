@@ -22,9 +22,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const type_graphql_1 = require("type-graphql");
-const auth_guards_1 = require("@guards/auth.guards");
-const distanceMatrix_model_1 = require("@models/distanceMatrix.model");
-const matrix_1 = require("@services/maps/matrix");
+const auth_guards_1 = require("../guards/auth.guards");
+const distanceMatrix_model_1 = require("../models/distanceMatrix.model");
+const matrix_1 = require("../services/maps/matrix");
 const lodash_1 = require("lodash");
 let MapsResolver = class MapsResolver {
     distanceMatrix(lat, destinations) {
