@@ -2,9 +2,12 @@
   "name": "movemate-api",
   "version": "0.1.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "start": "ts-node -r tsconfig-paths/register --files ./src/app.ts",
+    "build": "rimraf dist && tsc",
+    "ts.check": "tsc --project tsconfig.json",
+    "add-build": "git add dist",
     "dev": "nodemon",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -48,8 +51,15 @@
     "@types/nodemailer-express-handlebars": "^4.0.5",
     "google-auth-library": "^9.9.0",
     "nodemon": "^3.1.0",
+    "pre-commit": "^1.2.2",
+    "rimraf": "^5.0.7",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.4.5"
-  }
+  },
+  "pre-commit": [
+    "ts.check",
+    "build",
+    "add-build"
+  ]
 }
