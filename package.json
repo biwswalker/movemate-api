@@ -9,7 +9,8 @@
     "ts.check": "tsc --project tsconfig.json",
     "add-build": "git add dist",
     "dev": "nodemon",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "docker:build": "sudo docker build -t movemate-api ."
   },
   "keywords": [],
   "author": "biwswalker",
