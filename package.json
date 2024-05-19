@@ -5,9 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "ts-node --files ./src/app.ts",
-    "build": "rimraf dist && tsc && tsc-alias",
+    "build": "rimraf dist && tsc && tsc-alias && copyfiles *.png -u 2 src/assets/*.png dist/assets/ && copyfiles *.handlebars -u 2 src/templates/*.handlebars dist/templates/",
     "ts.check": "tsc --project tsconfig.json",
-    "add-build": "git add dist",
     "dev": "nodemon",
     "test": "echo \"Error: no test specified\" && exit 1",
     "docker:build": "sudo docker build -t movemate-api ."
@@ -50,6 +49,7 @@
     "@types/lodash": "^4.17.1",
     "@types/nodemailer": "^6.4.15",
     "@types/nodemailer-express-handlebars": "^4.0.5",
+    "copyfiles": "^2.4.1",
     "google-auth-library": "^9.9.0",
     "nodemon": "^3.1.0",
     "pre-commit": "^1.2.2",
@@ -58,10 +58,5 @@
     "tsc-alias": "^1.8.10",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.4.5"
-  },
-  "pre-commit": [
-    "ts.check",
-    "build",
-    "add-build"
-  ]
+  }
 }

@@ -20,7 +20,7 @@ import { get, isEmpty, isEqual } from "lodash";
 import { generateId, generateRandomNumberPattern } from "@utils/string.utils";
 import { email_sender } from "@utils/email.utils";
 import imageToBase64 from 'image-to-base64'
-import { join, resolve } from 'path'
+import { join } from 'path'
 import { SafeString } from 'handlebars'
 import { GraphQLError } from 'graphql'
 import FileModel from "@models/file.model";
@@ -115,7 +115,7 @@ export default class UserResolver {
       const emailTranspoter = email_sender()
 
       // Conver image path to base64 image
-      const base64Image = await imageToBase64(join(resolve('.'), 'assets', 'email_logo.png'))
+      const base64Image = await imageToBase64(join(__dirname, '..', 'assets', 'email_logo.png'))
       const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`)
 
       // Exist email
