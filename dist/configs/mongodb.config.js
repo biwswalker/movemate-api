@@ -14,18 +14,20 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.connectToMongoDB = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
-const url = process.env.DATABASE_URL || 'mongodb://localhost:27017';
-const dbName = process.env.DATABASE_NAME || 'movemate';
 const options = {
 // TODO: Configure any additional options
 };
 const connectToMongoDB = () => __awaiter(void 0, void 0, void 0, function* () {
+    const url = process.env.DATABASE_URL || "mongodb://localhost:27017";
+    const dbName = process.env.DATABASE_NAME || "movemate";
     try {
-        yield mongoose_1.default.connect(`${url}/${dbName}`, options);
-        console.log('Connected to MongoDB');
+        yield mongoose_1.default.connect(`${url}`, {
+            dbName,
+        });
+        console.log("Connected to MongoDB", `${process.env.DATABASE_URL}`);
     }
     catch (error) {
-        console.error('Error connecting to MongoDB:', error);
+        console.error("Error connecting to MongoDB:", error);
         process.exit(1);
     }
 });

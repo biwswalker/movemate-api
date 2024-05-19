@@ -17,13 +17,13 @@ exports.getDistanceMatrix = void 0;
  * destinations: `${lat},${lng}|${lat},${lng}|${lat},${lng}`
  */
 // async function getDistanceMatrix(origin: string, destinations: string): Promise<IDistanceMatrixResponse> {
-//     const MAP_API_KEY = process.env.MAP_API_KEY
+//     const GOOGLE_MAP_API_KEY = process.env.GOOGLE_MAP_API_KEY
 //     try {
 //         const response = await axios.get<IDistanceMatrixResponse>(GOOGLEAPI_DISTANCE_MATRIX, {
 //             params: {
 //                 origin,
 //                 destinations,
-//                 key: MAP_API_KEY
+//                 key: GOOGLE_MAP_API_KEY
 //             }
 //         })
 //         return response.data
