@@ -10,11 +10,12 @@ COPY . .
 RUN npm run build
 
 FROM node:20-alpine
+WORKDIR /usr/src/movemate-api
 
 COPY package.json package-lock.json ./
 
-COPY --from=builder /usr/src/movemate-api/node_modules /node_modules
-COPY --from=builder /usr/src/movemate-api/dist /dist
+COPY --from=builder /usr/src/movemate-api/node_modules /usr/src/movemate-api/node_modules
+COPY --from=builder /usr/src/movemate-api/dist /usr/src/movemate-api/dist
 
 EXPOSE 4000
-CMD ["dist/app.js"]
+CMD ["/usr/src/movemate-api/dist/app.js"]
