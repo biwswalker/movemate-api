@@ -34,7 +34,7 @@ async function server() {
     server.applyMiddleware({ app })
     await initialGoogleOAuth()
 
-    app.use('/api/v1', api_v1)
+    app.use('/v1', api_v1)
 
     const PORT = process.env.PORT || 5000
     app.listen(PORT, () => {
