@@ -11,9 +11,9 @@ RUN npm run build
 
 FROM node:20-alpine
 WORKDIR /usr/src/movemate-api
+RUN mkdir uploads
 
 COPY package.json package-lock.json ./
-
 COPY --from=builder /usr/src/movemate-api/node_modules /usr/src/movemate-api/node_modules
 COPY --from=builder /usr/src/movemate-api/dist /usr/src/movemate-api/dist
 
