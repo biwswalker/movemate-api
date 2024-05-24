@@ -11,13 +11,13 @@ import {
 import UserModel, { User } from "@models/user.model";
 import CustomerIndividualModel from "@models/customerIndividual.model";
 import BusinessCustomerModel from "@models/customerBusiness.model";
-import BusinessCustomerCashPaymentModel from '@models/customerBusinessCashPayment.model'
+import BusinessCustomerCashPaymentModel, { BusinessCustomerCashPayment } from '@models/customerBusinessCashPayment.model'
 import BusinessCustomerCreditPaymentModel from '@models/customerBusinessCreditPayment.model'
 import { GetCustomersArgs, RegisterInput, UpdateUserInput } from "@inputs/user.input";
 import bcrypt from "bcrypt";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
-import { get, isArray, isEmpty, isEqual, map, reduce } from "lodash";
+import { get, isArray, isEmpty, isEqual, reduce } from "lodash";
 import { generateId, generateRandomNumberPattern } from "@utils/string.utils";
 import { email_sender } from "@utils/email.utils";
 import imageToBase64 from 'image-to-base64'
@@ -25,16 +25,16 @@ import { join } from 'path'
 import { SafeString } from 'handlebars'
 import { GraphQLError } from 'graphql'
 import FileModel from "@models/file.model";
-import { UserPaginationPayload, UserPayload } from "@payloads/user.payloads";
-import IndividualCustomerModel from "@models/customerIndividual.model";
+import { UserPaginationPayload } from "@payloads/user.payloads";
 import { FilterQuery, PaginateOptions } from "mongoose";
 import { PaginationArgs } from "@inputs/query.input";
 
 @Resolver(User)
 export default class UserResolver {
+
   @Query(() => UserPaginationPayload)
   @UseMiddleware(AuthGuard)
-  async customers(
+  async users(
     @Args() query: GetCustomersArgs,
     @Args() { sortField, sortAscending, ...paginationArgs }: PaginationArgs
   ): Promise<UserPaginationPayload> {
@@ -63,7 +63,7 @@ export default class UserResolver {
 
   @Query(() => User)
   @UseMiddleware(AuthGuard)
-  async customer(@Arg("id") id: string): Promise<User> {
+  async user(@Arg("id") id: string): Promise<User> {
     try {
       const user = await UserModel.findById(id);
       if (!user) {
@@ -75,9 +75,9 @@ export default class UserResolver {
     }
   }
 
-  @Query(() => UserPayload)
+  @Query(() => User)
   @UseMiddleware(AuthGuard)
-  async me(@Ctx() ctx: GraphQLContext): Promise<UserPayload> {
+  async me(@Ctx() ctx: GraphQLContext): Promise<User> {
     try {
       const userId = ctx.req.user_id;
       if (!userId) {
@@ -88,33 +88,18 @@ export default class UserResolver {
         throw new AuthenticationError("ไม่พบผู้ใช้");
       }
 
-      if (user.userType === 'individual') {
-        const individualDetail = await IndividualCustomerModel.findByUserNumber(user.userNumber)
-        return {
-          user,
-          individualDetail
-        }
-      } else if (user.userType === 'business') {
-        const businessDetail = await BusinessCustomerModel.findByUserNumber(user.userNumber)
-        return {
-          user,
-          businessDetail
-        }
-      }
-      return {
-        user
-      };
+      return user;
     } catch (error) {
       throw error
     }
   }
 
 
-  @Mutation(() => UserPayload)
+  @Mutation(() => User)
   async register(
     @Arg("data") data: RegisterInput,
     @Ctx() ctx: GraphQLContext
-  ): Promise<UserPayload> {
+  ): Promise<User> {
     const {
       userType,
       password,
@@ -186,8 +171,17 @@ export default class UserResolver {
         if (isExistingEmail) {
           throw new Error("อีเมลถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ");
         }
-        const userNumber = await generateId("MMIN", userType);
+
         const hashedPassword = await bcrypt.hash(password, 10);
+        const userNumber = await generateId("MMIN", userType);
+
+        const individualCustomer = new CustomerIndividualModel({
+          userNumber,
+          ...individualDetail,
+        });
+
+        await individualCustomer.save();
+
         const user = new UserModel({
           userRole: 'customer',
           userNumber,
@@ -200,14 +194,10 @@ export default class UserResolver {
           isVerifiedPhoneNumber: false,
           acceptPolicyVersion,
           acceptPolicyTime,
-        });
-        const individualCustomer = new CustomerIndividualModel({
-          userNumber,
-          ...individualDetail,
+          individualDetail: individualCustomer
         });
 
         await user.save();
-        await individualCustomer.save();
         // Email sender
         await emailTranspoter.sendMail({
           from: process.env.GOOGLE_MAIL,
@@ -223,7 +213,7 @@ export default class UserResolver {
           }
         })
 
-        return { user, individualDetail: individualCustomer };
+        return user;
       }
 
       /**
@@ -235,33 +225,61 @@ export default class UserResolver {
         }
 
         const userNumber = await generateId("MMBU", userType);
-        const generatedPassword = generateRandomNumberPattern('MM##########').toLowerCase()
+        const generatedPassword = generateRandomNumberPattern('MM########').toLowerCase()
         const hashedPassword = await bcrypt.hash(generatedPassword, 10);
-        const user = new UserModel({
-          userNumber,
-          userType,
-          username: userNumber,
-          password: hashedPassword,
-          remark,
-          registration: platform,
-          isVerifiedEmail: false,
-          isVerifiedPhoneNumber: false,
-          acceptPolicyVersion,
-          acceptPolicyTime,
-        });
-
-        const business = new BusinessCustomerModel({
-          ...businessDetail,
-          userNumber,
-        })
 
         if (businessDetail.paymentMethod === 'cash' && businessDetail.paymentCashDetail) {
           const cashDetail = businessDetail.paymentCashDetail
           const cashPayment = new BusinessCustomerCashPaymentModel({
-            userNumber,
             acceptedEreceiptDate: cashDetail.acceptedEReceiptDate
           })
+
           await cashPayment.save()
+
+          const business = new BusinessCustomerModel({
+            ...businessDetail,
+            userNumber,
+            cashPayment,
+          })
+
+          await business.save()
+
+          const user = new UserModel({
+            userNumber,
+            userType,
+            username: userNumber,
+            password: hashedPassword,
+            remark,
+            registration: platform,
+            isVerifiedEmail: false,
+            isVerifiedPhoneNumber: false,
+            acceptPolicyVersion,
+            acceptPolicyTime,
+            businessDetail: business,
+          });
+
+          await user.save();
+
+
+          // Email sender
+          await emailTranspoter.sendMail({
+            from: process.env.GOOGLE_MAIL,
+            to: businessDetail.businessEmail,
+            subject: 'ยืนยันการสมัครสมาชิก Movemate!',
+            template: 'register_business',
+            context: {
+              business_title: businessDetail.businessTitle,
+              business_name: businessDetail.businessName,
+              username: userNumber,
+              password: generatedPassword,
+              logo: imageUrl,
+              activate_link: `https://api.movemateth.com/activate/customer/${userNumber}`,
+              movemate_link: `https://www.movemateth.com`,
+            }
+          })
+
+          return user
+
         } else if (businessDetail.paymentMethod === 'credit' && businessDetail.paymentCreditDetail) {
           // TODO: Get default config
           const _defaultCreditLimit = 20000.00
@@ -301,39 +319,41 @@ export default class UserResolver {
             billedDate: _billedDate,
             billedRound: _billedRound,
             creditLimit: _defaultCreditLimit,
-            userNumber,
             creditUsage: 0,
             businessRegistrationCertificateFile: businessRegisCertFileModel,
             copyIDAuthorizedSignatoryFile: copyIDAuthSignatoryFileModel,
             ...(certValueAddedTaxRegisFileModel ? { certificateValueAddedTaxRefistrationFile: certValueAddedTaxRegisFileModel } : {})
           })
           await creditPayment.save()
+
+          const business = new BusinessCustomerModel({
+            ...businessDetail,
+            userNumber,
+            creditPayment,
+          })
+
+          await business.save()
+
+          const user = new UserModel({
+            userNumber,
+            userType,
+            username: userNumber,
+            password: hashedPassword,
+            remark,
+            registration: platform,
+            isVerifiedEmail: false,
+            isVerifiedPhoneNumber: false,
+            acceptPolicyVersion,
+            acceptPolicyTime,
+            businessDetail: business,
+          });
+
+          await user.save();
+
+          return user
         } else {
           throw new Error("ไม่พบข้อมูลการชำระ กรุณาติดต่อผู้ดูแลระบบ");
         }
-
-        await business.save()
-        await user.save();
-
-        if (businessDetail.paymentMethod === 'cash') {
-          // Email sender
-          await emailTranspoter.sendMail({
-            from: process.env.GOOGLE_MAIL,
-            to: businessDetail.businessEmail,
-            subject: 'ยืนยันการสมัครสมาชิก Movemate!',
-            template: 'register_business',
-            context: {
-              business_title: businessDetail.businessTitle,
-              business_name: businessDetail.businessName,
-              username: userNumber,
-              password: generatedPassword,
-              logo: imageUrl,
-              activate_link: `https://api.movemateth.com/activate/customer/${userNumber}`,
-              movemate_link: `https://www.movemateth.com`,
-            }
-          })
-        }
-        return { user, businessDetail: business };
       }
 
       return null;

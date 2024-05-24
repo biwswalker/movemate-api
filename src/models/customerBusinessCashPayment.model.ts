@@ -7,12 +7,6 @@ export class BusinessCustomerCashPayment {
   @Field(() => ID)
   readonly _id: string;
 
-  @Field()
-  @IsString()
-  @IsNotEmpty()
-  @Property({ required: true, unique: true })
-  userNumber: string;
-
   // Cash
   @Field()
   @Property()

@@ -1,7 +1,11 @@
 import { ObjectType, Field, ID, Int } from "type-graphql";
-import { prop as Property, getModelForClass } from "@typegoose/typegoose";
+import { prop as Property, Ref, getModelForClass, plugin } from "@typegoose/typegoose";
 import { IsEmail, IsNotEmpty, IsString, Length } from "class-validator";
+import autopopulate from 'mongoose-autopopulate'
+import { BusinessCustomerCreditPayment } from "./customerBusinessCreditPayment.model";
+import { BusinessCustomerCashPayment } from "./customerBusinessCashPayment.model";
 
+@plugin(autopopulate)
 @ObjectType()
 export class BusinessCustomer {
   @Field(() => ID)
@@ -99,6 +103,14 @@ export class BusinessCustomer {
   @Field()
   @Property()
   acceptedTermConditionDate: Date;
+
+  @Field(() => BusinessCustomerCreditPayment, { nullable: true })
+  @Property({ autopopulate: true, ref: 'BusinessCustomerCreditPayment' })
+  creditPayment?: Ref<BusinessCustomerCreditPayment>
+
+  @Field(() => BusinessCustomerCashPayment, { nullable: true })
+  @Property({ autopopulate: true, ref: 'BusinessCustomerCashPayment' })
+  cashPayment?: Ref<BusinessCustomerCashPayment>
 
   static async findByUserNumber(userNumber: string): Promise<BusinessCustomer | null> {
     return BusinessCustomerModel.findOne({ userNumber });

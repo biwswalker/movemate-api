@@ -1,11 +1,14 @@
-import { ObjectType, Field, ID, Int, InputType, ArgsType } from "type-graphql";
-import { prop as Property, getModelForClass, index, plugin } from "@typegoose/typegoose";
-import { } from 'type-graphql-filter'
+import { ObjectType, Field, ID, Int } from "type-graphql";
+import { prop as Property, Ref, getModelForClass, plugin } from "@typegoose/typegoose";
+import autopopulate from 'mongoose-autopopulate'
 import { IsNotEmpty, IsString, IsEnum } from "class-validator";
 import bcrypt from "bcrypt";
 import cryptoJs from "crypto-js";
 import mongoosePagination from 'mongoose-paginate-v2'
 import mongoose from "mongoose";
+import { Admin } from "./admin.model";
+import { IndividualCustomer } from "./customerIndividual.model";
+import { BusinessCustomer } from "./customerBusiness.model";
 
 enum EUserRole {
   CUSTOMER = 'customer',
@@ -34,6 +37,7 @@ enum ERegistration {
   APP = "app",
 }
 
+@plugin(autopopulate)
 @plugin(mongoosePagination)
 @ObjectType()
 export class User {
@@ -122,6 +126,18 @@ export class User {
   @Field()
   @Property({ default: Date.now })
   updatedAt: Date;
+
+  @Field(() => Admin, { nullable: true })
+  @Property({ autopopulate: true, ref: 'Admin' })
+  adminDetail?: Ref<Admin>
+
+  @Field(() => IndividualCustomer, { nullable: true })
+  @Property({ autopopulate: true, ref: 'IndividualCustomer' })
+  individualDetail?: Ref<IndividualCustomer>
+
+  @Field(() => BusinessCustomer, { nullable: true })
+  @Property({ autopopulate: true, ref: 'BusinessCustomer' })
+  businessDetail?: Ref<BusinessCustomer>
 
   async validatePassword(password: string): Promise<boolean> {
     const password_decryption = cryptoJs.AES.decrypt(

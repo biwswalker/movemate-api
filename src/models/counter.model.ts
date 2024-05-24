@@ -43,7 +43,7 @@ export class Couter {
             const counter = await CouterModel.findOneAndUpdate({}, { $inc: { upload: 1 } }, query_option)
             return counter.upload
         } else if (type === 'password') {
-            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { upload: 1 } }, query_option)
+            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { password: 1 } }, query_option)
             return counter.password
         }
         return 0

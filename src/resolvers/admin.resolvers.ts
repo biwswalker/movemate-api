@@ -1,13 +1,11 @@
 import {
     Resolver,
-    Query,
     Mutation,
     Arg,
     Ctx,
     UseMiddleware,
 } from "type-graphql";
 import UserModel, { User } from "@models/user.model";
-import { UpdateUserInput } from "@inputs/user.input";
 import bcrypt from "bcrypt";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
@@ -17,43 +15,19 @@ import imageToBase64 from 'image-to-base64'
 import { join } from 'path'
 import { SafeString } from 'handlebars'
 import { GraphQLError } from 'graphql'
-import { AdminPayload } from "@payloads/user.payloads";
-import AdminModel, { Admin } from "@models/admin.model";
+import AdminModel from "@models/admin.model";
 import { AddAdminInput } from "@inputs/admin.input";
 import cryptoJs from "crypto-js";
 
-@Resolver(Admin)
+@Resolver(User)
 export default class AdminResolver {
-    @Query(() => [User])
-    @UseMiddleware(AuthGuard)
-    async admins(): Promise<User[]> {
-        try {
-            const users = await UserModel.find({ userRole: 'admin' });
-            return users;
-        } catch (error) {
-            throw new Error("Failed to fetch users");
-        }
-    }
 
-    @Query(() => User)
+    @Mutation(() => User)
     @UseMiddleware(AuthGuard)
-    async admin(@Arg("id") id: string): Promise<User> {
-        try {
-            const user = await UserModel.findById(id);
-            if (!user) {
-                throw new Error("ไม่พบผู้ดูแล");
-            }
-            return user;
-        } catch (error) {
-            throw new Error("Failed to fetch user");
-        }
-    }
-
-    @Mutation(() => AdminPayload)
     async addAdmin(
         @Arg("data") data: AddAdminInput,
         @Ctx() ctx: GraphQLContext
-    ): Promise<AdminPayload> {
+    ): Promise<User> {
         const { email } = data;
         try {
             // Prepare email sender
@@ -84,10 +58,17 @@ export default class AdminResolver {
             const userNumber = await generateId("MMAM", 'admin');
             const userPassword = await generateId("ADMIN", 'password');
             const encryptionPassword = cryptoJs.AES.encrypt(
-                userPassword,
+                userPassword.toLowerCase(),
                 process.env.MOVEMATE_SHARED_KEY
             ).toString();
             const hashedPassword = await bcrypt.hash(encryptionPassword, 10);
+            const admin = new AdminModel({
+                userNumber,
+                ...data
+            });
+
+            await admin.save();
+
             const user = new UserModel({
                 userRole: 'admin',
                 userNumber,
@@ -99,14 +80,11 @@ export default class AdminResolver {
                 isVerifiedPhoneNumber: false,
                 acceptPolicyVersion: 99,
                 acceptPolicyTime: new Date().toISOString(),
-            });
-            const admin = new AdminModel({
-                userNumber,
-                ...data
+                adminDetail: admin,
             });
 
             await user.save();
-            await admin.save();
+
             // Email sender
             await emailTranspoter.sendMail({
                 from: process.env.GOOGLE_MAIL,
@@ -116,36 +94,17 @@ export default class AdminResolver {
                 context: {
                     fullname: admin.fullName,
                     username: userNumber,
-                    password: userPassword,
+                    password: userPassword.toLowerCase(),
                     logo: imageUrl,
                     activateLink: `https://api.movemateth.com/activate/admin/${userNumber}`,
                     movemateLink: `https://www.movemateth.com`,
                 }
             })
 
-            return { user, adminDetail: admin };
+            return user;
         } catch (error) {
             console.log(error)
             throw error
-        }
-    }
-
-    @Mutation(() => User)
-    @UseMiddleware(AuthGuard)
-    async updateUser(
-        @Arg("data") { id, ...update_data }: UpdateUserInput
-    ): Promise<User> {
-        try {
-            const user = await UserModel.findByIdAndUpdate(id, update_data, {
-                new: true,
-            });
-            if (!user) {
-                throw new Error("User not found");
-            }
-
-            return user;
-        } catch (error) {
-            throw new Error("Failed to update user");
         }
     }
 }

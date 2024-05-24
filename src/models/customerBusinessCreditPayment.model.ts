@@ -4,20 +4,16 @@ import {
   Ref,
   Severity,
   getModelForClass,
+  plugin,
 } from "@typegoose/typegoose";
-import { IsNotEmpty, IsString } from "class-validator";
 import { File } from "./file.model";
+import autopopulate from 'mongoose-autopopulate'
 
+@plugin(autopopulate)
 @ObjectType()
 export class BusinessCustomerCreditPayment {
   @Field(() => ID)
   readonly _id: string;
-
-  @Field()
-  @IsString()
-  @IsNotEmpty()
-  @Property({ required: true, unique: true })
-  userNumber: string;
 
   // Credit
   @Field({ nullable: true })
@@ -73,15 +69,15 @@ export class BusinessCustomerCreditPayment {
   acceptedFirstCredit_termDate: Date;
 
   @Field(() => File)
-  @Property({ ref: () => File })
+  @Property({ ref: () => File, autopopulate: true })
   businessRegistrationCertificateFile: Ref<File>;
 
   @Field(() => File)
-  @Property({ ref: () => File })
+  @Property({ ref: () => File, autopopulate: true })
   copyIDAuthorizedSignatoryFile: Ref<File>;
 
   @Field(() => File, { nullable: true })
-  @Property({ ref: () => File })
+  @Property({ ref: () => File, autopopulate: true })
   certificateValueAddedTaxRefistrationFile: Ref<File>
 
   // Credit
