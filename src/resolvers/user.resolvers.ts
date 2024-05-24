@@ -17,7 +17,7 @@ import { GetCustomersArgs, RegisterInput, UpdateUserInput } from "@inputs/user.i
 import bcrypt from "bcrypt";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
-import { get, isEmpty, isEqual } from "lodash";
+import { get, isArray, isEmpty, isEqual, map, reduce } from "lodash";
 import { generateId, generateRandomNumberPattern } from "@utils/string.utils";
 import { email_sender } from "@utils/email.utils";
 import imageToBase64 from 'image-to-base64'
@@ -36,17 +36,22 @@ export default class UserResolver {
   @UseMiddleware(AuthGuard)
   async customers(
     @Args() query: GetCustomersArgs,
-    @Args() paginationArgs: PaginationArgs
+    @Args() { sortField, sortAscending, ...paginationArgs }: PaginationArgs
   ): Promise<UserPaginationPayload> {
     try {
       const options: FilterQuery<typeof User> = {
-        ...query
+        ...query,
       }
 
       const pagination: PaginateOptions = {
-        ...paginationArgs
+        ...paginationArgs,
+        ...(isArray(sortField) ? {
+          sort: reduce(sortField, function (result, value) {
+            return { ...result, [value]: sortAscending ? 1 : -1 };
+          }, {})
+        } : {})
       }
-      
+
       const users = await UserModel.paginate(options, pagination) as UserPaginationPayload
 
       return users

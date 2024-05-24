@@ -5,7 +5,7 @@ import { IsNotEmpty, IsString, IsEnum } from "class-validator";
 import bcrypt from "bcrypt";
 import cryptoJs from "crypto-js";
 import mongoosePagination from 'mongoose-paginate-v2'
-import mongoose, { ObjectId } from "mongoose";
+import mongoose from "mongoose";
 
 enum EUserRole {
   CUSTOMER = 'customer',
