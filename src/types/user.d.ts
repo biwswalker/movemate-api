@@ -7,3 +7,5 @@ type TRegistration = 'web' | 'app'
 type TUserType = 'individual' | 'business'
 type TUserStatus = 'active' | 'banned'
 type TUserValidationStatus = 'validating' | 'approve' | 'reject'
+
+type TAdminPermission = 'admin' | 'supervisor' | 'owner'

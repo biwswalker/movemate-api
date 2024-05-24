@@ -32,6 +32,7 @@ export const AuthGuard: MiddlewareFn<GraphQLContext> = async ({ context }, next)
             throw new AuthenticationError('รหัสระบุตัวตนไม่สมบูรณ์หรือหมดอายุ');
         }
         const user_id = decodedToken.user_id
+        const user_role = decodedToken.user_role
         const user = await findUserById(UserModel, user_id);
 
         if (!user) {
@@ -39,6 +40,7 @@ export const AuthGuard: MiddlewareFn<GraphQLContext> = async ({ context }, next)
         }
 
         req.user_id = user_id
+        req.user_role = user_role
 
     } catch (error) {
         if (error instanceof TokenExpiredError) {

@@ -1,8 +1,17 @@
-import { ObjectType, Field, ID, Int } from "type-graphql";
-import { prop as Property, getModelForClass } from "@typegoose/typegoose";
+import { ObjectType, Field, ID, Int, InputType, ArgsType } from "type-graphql";
+import { prop as Property, getModelForClass, index, plugin } from "@typegoose/typegoose";
+import { } from 'type-graphql-filter'
 import { IsNotEmpty, IsString, IsEnum } from "class-validator";
 import bcrypt from "bcrypt";
 import cryptoJs from "crypto-js";
+import mongoosePagination from 'mongoose-paginate-v2'
+import mongoose, { ObjectId } from "mongoose";
+
+enum EUserRole {
+  CUSTOMER = 'customer',
+  ADMIN = 'admin',
+  DRIVER = 'driver'
+}
 
 enum EUserType {
   INDIVIDUAL = "individual",
@@ -25,6 +34,7 @@ enum ERegistration {
   APP = "app",
 }
 
+@plugin(mongoosePagination)
 @ObjectType()
 export class User {
   @Field(() => ID)
@@ -35,6 +45,12 @@ export class User {
   @IsNotEmpty()
   @Property({ required: true, unique: true })
   userNumber: string;
+
+  @Field()
+  @IsEnum(EUserRole)
+  @IsNotEmpty()
+  @Property({ enum: EUserRole, default: EUserRole.CUSTOMER, required: true })
+  userRole: TUserRole;
 
   @Field()
   @IsEnum(EUserType)
@@ -118,6 +134,8 @@ export class User {
   static async findByUsername(username: string): Promise<User | null> {
     return UserModel.findOne({ username });
   }
+
+  static paginate: mongoose.PaginateModel<typeof User>['paginate']
 }
 
 const UserModel = getModelForClass(User);

@@ -6,6 +6,7 @@ import { GraphQLContext } from '@configs/graphQL.config'
 import { GraphQLError } from 'graphql'
 import IndividualCustomerModel from '@models/customerIndividual.model'
 import BusinessCustomerModel from '@models/customerBusiness.model'
+import AdminModel from '@models/admin.model'
 
 @Resolver()
 export default class AuthResolver {
@@ -23,33 +24,52 @@ export default class AuthResolver {
                 throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
             }
 
-            const token = generateAccessToken(user._id)
+            const token = generateAccessToken(user._id, user.userRole)
             ctx.res.cookie('access_token', token, { httpOnly: true })
 
-            if (user.userType === 'individual') {
-                const individualDetail = await IndividualCustomerModel.findByUserNumber(user.userNumber)
-                return {
-                    token,
-                    detail: {
-                        user,
-                        individualDetail
-                    },
-                }
-            } else if (user.userType === 'business') {
-                const businessDetail = await BusinessCustomerModel.findByUserNumber(user.userNumber)
-                return {
-                    token,
-                    detail: {
-                        user,
-                        businessDetail
-                    },
-                }
-            }
-            return {
-                token,
-                detail: {
-                    user,
-                },
+            switch (user.userRole) {
+                case 'customer':
+                    if (user.userType === 'individual') {
+                        const individualDetail = await IndividualCustomerModel.findByUserNumber(user.userNumber)
+                        return {
+                            token,
+                            detail: {
+                                user,
+                                individualDetail
+                            },
+                        }
+                    } else if (user.userType === 'business') {
+                        const businessDetail = await BusinessCustomerModel.findByUserNumber(user.userNumber)
+                        return {
+                            token,
+                            detail: {
+                                user,
+                                businessDetail
+                            },
+                        }
+                    }
+                    return {
+                        token,
+                        detail: {
+                            user,
+                        },
+                    }
+                case 'admin':
+                    const adminDetail = await AdminModel.findByUserNumber(user.userNumber)
+                    return {
+                        token,
+                        detail: {
+                            user,
+                            adminDetail
+                        }
+                    }
+                default:
+                    return {
+                        token,
+                        detail: {
+                            user,
+                        },
+                    }
             }
         } catch (error) {
             console.log(error)

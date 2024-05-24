@@ -6,13 +6,14 @@ import {
   Ctx,
   UseMiddleware,
   AuthenticationError,
+  Args,
 } from "type-graphql";
 import UserModel, { User } from "@models/user.model";
 import CustomerIndividualModel from "@models/customerIndividual.model";
 import BusinessCustomerModel from "@models/customerBusiness.model";
 import BusinessCustomerCashPaymentModel from '@models/customerBusinessCashPayment.model'
 import BusinessCustomerCreditPaymentModel from '@models/customerBusinessCreditPayment.model'
-import { RegisterInput, UpdateUserInput } from "@inputs/user.input";
+import { GetCustomersArgs, RegisterInput, UpdateUserInput } from "@inputs/user.input";
 import bcrypt from "bcrypt";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
@@ -24,25 +25,40 @@ import { join } from 'path'
 import { SafeString } from 'handlebars'
 import { GraphQLError } from 'graphql'
 import FileModel from "@models/file.model";
-import { UserPayload } from "@payloads/user.payloads";
+import { UserPaginationPayload, UserPayload } from "@payloads/user.payloads";
 import IndividualCustomerModel from "@models/customerIndividual.model";
+import { FilterQuery, PaginateOptions } from "mongoose";
+import { PaginationArgs } from "@inputs/query.input";
 
 @Resolver(User)
 export default class UserResolver {
-  @Query(() => [User])
+  @Query(() => UserPaginationPayload)
   @UseMiddleware(AuthGuard)
-  async users(): Promise<User[]> {
+  async customers(
+    @Args() query: GetCustomersArgs,
+    @Args() paginationArgs: PaginationArgs
+  ): Promise<UserPaginationPayload> {
     try {
-      const users = await UserModel.find();
-      return users;
+      const options: FilterQuery<typeof User> = {
+        ...query
+      }
+
+      const pagination: PaginateOptions = {
+        ...paginationArgs
+      }
+      
+      const users = await UserModel.paginate(options, pagination) as UserPaginationPayload
+
+      return users
     } catch (error) {
+      console.log(error)
       throw new Error("Failed to fetch users");
     }
   }
 
   @Query(() => User)
   @UseMiddleware(AuthGuard)
-  async user(@Arg("id") id: string): Promise<User> {
+  async customer(@Arg("id") id: string): Promise<User> {
     try {
       const user = await UserModel.findById(id);
       if (!user) {
@@ -168,6 +184,7 @@ export default class UserResolver {
         const userNumber = await generateId("MMIN", userType);
         const hashedPassword = await bcrypt.hash(password, 10);
         const user = new UserModel({
+          userRole: 'customer',
           userNumber,
           userType,
           username: individualDetail.email,

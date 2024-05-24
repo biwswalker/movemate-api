@@ -1,4 +1,4 @@
-import { Field, InputType, Int } from "type-graphql";
+import { ArgsType, Field, InputType, Int } from "type-graphql";
 import { RegisterBusinessInput, RegisterIndividualInput } from "./customer.input";
 
 @InputType()
@@ -179,4 +179,43 @@ export class UpdateBusinessDetailInput {
 
   @Field()
   isAcceptEDocuments: boolean;
+}
+
+@ArgsType()
+export class GetCustomersArgs {
+  @Field({ nullable: true })
+  _id?: string;
+
+  @Field({ nullable: true })
+  userNumber: string;
+
+  @Field({ nullable: true })
+  userRole: TUserRole;
+
+  @Field({ nullable: true })
+  userType: TUserType;
+
+  @Field({ nullable: true })
+  username: string;
+
+  @Field({ nullable: true })
+  status: TUserStatus;
+
+  @Field({ nullable: true })
+  validationStatus: TUserValidationStatus;
+
+  @Field({ nullable: true })
+  registration: TRegistration;
+
+  @Field({ nullable: true })
+  lastestOTP: string;
+
+  @Field({ nullable: true })
+  lastestOTPRef: string;
+
+  @Field({ nullable: true })
+  isVerifiedEmail: boolean;
+
+  @Field({ nullable: true })
+  isVerifiedPhoneNumber: boolean;
 }

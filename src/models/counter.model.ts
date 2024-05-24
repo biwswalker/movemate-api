@@ -19,6 +19,9 @@ export class Couter {
     @Property({ required: true, default: 0 })
     upload: number
 
+    @Property({ required: true, default: 0 })
+    password: number
+
     static async getNextCouter(type: TGenerateIDType): Promise<number> {
         const query_option = { upsert: true, new: true }
         if (type === 'individual') {
@@ -39,6 +42,9 @@ export class Couter {
         } else if (type === 'upload') {
             const counter = await CouterModel.findOneAndUpdate({}, { $inc: { upload: 1 } }, query_option)
             return counter.upload
+        } else if (type === 'password') {
+            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { upload: 1 } }, query_option)
+            return counter.password
         }
         return 0
     }
