@@ -18,13 +18,7 @@ const MaxUploadFileSize = 2 * 1024 * 1024;
 async function server() {
   const app = express();
   app.use(
-    cors({
-      origin: [
-        "https://movmateth.space",
-        "https://www.movmateth.space",
-        "https://admin.movmateth.space",
-      ],
-    })
+    cors()
   );
   app.use(express.json());
   app.use(bodyParser.urlencoded({ extended: false }));
