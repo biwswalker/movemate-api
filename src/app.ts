@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import { engine } from "express-handlebars";
+import { Request } from "express";
 import { expressMiddleware } from '@apollo/server/express4';
 import { connectToMongoDB } from "@configs/mongodb.config";
 import { createGraphQLServer } from "@configs/graphQL.config";
@@ -14,6 +15,17 @@ import cors from "cors";
 import http from 'http'
 import "reflect-metadata";
 
+morgan.token('graphql-query', (req: Request) => {
+  const ip = req.ip || undefined
+  const method = req.method || undefined
+  const baseUrl = req.baseUrl || undefined
+  const { query, variables, operationName } = req.body;
+  if (query) {
+    return `GRAPHQL:\n${operationName} \nQuery: ${query} \nVariables: ${JSON.stringify(variables)}`;
+  }
+  return `${ip} ${method} ${baseUrl}`
+});
+
 dotenv.config();
 
 const MaxUploadFileSize = 2 * 1024 * 1024;
@@ -24,7 +36,7 @@ async function server() {
   const alllowedCors = cors<cors.CorsRequest>()
   app.use(alllowedCors);
   app.use(express.json());
-  app.use(morgan('short'))
+  app.use(morgan(':graphql-query'))
   app.use(bodyParser.urlencoded({ extended: false }));
   app.use(graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }));
   app.use("/source", authenticateTokenAccessImage, express.static("uploads"));
