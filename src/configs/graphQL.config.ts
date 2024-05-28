@@ -1,7 +1,9 @@
 import { buildSchema } from "type-graphql";
-import { ApolloServer } from "apollo-server-express";
+import { ApolloServer } from '@apollo/server'
+import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHttpServer'
 import { Request, Response } from "express";
 import { get } from "lodash";
+import http from 'http'
 import AuthResolver from '@resolvers/auth.resolvers'
 import UserResolver from '@resolvers/user.resolvers'
 import ShipmentResolver from "@resolvers/shipment.resolvers";
@@ -15,7 +17,7 @@ export interface GraphQLContext {
     res: Response
 }
 
-export async function createGraphQLServer() {
+export async function createGraphQLServer(httpServer: http.Server) {
     const schema = await buildSchema({
         resolvers: [AuthResolver, UserResolver, ShipmentResolver, MapsResolver, FileResolver, PingResolver, AdminResolver],
         authChecker: ({ context }: { context: GraphQLContext }) => {
@@ -26,7 +28,7 @@ export async function createGraphQLServer() {
 
     const server = new ApolloServer<GraphQLContext>({
         schema,
-        context: ({ req, res }) => ({ req, res }),
+        plugins: [ApolloServerPluginDrainHttpServer({ httpServer })],
     })
 
     return server
