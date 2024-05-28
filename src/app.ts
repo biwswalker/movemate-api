@@ -33,7 +33,15 @@ const MaxUploadFileSize = 2 * 1024 * 1024;
 async function server() {
   const app = express();
   const httpServer = http.createServer(app)
-  const alllowedCors = cors<cors.CorsRequest>()
+  const alllowedCors = cors<cors.CorsRequest>({
+    maxAge: 600,
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    origin: [
+      'https://movmateth.space',
+      'https://admin.movmateth.space',
+    ],
+  })
   app.use(alllowedCors);
   app.use(express.json());
   app.use(morgan(':graphql-query'))
