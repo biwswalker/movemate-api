@@ -36,11 +36,19 @@ async function server() {
   const alllowedCors = cors<cors.CorsRequest>({
     maxAge: 600,
     credentials: true,
-    methods: ['GET', 'POST', 'OPTIONS'],
+    methods: ['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS'],
     origin: [
+      'http://localhost:3000',
       'https://movmateth.space',
       'https://admin.movmateth.space',
     ],
+    allowedHeaders: [
+      'Accept',
+      'Authorization',
+      'Content-Type',
+      'X-Requested-With',
+      'apollo-require-preflight',
+    ]
   })
   app.use(alllowedCors);
   app.use(express.json());
