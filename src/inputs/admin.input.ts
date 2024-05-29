@@ -7,11 +7,11 @@ export class AddAdminInput {
     permission: TAdminPermission
 
     @Field()
-    @IsEmail()
-    email: string;
+    status: TUserStatus;
 
     @Field()
-    title: string;
+    @IsEmail()
+    email: string;
 
     @Field()
     firstname: string;
@@ -27,16 +27,4 @@ export class AddAdminInput {
 
     @Field({ nullable: true })
     address: string;
-
-    @Field({ nullable: true })
-    province: string;
-
-    @Field({ nullable: true })
-    district: string;
-
-    @Field({ nullable: true })
-    subDistrict: string;
-
-    @Field({ nullable: true })
-    postcode: string;
 }

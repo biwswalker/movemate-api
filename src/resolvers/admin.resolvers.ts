@@ -28,7 +28,7 @@ export default class AdminResolver {
         @Arg("data") data: AddAdminInput,
         @Ctx() ctx: GraphQLContext
     ): Promise<User> {
-        const { email } = data;
+        const { email, status } = data;
         try {
             // Prepare email sender
             const emailTranspoter = email_sender()
@@ -72,6 +72,7 @@ export default class AdminResolver {
             const user = new UserModel({
                 userRole: 'admin',
                 userNumber,
+                status,
                 userType: 'individual',
                 username: userNumber,
                 password: hashedPassword,

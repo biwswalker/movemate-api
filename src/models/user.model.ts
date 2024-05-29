@@ -23,6 +23,7 @@ enum EUserType {
 
 enum EUserStatus {
   ACTIVE = "active",
+  INACTIVE = "inactive",
   BANNED = "banned",
 }
 
