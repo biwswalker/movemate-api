@@ -26,62 +26,6 @@ export class RegisterInput {
   businessDetail: RegisterBusinessInput;
 }
 
-
-@InputType()
-export class CutomerIndividualInput {
-  @Field()
-  userType: TUserType;
-
-  @Field()
-  status: TUserStatus;
-
-  @Field({ nullable: true })
-  remark: string;
-
-  @Field({ nullable: true })
-  isVerifiedEmail: boolean;
-
-  @Field({ nullable: true })
-  isVerifiedPhoneNumber: boolean;
-
-  @Field()
-  @IsEmail()
-  email: string;
-
-  @Field()
-  title: string;
-
-  @Field()
-  firstname: string;
-
-  @Field()
-  lastname: string;
-
-  @Field()
-  phoneNumber: string;
-
-  @Field({ nullable: true })
-  taxId: string;
-
-  @Field({ nullable: true })
-  address: string;
-
-  @Field({ nullable: true })
-  province: string;
-
-  @Field({ nullable: true })
-  district: string;
-
-  @Field({ nullable: true })
-  subDistrict: string;
-
-  @Field({ nullable: true })
-  postcode: string;
-
-  @Field(() => File, { nullable: true })
-  profileImage: File;
-}
-
 @InputType()
 export class UpdateUserInput {
   @Field()

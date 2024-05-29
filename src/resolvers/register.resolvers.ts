@@ -4,11 +4,7 @@ import CustomerIndividualModel from "@models/customerIndividual.model";
 import BusinessCustomerModel from "@models/customerBusiness.model";
 import BusinessCustomerCashPaymentModel from "@models/customerBusinessCashPayment.model";
 import BusinessCustomerCreditPaymentModel from "@models/customerBusinessCreditPayment.model";
-import {
-  CutomerIndividualInput,
-  RegisterInput,
-  UpdateUserInput,
-} from "@inputs/user.input";
+import { RegisterInput, UpdateUserInput } from "@inputs/user.input";
 import bcrypt from "bcrypt";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
@@ -20,6 +16,7 @@ import { join } from "path";
 import { SafeString } from "handlebars";
 import { GraphQLError } from "graphql";
 import FileModel from "@models/file.model";
+import { CutomerIndividualInput } from "@inputs/customer.input";
 
 @Resolver(User)
 export default class RegisterResolver {

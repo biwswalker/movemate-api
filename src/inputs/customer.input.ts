@@ -47,13 +47,13 @@ export class CashPaymentInput {
 @InputType()
 export class FileInput {
   @Field()
-  fileId: string
+  fileId: string;
 
   @Field()
-  filename: string
+  filename: string;
 
   @Field()
-  mimetype: string
+  mimetype: string;
 }
 
 @InputType()
@@ -149,13 +149,13 @@ export class RegisterBusinessInput {
   @Field()
   acceptedEDocumentDate: Date;
 
-  @Field(type => Int)
+  @Field((type) => Int)
   acceptedPoliciesVersion: number;
 
   @Field()
   acceptedPoliciesDate: Date;
 
-  @Field(type => Int)
+  @Field((type) => Int)
   acceptedTermConditionVersion: number;
 
   @Field()
@@ -166,4 +166,59 @@ export class RegisterBusinessInput {
 
   @Field(() => CreditPaymentInput, { nullable: true })
   paymentCreditDetail: CreditPaymentInput;
+}
+
+@InputType()
+export class CutomerIndividualInput {
+  @Field()
+  userType: TUserType;
+
+  @Field()
+  status: TUserStatus;
+
+  @Field({ nullable: true })
+  remark: string;
+
+  @Field({ nullable: true })
+  isVerifiedEmail: boolean;
+
+  @Field({ nullable: true })
+  isVerifiedPhoneNumber: boolean;
+
+  @Field()
+  @IsEmail()
+  email: string;
+
+  @Field()
+  title: string;
+
+  @Field()
+  firstname: string;
+
+  @Field()
+  lastname: string;
+
+  @Field()
+  phoneNumber: string;
+
+  @Field({ nullable: true })
+  taxId: string;
+
+  @Field({ nullable: true })
+  address: string;
+
+  @Field({ nullable: true })
+  province: string;
+
+  @Field({ nullable: true })
+  district: string;
+
+  @Field({ nullable: true })
+  subDistrict: string;
+
+  @Field({ nullable: true })
+  postcode: string;
+
+  @Field(() => File, { nullable: true })
+  profileImage: File;
 }
