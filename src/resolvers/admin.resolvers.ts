@@ -23,7 +23,7 @@ import cryptoJs from "crypto-js";
 export default class AdminResolver {
 
     @Mutation(() => User)
-    @UseMiddleware(AuthGuard)
+    @UseMiddleware(AuthGuard(['admin']))
     async addAdmin(
         @Arg("data") data: AddAdminInput,
         @Ctx() ctx: GraphQLContext

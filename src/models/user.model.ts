@@ -140,6 +140,10 @@ export class User {
   @Property({ autopopulate: true, ref: 'BusinessCustomer' })
   businessDetail?: Ref<BusinessCustomer>
 
+  @Field(() => File, { nullable: true })
+  @Property({ autopopulate: true, ref: 'File' })
+  profileImage?: Ref<File>
+
   async validatePassword(password: string): Promise<boolean> {
     const password_decryption = cryptoJs.AES.decrypt(
       password,

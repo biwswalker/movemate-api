@@ -11,6 +11,7 @@ import MapsResolver from "@resolvers/maps.resolvers";
 import FileResolver from "@resolvers/file.resolvers";
 import PingResolver from "@resolvers/ping.resolvers";
 import AdminResolver from "@resolvers/admin.resolvers";
+import RegisterResolver from "@resolvers/register.resolvers";
 
 export interface GraphQLContext {
     req: Request
@@ -19,7 +20,16 @@ export interface GraphQLContext {
 
 export async function createGraphQLServer(httpServer: http.Server) {
     const schema = await buildSchema({
-        resolvers: [AuthResolver, UserResolver, ShipmentResolver, MapsResolver, FileResolver, PingResolver, AdminResolver],
+        resolvers: [
+            AuthResolver,
+            UserResolver,
+            ShipmentResolver,
+            MapsResolver,
+            FileResolver,
+            PingResolver,
+            AdminResolver,
+            RegisterResolver,
+        ],
         authChecker: ({ context }: { context: GraphQLContext }) => {
             const userId = get(context, 'req.userId', '')
             return !!userId

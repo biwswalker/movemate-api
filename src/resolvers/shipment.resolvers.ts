@@ -12,7 +12,7 @@ import { Arg, Ctx, FieldResolver, Mutation, Query, Resolver, Root, UseMiddleware
 @Resolver(Shipment)
 export default class ShipmentResolver {
     @Query(() => Shipment)
-    @UseMiddleware(AuthGuard)
+    @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
     async shipment(@Arg('id') id: string): Promise<Shipment> {
         try {
             const shipment = await ShipmentModel.findById(id)
@@ -24,7 +24,7 @@ export default class ShipmentResolver {
     }
 
     @Query(() => [Shipment])
-    @UseMiddleware(AuthGuard)
+    @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
     async shipments(): Promise<Shipment[]> {
         try {
             const shipment = await ShipmentModel.find()
@@ -86,7 +86,7 @@ export default class ShipmentResolver {
     }
 
     @Mutation(() => Shipment)
-    @UseMiddleware(AuthGuard)
+    @UseMiddleware(AuthGuard(['customer', 'admin']))
     async createShipment(@Arg('data') data: ShipmentInput, @Ctx() ctx: GraphQLContext): Promise<Shipment> {
         try {
             const user_id = ctx.req.user_id

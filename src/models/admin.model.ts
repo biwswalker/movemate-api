@@ -31,9 +31,9 @@ export class Admin {
   @Property({ required: true })
   email: string;
 
-  @Field()
+  @Field({ nullable: true })
   @IsString()
-  @Property({ required: true })
+  @Property()
   title: string;
 
   @Field()

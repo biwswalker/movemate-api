@@ -7,7 +7,7 @@ import { get } from 'lodash'
 @Resolver()
 export default class MapsResolver {
     @Query(() => DistanceMatrix)
-    @UseMiddleware(AuthGuard)
+    @UseMiddleware(AuthGuard())
     async distanceMatrix(@Arg('origin') lat: string, @Arg('destinations') destinations: string): Promise<DistanceMatrix> {
         try {
             const {

@@ -4,6 +4,7 @@ import { GraphQLContext } from '@configs/graphQL.config'
 import UserModel from '@models/user.model'
 import { NextFunction, Request, Response } from 'express';
 import { TokenExpiredError } from 'jsonwebtoken';
+import { includes } from 'lodash';
 
 interface IAccountModel {
     findById(user_id: string): Promise<any>;
@@ -17,7 +18,7 @@ const findUserById = async (Model: IAccountModel, user_id: string): Promise<any>
     return user;
 };
 
-export const AuthGuard: MiddlewareFn<GraphQLContext> = async ({ context }, next) => {
+export const AuthGuard: (roles?: TUserRole[]) => MiddlewareFn<GraphQLContext> = (roles = ['customer']) => async ({ context }, next) => {
     const { req } = context
 
     const authorization = req.headers['authorization']
@@ -37,6 +38,10 @@ export const AuthGuard: MiddlewareFn<GraphQLContext> = async ({ context }, next)
 
         if (!user) {
             throw new AuthenticationError('ไม่พบผู้ใช้');
+        }
+
+        if (!includes(roles, user_role)) {
+            throw new AuthenticationError('ไม่สามารถใช้งานฟังก์ชั้นนี้ได้ จำกัดสิทธิ์การเข้าถึง');
         }
 
         req.user_id = user_id
