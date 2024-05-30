@@ -107,8 +107,8 @@ export default class RegisterResolver {
       const email = isEqual(userType, "individual")
         ? get(individualDetail, "email", "")
         : isEqual(userType, "business")
-        ? get(businessDetail, "businessEmail", "")
-        : "";
+          ? get(businessDetail, "businessEmail", "")
+          : "";
       const emailFieldName =
         userType === "individual" ? "email" : "businessEmail";
       await this.isExistingEmail(email, emailFieldName);
@@ -304,9 +304,9 @@ export default class RegisterResolver {
             copyIDAuthorizedSignatoryFile: copyIDAuthSignatoryFileModel,
             ...(certValueAddedTaxRegisFileModel
               ? {
-                  certificateValueAddedTaxRefistrationFile:
-                    certValueAddedTaxRegisFileModel,
-                }
+                certificateValueAddedTaxRefistrationFile:
+                  certValueAddedTaxRegisFileModel,
+              }
               : {}),
           });
           await creditPayment.save();
@@ -354,7 +354,7 @@ export default class RegisterResolver {
     @Arg("data") data: CutomerIndividualInput,
     @Ctx() ctx: GraphQLContext
   ): Promise<User> {
-    const { email } = data;
+    const { email, profileImage, ...formValue } = data;
     try {
       // Check if the user already exists
       const platform = ctx.req.headers["platform"];
@@ -380,16 +380,26 @@ export default class RegisterResolver {
 
       const customer = new CustomerIndividualModel({
         userNumber,
-        ...data,
+        email,
+        ...formValue,
       });
 
       await customer.save();
 
+      const image =
+        profileImage
+          ? new FileModel(profileImage)
+          : null;
+      if (image) {
+        await image.save()
+      }
+
       const user = new UserModel({
-        ...data,
+        ...formValue,
         userRole: "customer",
         userNumber,
         username: data.email,
+        profileImage: image,
         password: hashedPassword,
         registration: platform,
         individualDetail: customer,
