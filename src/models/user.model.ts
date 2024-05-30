@@ -113,12 +113,12 @@ export class User {
   @Property()
   isVerifiedPhoneNumber: boolean;
 
-  @Field((type) => Int)
-  @Property({ required: true })
+  @Field((type) => Int, { nullable: true })
+  @Property()
   acceptPolicyVersion: number;
 
-  @Field()
-  @Property({ required: true })
+  @Field({ nullable: true })
+  @Property()
   acceptPolicyTime: string;
 
   @Field()
