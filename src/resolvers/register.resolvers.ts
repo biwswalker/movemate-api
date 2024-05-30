@@ -424,7 +424,8 @@ export default class RegisterResolver {
 
       return user;
     } catch (error) {
-      throw new Error("Failed to update user");
+      console.log(error);
+      throw error;
     }
   }
 
