@@ -10,6 +10,9 @@ export class RegisterIndividualInput {
   @Field()
   title: string;
 
+  @Field({ nullable: true })
+  otherTitle: string;
+
   @Field()
   firstname: string;
 
@@ -191,6 +194,9 @@ export class CutomerIndividualInput {
 
   @Field()
   title: string;
+
+  @Field({ nullable: true })
+  otherTitle: string;
 
   @Field()
   firstname: string;

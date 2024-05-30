@@ -19,10 +19,15 @@ export class IndividualCustomer {
   @Property({ required: true })
   email: string;
 
-  @Field()
+  @Field({ nullable: true })
   @IsString()
   @Property({ required: true })
   title: string;
+
+  @Field()
+  @IsString()
+  @Property()
+  otherTitle: string;
 
   @Field()
   @IsString()
