@@ -9,6 +9,7 @@ import mongoose from "mongoose";
 import { Admin } from "./admin.model";
 import { IndividualCustomer } from "./customerIndividual.model";
 import { BusinessCustomer } from "./customerBusiness.model";
+import { File } from "./file.model"
 
 enum EUserRole {
   CUSTOMER = 'customer',

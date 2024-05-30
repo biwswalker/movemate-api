@@ -1,6 +1,6 @@
 import { IsEmail } from "class-validator";
 import { Field, InputType, Int } from "type-graphql";
-
+import { File } from "models/file.model";
 @InputType()
 export class RegisterIndividualInput {
   @Field()
@@ -219,6 +219,6 @@ export class CutomerIndividualInput {
   @Field({ nullable: true })
   postcode: string;
 
-  @Field(() => File, { nullable: true })
-  profileImage: File;
+  @Field(() => FileInput, { nullable: true })
+  profileImage: FileInput;
 }
