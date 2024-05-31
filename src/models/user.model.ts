@@ -10,6 +10,7 @@ import { Admin } from "./admin.model";
 import { IndividualCustomer } from "./customerIndividual.model";
 import { BusinessCustomer } from "./customerBusiness.model";
 import { File } from "./file.model"
+import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 
 enum EUserRole {
   CUSTOMER = 'customer',
@@ -42,7 +43,7 @@ enum ERegistration {
 @plugin(autopopulate)
 @plugin(mongoosePagination)
 @ObjectType()
-export class User {
+export class User extends TimeStamps {
   @Field(() => ID)
   readonly _id: string;
 

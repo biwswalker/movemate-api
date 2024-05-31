@@ -6,6 +6,7 @@ import { GraphQLContext } from '@configs/graphQL.config'
 import { generateId, generateRandomNumberPattern } from '@utils/string.utils'
 import { extname, join } from 'path'
 import { FileUploadPayload } from '@payloads/file.payloads'
+import { get } from 'lodash'
 
 @Resolver()
 export default class MapsResolver {
@@ -18,7 +19,9 @@ export default class MapsResolver {
         const generated_filename = await generateId(`${generateRandomNumberPattern('MMSOURCE######')}-`, 'upload')
         const final_filename = `${generated_filename}${extname(filename)}`
         const path = join(__dirname, '..', '..', 'uploads', final_filename)
-        const url = `${process.env.DOMAINNAME}/source/${final_filename}`
+        const protocol = get(ctx, 'req.protocol', '')
+        const host = ctx.req.get('host')
+        const url = `${protocol}://${host}/source/${final_filename}`
 
         return await new Promise<FileUploadPayload>((resolve, reject) => {
             createReadStream()

@@ -1,6 +1,7 @@
 import { ObjectType, Field, ID } from "type-graphql";
-import { DocumentType, prop as Property, getModelForClass } from "@typegoose/typegoose";
+import { prop as Property, getModelForClass } from "@typegoose/typegoose";
 import { IsEmail, IsNotEmpty, IsString, Length } from "class-validator";
+import { get } from "lodash";
 
 @ObjectType()
 export class IndividualCustomer {
@@ -77,13 +78,12 @@ export class IndividualCustomer {
   @Property()
   postcode: string;
 
-  @Field()
-  @Property({
-    default: function ({ firstname, lastname }: DocumentType<IndividualCustomer>) {
-      return `${firstname} ${lastname}`;
-    }
-  })
-  fullName: string;
+  @Field({ nullable: true })
+  get fullname(): string {
+    const firstname = get(this, '_doc.firstname', '') || get(this, 'firstname', '')
+    const lastname = get(this, '_doc.lastname', '') || get(this, 'lastname', '')
+    return `${firstname} ${lastname}`;
+  }
 
   static async findByUserNumber(userNumber: string): Promise<IndividualCustomer | null> {
     return IndividualCustomerModel.findOne({ userNumber });

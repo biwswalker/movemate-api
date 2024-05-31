@@ -93,7 +93,7 @@ export default class AdminResolver {
                 subject: 'ยืนยันการเข้าร่วม Movemate!',
                 template: 'register_admin',
                 context: {
-                    fullname: admin.fullName,
+                    fullname: admin.fullname,
                     username: userNumber,
                     password: userPassword.toLowerCase(),
                     logo: imageUrl,

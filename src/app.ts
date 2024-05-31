@@ -19,9 +19,9 @@ morgan.token('graphql-query', (req: Request) => {
   const ip = req.ip || undefined
   const method = req.method || undefined
   const baseUrl = req.baseUrl || undefined
-  const { query, variables, operationName } = req.body;
-  if (query) {
-    return `GRAPHQL:\n${operationName} \nQuery: ${query} \nVariables: ${JSON.stringify(variables)}`;
+  const { operationName } = req.body;
+  if (operationName) {
+    return `GRAPHQL: ${operationName}`;
   }
   return `${ip} ${method} ${baseUrl}`
 });
@@ -42,13 +42,6 @@ async function server() {
       'https://movmateth.space',
       'https://admin.movmateth.space',
     ],
-    // allowedHeaders: [
-    //   'Accept',
-    //   'Authorization',
-    //   'Content-Type',
-    //   'X-Requested-With',
-    //   'apollo-require-preflight',
-    // ]
   })
   app.use(alllowedCors);
   app.use(express.json());

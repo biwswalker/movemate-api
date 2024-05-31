@@ -1,6 +1,7 @@
 import { ObjectType, Field, ID } from "type-graphql";
-import { DocumentType, prop as Property, getModelForClass } from "@typegoose/typegoose";
+import { prop as Property, getModelForClass } from "@typegoose/typegoose";
 import { IsEmail, IsEnum, IsNotEmpty, IsString, Length } from "class-validator";
+import { get } from "lodash";
 
 enum EAdminPermission {
   ADMIN = 'admin',
@@ -80,13 +81,12 @@ export class Admin {
   @Property()
   postcode: string;
 
-  @Field()
-  @Property({
-    default: function ({ firstname, lastname }: DocumentType<Admin>) {
-      return `${firstname} ${lastname}`;
-    }
-  })
-  fullName: string;
+  @Field({ nullable: true })
+  get fullname(): string {
+    const firstname = get(this, '_doc.firstname', '') || get(this, 'firstname', '')
+    const lastname = get(this, '_doc.lastname', '') || get(this, 'lastname', '')
+    return `${firstname} ${lastname}`;
+  }
 
   static async findByUserNumber(userNumber: string): Promise<Admin | null> {
     return AdminModel.findOne({ userNumber });

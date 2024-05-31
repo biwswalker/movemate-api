@@ -150,7 +150,7 @@ export default class RegisterResolver {
           subject: "ยืนยันการสมัครสมาชิก Movemate!",
           template: "register_individual",
           context: {
-            fullname: individualCustomer.fullName,
+            fullname: individualCustomer.fullname,
             username: individualDetail.email,
             logo: imageUrl,
             activateLink: `https://api.movemateth.com/activate/customer/${userNumber}`,
@@ -413,7 +413,7 @@ export default class RegisterResolver {
         subject: "ยืนยันการสมัครสมาชิก Movemate!",
         template: "register_individual_withpassword",
         context: {
-          fullname: customer.fullName,
+          fullname: customer.fullname,
           username: email,
           password: rawPassword,
           logo: imageUrl,

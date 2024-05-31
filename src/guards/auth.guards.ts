@@ -58,29 +58,30 @@ export const AuthGuard: (roles?: TUserRole[]) => MiddlewareFn<GraphQLContext> = 
 }
 
 export const authenticateTokenAccessImage = async (request: Request, response: Response, next: NextFunction) => {
-    const authorization = request.headers['authorization']
+    next()
+    // const authorization = request.headers['authorization']
 
-    if (!authorization || !authorization.startsWith('Bearer ') || authorization === undefined || authorization === null) {
-        return response.sendStatus(401)
-    }
+    // if (!authorization || !authorization.startsWith('Bearer ') || authorization === undefined || authorization === null) {
+    //     return response.sendStatus(401)
+    // }
 
-    try {
-        const token = authorization.split(' ')[1];
-        const decodedToken = verifyAccessToken(token)
-        if (!decodedToken) {
-            return response.sendStatus(403)
-        }
-        const user_id = decodedToken.user_id
+    // try {
+    //     const token = authorization.split(' ')[1];
+    //     const decodedToken = verifyAccessToken(token)
+    //     if (!decodedToken) {
+    //         return response.sendStatus(403)
+    //     }
+    //     const user_id = decodedToken.user_id
 
-        const user = await findUserById(UserModel, user_id)
+    //     const user = await findUserById(UserModel, user_id)
 
-        if (!user) {
-            return response.sendStatus(403)
-        }
+    //     if (!user) {
+    //         return response.sendStatus(403)
+    //     }
 
-        next()
-    } catch (error) {
-        // console.log(error)
-        return response.sendStatus(403)
-    }
+    //     next()
+    // } catch (error) {
+    //     // console.log(error)
+    //     return response.sendStatus(403)
+    // }
 }
