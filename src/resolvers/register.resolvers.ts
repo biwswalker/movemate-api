@@ -296,15 +296,43 @@ export default class RegisterResolver {
 
           const creditPayment = new BusinessCustomerCreditPaymentModel({
             ...creditDetail,
-            billedDate: _billedDate,
-            billedRound: _billedRound,
+            billedDateType: 'default',
+            billedDate: {
+              jan: _billedDate,
+              feb: _billedDate,
+              mar: _billedDate,
+              apr: _billedDate,
+              may: _billedDate,
+              jun: _billedDate,
+              jul: _billedDate,
+              aug: _billedDate,
+              sept: _billedDate,
+              oct: _billedDate,
+              nov: _billedDate,
+              dec: _billedDate,
+            },
+            billedRoundType: 'default',
+            billedRound: {
+              jan: _billedRound,
+              feb: _billedRound,
+              mar: _billedRound,
+              apr: _billedRound,
+              may: _billedRound,
+              jun: _billedRound,
+              jul: _billedRound,
+              aug: _billedRound,
+              sept: _billedRound,
+              oct: _billedRound,
+              nov: _billedRound,
+              dec: _billedRound,
+            },
             creditLimit: _defaultCreditLimit,
             creditUsage: 0,
             businessRegistrationCertificateFile: businessRegisCertFileModel,
             copyIDAuthorizedSignatoryFile: copyIDAuthSignatoryFileModel,
             ...(certValueAddedTaxRegisFileModel
               ? {
-                certificateValueAddedTaxRefistrationFile:
+                certificateValueAddedTaxRegistrationFile:
                   certValueAddedTaxRegisFileModel,
               }
               : {}),

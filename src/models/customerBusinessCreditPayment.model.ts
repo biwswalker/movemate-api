@@ -8,6 +8,63 @@ import {
 } from "@typegoose/typegoose";
 import { File } from "./file.model";
 import autopopulate from 'mongoose-autopopulate'
+import { IsEnum, IsNotEmpty } from "class-validator";
+
+enum EBilledType {
+  DEFAULT = 'default',
+  DATES = 'dates'
+}
+
+@ObjectType()
+export class BilledMonth {
+  @Field(() => Int)
+  @Property()
+  jan: number;
+
+  @Field(() => Int)
+  @Property()
+  feb: number;
+
+  @Field(() => Int)
+  @Property()
+  mar: number;
+
+  @Field(() => Int)
+  @Property()
+  apr: number;
+
+  @Field(() => Int)
+  @Property()
+  may: number;
+
+  @Field(() => Int)
+  @Property()
+  jun: number;
+
+  @Field(() => Int)
+  @Property()
+  jul: number;
+
+  @Field(() => Int)
+  @Property()
+  aug: number;
+
+  @Field(() => Int)
+  @Property()
+  sept: number;
+
+  @Field(() => Int)
+  @Property()
+  oct: number;
+
+  @Field(() => Int)
+  @Property()
+  nov: number;
+
+  @Field(() => Int)
+  @Property()
+  dec: number;
+}
 
 @plugin(autopopulate)
 @ObjectType()
@@ -56,17 +113,30 @@ export class BusinessCustomerCreditPayment {
   @Property({ required: true })
   financialSubDistrict: string;
 
-  @Field(type => Int)
-  @Property({ required: true })
-  billedDate: number;
 
-  @Field(type => Int)
+  @Field()
+  @IsEnum(EBilledType)
+  @IsNotEmpty()
+  @Property({ enum: EBilledType, default: EBilledType.DEFAULT, required: true })
+  billedDateType: TBilledMonthType;
+
+  @Field(type => BilledMonth)
   @Property({ required: true })
-  billedRound: number;
+  billedDate: BilledMonth;
+
+  @Field()
+  @IsEnum(EBilledType)
+  @IsNotEmpty()
+  @Property({ enum: EBilledType, default: EBilledType.DEFAULT, required: true })
+  billedRoundType: TBilledMonthType;
+
+  @Field(type => BilledMonth)
+  @Property({ required: true })
+  billedRound: BilledMonth;
 
   @Field({ nullable: true })
   @Property()
-  acceptedFirstCredit_termDate: Date;
+  acceptedFirstCreditTermDate: Date;
 
   @Field(() => File)
   @Property({ ref: () => File, autopopulate: true })
@@ -78,7 +148,7 @@ export class BusinessCustomerCreditPayment {
 
   @Field(() => File, { nullable: true })
   @Property({ ref: () => File, autopopulate: true })
-  certificateValueAddedTaxRefistrationFile: Ref<File>
+  certificateValueAddedTaxRegistrationFile: Ref<File>
 
   // Credit
   @Field(() => Float)
