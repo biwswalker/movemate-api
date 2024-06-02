@@ -406,6 +406,9 @@ export class CutomerBusinessInput {
   @Field()
   postcode: string;
 
+  @Field(() => CashPaymentDetailInput, { nullable: true })
+  cashPayment?: CashPaymentDetailInput;
+
   @Field(() => CreditPaymentDetailInput, { nullable: true })
   creditPayment?: CreditPaymentDetailInput;
 }

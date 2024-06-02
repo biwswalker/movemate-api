@@ -481,7 +481,7 @@ export default class RegisterResolver {
       const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`);
 
       // Check existing email
-      await this.isExistingEmail(businessEmail);
+      await this.isExistingEmail(businessEmail, 'businessEmail');
 
       const rawPassword =
         generateRandomNumberPattern("MMPWD########").toLowerCase();
