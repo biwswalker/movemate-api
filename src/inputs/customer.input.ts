@@ -1,6 +1,7 @@
 import { IsEmail } from "class-validator";
-import { Field, InputType, Int } from "type-graphql";
+import { Field, Float, InputType, Int } from "type-graphql";
 import { File } from "models/file.model";
+import { BilledMonth } from "@models/customerBusinessCreditPayment.model";
 @InputType()
 export class RegisterIndividualInput {
   @Field()
@@ -227,4 +228,146 @@ export class CutomerIndividualInput {
 
   @Field(() => FileInput, { nullable: true })
   profileImage: FileInput;
+}
+
+@InputType()
+export class CashPaymentDetailInput {
+  @Field()
+  acceptedEReceipt: boolean;
+
+  @Field()
+  acceptedEReceiptDate: string;
+}
+
+@InputType()
+export class CreditPaymentDetailInput {
+  @Field()
+  acceptedFirstCreditTerm: boolean;
+
+  @Field()
+  acceptedFirstCreditTermDate: string;
+
+  @Field()
+  billedDateType: string; // default | dates
+
+  @Field(() => BilledMonth)
+  billedDate: BilledMonth;
+
+  @Field()
+  billedRoundType: string; // default | dates
+
+  @Field(() => BilledMonth)
+  billedRound: BilledMonth;
+
+  @Field(() => Float)
+  creditLimit: number;
+
+  @Field(() => Float, { nullable: true })
+  creditUsage?: number;
+
+  @Field()
+  financialAddress: string;
+
+  @Field()
+  financialContactEmails: string[];
+
+  @Field()
+  financialContactNumber: string;
+
+  @Field()
+  financialDistrict: string;
+
+  @Field()
+  financialFirstname: string;
+
+  @Field()
+  financialLastname: string;
+
+  @Field()
+  financialPostcode: string;
+
+  @Field()
+  financialProvince: string;
+
+  @Field()
+  financialSubDistrict: string;
+
+  @Field()
+  isSameAddress: boolean;
+
+  @Field(() => FileInput)
+  businessRegistrationCertificateFile: FileInput;
+
+  @Field(() => FileInput)
+  copyIDAuthorizedSignatoryFile: FileInput;
+
+  @Field(() => FileInput, { nullable: true })
+  certificateValueAddedTaxRegistrationFile?: FileInput;
+}
+
+@InputType()
+export class CutomerBusinessInput {
+  @Field()
+  userType: TUserType;
+
+  @Field()
+  status: TUserStatus;
+
+  @Field({ nullable: true })
+  remark: string;
+
+  @Field({ nullable: true })
+  isVerifiedEmail: boolean;
+
+  @Field({ nullable: true })
+  isVerifiedPhoneNumber: boolean;
+
+  @Field(() => FileInput, { nullable: true })
+  profileImage: FileInput;
+
+  @Field()
+  @IsEmail()
+  businessEmail: string;
+
+  @Field()
+  businessTitle: string;
+
+  @Field()
+  businessName: string;
+
+  @Field()
+  businessBranch: string;
+
+  @Field()
+  businessType: string;
+
+  @Field()
+  businessTypeOther: string;
+
+  @Field()
+  contactNumber: string;
+
+  @Field()
+  paymentMethod: string;
+
+  @Field()
+  taxNumber: string;
+
+  @Field()
+  address: string;
+
+  @Field()
+  province: string;
+
+  @Field()
+  district: string;
+
+  @Field()
+  subDistrict: string;
+
+  @Field()
+  postcode: string;
+
+  @Field(() => CreditPaymentDetailInput, { nullable: true })
+  creditPayment?: CreditPaymentDetailInput;
 }

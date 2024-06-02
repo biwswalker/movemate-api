@@ -1,4 +1,4 @@
-import { ObjectType, Field, ID, Int, Float } from "type-graphql";
+import { ObjectType, Field, ID, Int, Float, InputType } from "type-graphql";
 import {
   prop as Property,
   Ref,
@@ -15,6 +15,7 @@ enum EBilledType {
   DATES = 'dates'
 }
 
+@InputType()
 @ObjectType()
 export class BilledMonth {
   @Field(() => Int)
