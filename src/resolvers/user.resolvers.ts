@@ -44,14 +44,14 @@ export default class UserResolver {
         ...paginationArgs,
         ...(isArray(sortField)
           ? {
-              sort: reduce(
-                sortField,
-                function (result, value) {
-                  return { ...result, [value]: sortAscending ? 1 : -1 };
-                },
-                {}
-              ),
-            }
+            sort: reduce(
+              sortField,
+              function (result, value) {
+                return { ...result, [value]: sortAscending ? 1 : -1 };
+              },
+              {}
+            ),
+          }
           : {}),
       };
 
@@ -296,7 +296,7 @@ export default class UserResolver {
           ...(uploadedImage ? { profileImage: uploadedImage } : {}),
         });
 
-        await customerBusinesslModel.updateOne({ ...formValue });
+        await customerBusinesslModel.updateOne({ ...formValue, businessEmail });
 
         const user = await UserModel.findById(id);
         return user;

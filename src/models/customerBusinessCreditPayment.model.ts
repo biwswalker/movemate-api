@@ -15,7 +15,6 @@ enum EBilledType {
   DATES = 'dates'
 }
 
-@InputType()
 @ObjectType()
 export class BilledMonth {
   @Field(() => Int)

@@ -1,7 +1,6 @@
 import { IsEmail } from "class-validator";
 import { Field, Float, InputType, Int } from "type-graphql";
 import { File } from "models/file.model";
-import { BilledMonth } from "@models/customerBusinessCreditPayment.model";
 @InputType()
 export class RegisterIndividualInput {
   @Field()
@@ -240,6 +239,45 @@ export class CashPaymentDetailInput {
 }
 
 @InputType()
+class BilledMonthInput {
+  @Field(() => Int)
+  jan: number;
+
+  @Field(() => Int)
+  feb: number;
+
+  @Field(() => Int)
+  mar: number;
+
+  @Field(() => Int)
+  apr: number;
+
+  @Field(() => Int)
+  may: number;
+
+  @Field(() => Int)
+  jun: number;
+
+  @Field(() => Int)
+  jul: number;
+
+  @Field(() => Int)
+  aug: number;
+
+  @Field(() => Int)
+  sept: number;
+
+  @Field(() => Int)
+  oct: number;
+
+  @Field(() => Int)
+  nov: number;
+
+  @Field(() => Int)
+  dec: number;
+}
+
+@InputType()
 export class CreditPaymentDetailInput {
   @Field()
   acceptedFirstCreditTerm: boolean;
@@ -250,14 +288,14 @@ export class CreditPaymentDetailInput {
   @Field()
   billedDateType: string; // default | dates
 
-  @Field(() => BilledMonth)
-  billedDate: BilledMonth;
+  @Field(() => BilledMonthInput)
+  billedDate: BilledMonthInput;
 
   @Field()
   billedRoundType: string; // default | dates
 
-  @Field(() => BilledMonth)
-  billedRound: BilledMonth;
+  @Field(() => BilledMonthInput)
+  billedRound: BilledMonthInput;
 
   @Field(() => Float)
   creditLimit: number;
@@ -268,7 +306,7 @@ export class CreditPaymentDetailInput {
   @Field()
   financialAddress: string;
 
-  @Field()
+  @Field(() => [String])
   financialContactEmails: string[];
 
   @Field()

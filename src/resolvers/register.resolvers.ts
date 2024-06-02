@@ -4,7 +4,7 @@ import CustomerIndividualModel from "@models/customerIndividual.model";
 import BusinessCustomerModel from "@models/customerBusiness.model";
 import BusinessCustomerCashPaymentModel from "@models/customerBusinessCashPayment.model";
 import BusinessCustomerCreditPaymentModel from "@models/customerBusinessCreditPayment.model";
-import { RegisterInput, UpdateUserInput } from "@inputs/user.input";
+import { RegisterInput } from "@inputs/user.input";
 import bcrypt from "bcrypt";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
@@ -16,7 +16,7 @@ import { join } from "path";
 import { SafeString } from "handlebars";
 import { GraphQLError } from "graphql";
 import FileModel from "@models/file.model";
-import { CutomerIndividualInput } from "@inputs/customer.input";
+import { CutomerBusinessInput, CutomerIndividualInput } from "@inputs/customer.input";
 
 @Resolver(User)
 export default class RegisterResolver {
@@ -425,6 +425,7 @@ export default class RegisterResolver {
       const user = new UserModel({
         ...formValue,
         userRole: "customer",
+        userType: 'individual',
         userNumber,
         username: data.email,
         profileImage: image,
@@ -459,20 +460,157 @@ export default class RegisterResolver {
 
   @Mutation(() => User)
   @UseMiddleware(AuthGuard(["admin"]))
-  async updateUser(
-    @Arg("data") { id, ...update_data }: UpdateUserInput
+  async addBusinessCustomer(
+    @Arg("data") data: CutomerBusinessInput,
+    @Ctx() ctx: GraphQLContext
   ): Promise<User> {
+    const { businessEmail, profileImage, creditPayment, ...formValue } = data;
     try {
-      const user = await UserModel.findByIdAndUpdate(id, update_data, {
-        new: true,
-      });
-      if (!user) {
-        throw new Error("User not found");
+      // Check if the user already exists
+      const platform = ctx.req.headers["platform"];
+      if (isEmpty(platform)) {
+        throw new Error("Bad Request: Platform is require");
       }
+
+      // Prepare email sender
+      const emailTranspoter = email_sender();
+      // Conver image path to base64 image
+      const base64Image = await imageToBase64(
+        join(__dirname, "..", "assets", "email_logo.png")
+      );
+      const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`);
+
+      // Check existing email
+      await this.isExistingEmail(businessEmail);
+
+      const rawPassword =
+        generateRandomNumberPattern("MMPWD########").toLowerCase();
+      const hashedPassword = await bcrypt.hash(rawPassword, 10);
+      const userNumber = await generateId("MMBU", "business");
+
+      const {
+        businessRegistrationCertificateFile,
+        copyIDAuthorizedSignatoryFile,
+        certificateValueAddedTaxRegistrationFile,
+        ...creditVelues
+      } = creditPayment;
+
+      // Document Image 1
+      const businessRegistrationCertificate =
+        businessRegistrationCertificateFile
+          ? new FileModel(businessRegistrationCertificateFile)
+          : null;
+      if (businessRegistrationCertificate) {
+        await businessRegistrationCertificate.save();
+      }
+      // Document Image 2
+      const copyIDAuthorizedSignatory = copyIDAuthorizedSignatoryFile
+        ? new FileModel(copyIDAuthorizedSignatoryFile)
+        : null;
+      if (copyIDAuthorizedSignatory) {
+        await copyIDAuthorizedSignatory.save();
+      }
+      // Document Image 3
+      const certificateValueAddedTaxRegistration =
+        certificateValueAddedTaxRegistrationFile
+          ? new FileModel(certificateValueAddedTaxRegistrationFile)
+          : null;
+      if (certificateValueAddedTaxRegistration) {
+        await certificateValueAddedTaxRegistration.save();
+      }
+
+      const creditPrymentDetail =
+        (formValue.paymentMethod === 'credit' && creditPayment)
+          ? new BusinessCustomerCreditPaymentModel({
+            ...creditVelues,
+            ...(businessRegistrationCertificate
+              ? { profileImage: businessRegistrationCertificate }
+              : {}),
+            ...(copyIDAuthorizedSignatory
+              ? { profileImage: copyIDAuthorizedSignatory }
+              : {}),
+            ...(certificateValueAddedTaxRegistration
+              ? { profileImage: certificateValueAddedTaxRegistration }
+              : {}),
+          })
+          : null;
+      if (creditPrymentDetail) {
+        await creditPrymentDetail.save()
+      }
+
+      const customer = new BusinessCustomerModel({
+        userNumber,
+        businessEmail,
+        ...formValue,
+        ...(creditPrymentDetail ? { creditPayment: creditPrymentDetail } : {})
+      });
+
+      await customer.save();
+
+      const image =
+        profileImage
+          ? new FileModel(profileImage)
+          : null;
+      if (image) {
+        await image.save()
+      }
+
+      const user = new UserModel({
+        ...formValue,
+        userRole: "customer",
+        userType: 'business',
+        userNumber,
+        username: userNumber,
+        password: hashedPassword,
+        registration: platform,
+        businessDetail: customer,
+        isVerifiedEmail: false,
+        isVerifiedPhoneNumber: false,
+        ...(image ? { profileImage: image } : {}),
+      });
+
+      await user.save();
+
+      // Email sender
+      await emailTranspoter.sendMail({
+        from: process.env.GOOGLE_MAIL,
+        to: customer.businessEmail,
+        subject: "ยืนยันการสมัครสมาชิก Movemate!",
+        template: "register_business",
+        context: {
+          business_title: customer.businessTitle,
+          business_name: customer.businessName,
+          username: userNumber,
+          password: rawPassword,
+          logo: imageUrl,
+          activate_link: `https://api.movemateth.com/activate/customer/${userNumber}`,
+          movemate_link: `https://www.movemateth.com`,
+        },
+      });
 
       return user;
     } catch (error) {
-      throw new Error("Failed to update user");
+      console.log(error);
+      throw error;
     }
   }
+
+  // @Mutation(() => User)
+  // @UseMiddleware(AuthGuard(["admin"]))
+  // async updateUser(
+  //   @Arg("data") { id, ...update_data }: UpdateUserInput
+  // ): Promise<User> {
+  //   try {
+  //     const user = await UserModel.findByIdAndUpdate(id, update_data, {
+  //       new: true,
+  //     });
+  //     if (!user) {
+  //       throw new Error("User not found");
+  //     }
+
+  //     return user;
+  //   } catch (error) {
+  //     throw new Error("Failed to update user");
+  //   }
+  // }
 }
