@@ -113,7 +113,6 @@ export class BusinessCustomerCreditPayment {
   @Property({ required: true })
   financialSubDistrict: string;
 
-
   @Field()
   @IsEnum(EBilledType)
   @IsNotEmpty()

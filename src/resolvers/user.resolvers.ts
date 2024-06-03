@@ -12,7 +12,7 @@ import UserModel, { User } from "@models/user.model";
 import { GetCustomersArgs } from "@inputs/user.input";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
-import { isArray, isEmpty, isEqual, reduce } from "lodash";
+import { get, isArray, isEmpty, isEqual, omit, reduce } from "lodash";
 import { UserPaginationPayload } from "@payloads/user.payloads";
 import { FilterQuery, PaginateOptions } from "mongoose";
 import { PaginationArgs } from "@inputs/query.input";
@@ -246,12 +246,9 @@ export default class UserResolver {
             });
           }
 
-          const {
-            businessRegistrationCertificateFile,
-            copyIDAuthorizedSignatoryFile,
-            certificateValueAddedTaxRegistrationFile,
-            ...creditVelues
-          } = creditPayment;
+          const businessRegistrationCertificateFile = get(creditPayment, 'businessRegistrationCertificateFile', null)
+          const copyIDAuthorizedSignatoryFile = get(creditPayment, 'copyIDAuthorizedSignatoryFile', null)
+          const certificateValueAddedTaxRegistrationFile = get(creditPayment, 'certificateValueAddedTaxRegistrationFile', null)
 
           // Document Image 1
           const businessRegistrationCertificate =
@@ -278,7 +275,7 @@ export default class UserResolver {
           }
 
           await creditDetail.updateOne({
-            ...creditVelues,
+            ...omit(creditPayment, ['businessRegistrationCertificateFile', 'copyIDAuthorizedSignatoryFile', 'certificateValueAddedTaxRegistrationFile']),
             ...(businessRegistrationCertificate
               ? { profileImage: businessRegistrationCertificate }
               : {}),

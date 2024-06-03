@@ -24,9 +24,11 @@ enum EUserType {
 }
 
 enum EUserStatus {
+  PENDING = "pending",
   ACTIVE = "active",
   INACTIVE = "inactive",
   BANNED = "banned",
+  DENIED = "denied",
 }
 
 enum EUserValidationStatus {

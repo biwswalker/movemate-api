@@ -82,25 +82,25 @@ export class BusinessCustomer {
   paymentMethod: string;
 
   // E-Document
-  @Field()
+  @Field({ nullable: true })
   @Property()
   acceptedEDocumentDate: Date;
 
   // Policies
-  @Field(type => Int)
+  @Field(type => Int, { nullable: true })
   @Property()
   acceptedPoliciesVersion: number;
 
-  @Field()
+  @Field({ nullable: true })
   @Property()
   acceptedPoliciesDate: Date;
 
   // Term and Conditions
-  @Field(type => Int)
+  @Field(type => Int, { nullable: true })
   @Property()
   acceptedTermConditionVersion: number;
 
-  @Field()
+  @Field({ nullable: true })
   @Property()
   acceptedTermConditionDate: Date;
 

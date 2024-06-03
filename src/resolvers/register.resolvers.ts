@@ -8,7 +8,7 @@ import { RegisterInput } from "@inputs/user.input";
 import bcrypt from "bcrypt";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
-import { get, isEmpty, isEqual } from "lodash";
+import { get, isEmpty, isEqual, omit } from "lodash";
 import { generateId, generateRandomNumberPattern } from "@utils/string.utils";
 import { email_sender } from "@utils/email.utils";
 import imageToBase64 from "image-to-base64";
@@ -199,6 +199,7 @@ export default class RegisterResolver {
             username: userNumber,
             password: hashedPassword,
             remark,
+            validationStatus: 'pending',
             registration: platform,
             isVerifiedEmail: false,
             isVerifiedPhoneNumber: false,
@@ -352,6 +353,7 @@ export default class RegisterResolver {
             userType,
             username: userNumber,
             password: hashedPassword,
+            validationStatus: 'pending',
             remark,
             registration: platform,
             isVerifiedEmail: false,
@@ -426,6 +428,8 @@ export default class RegisterResolver {
         ...formValue,
         userRole: "customer",
         userType: 'individual',
+        status: 'active',
+        validationStatus: 'approve',
         userNumber,
         username: data.email,
         profileImage: image,
@@ -464,7 +468,7 @@ export default class RegisterResolver {
     @Arg("data") data: CutomerBusinessInput,
     @Ctx() ctx: GraphQLContext
   ): Promise<User> {
-    const { businessEmail, profileImage, creditPayment, ...formValue } = data;
+    const { businessEmail, profileImage, creditPayment, cashPayment, ...formValue } = data;
     try {
       // Check if the user already exists
       const platform = ctx.req.headers["platform"];
@@ -488,12 +492,9 @@ export default class RegisterResolver {
       const hashedPassword = await bcrypt.hash(rawPassword, 10);
       const userNumber = await generateId("MMBU", "business");
 
-      const {
-        businessRegistrationCertificateFile,
-        copyIDAuthorizedSignatoryFile,
-        certificateValueAddedTaxRegistrationFile,
-        ...creditVelues
-      } = creditPayment;
+      const businessRegistrationCertificateFile = get(creditPayment, 'businessRegistrationCertificateFile', null)
+      const copyIDAuthorizedSignatoryFile = get(creditPayment, 'copyIDAuthorizedSignatoryFile', null)
+      const certificateValueAddedTaxRegistrationFile = get(creditPayment, 'certificateValueAddedTaxRegistrationFile', null)
 
       // Document Image 1
       const businessRegistrationCertificate =
@@ -519,10 +520,10 @@ export default class RegisterResolver {
         await certificateValueAddedTaxRegistration.save();
       }
 
-      const creditPrymentDetail =
+      const creditPaymentDetail =
         (formValue.paymentMethod === 'credit' && creditPayment)
           ? new BusinessCustomerCreditPaymentModel({
-            ...creditVelues,
+            ...omit(creditPayment, ['businessRegistrationCertificateFile', 'copyIDAuthorizedSignatoryFile', 'certificateValueAddedTaxRegistrationFile']),
             ...(businessRegistrationCertificate
               ? { profileImage: businessRegistrationCertificate }
               : {}),
@@ -534,15 +535,15 @@ export default class RegisterResolver {
               : {}),
           })
           : null;
-      if (creditPrymentDetail) {
-        await creditPrymentDetail.save()
+      if (creditPaymentDetail) {
+        await creditPaymentDetail.save()
       }
 
       const customer = new BusinessCustomerModel({
         userNumber,
         businessEmail,
         ...formValue,
-        ...(creditPrymentDetail ? { creditPayment: creditPrymentDetail } : {})
+        ...(creditPaymentDetail ? { creditPayment: creditPaymentDetail } : {})
       });
 
       await customer.save();
@@ -559,6 +560,8 @@ export default class RegisterResolver {
         ...formValue,
         userRole: "customer",
         userType: 'business',
+        status: 'active',
+        validationStatus: 'approve',
         userNumber,
         username: userNumber,
         password: hashedPassword,
@@ -587,6 +590,8 @@ export default class RegisterResolver {
           movemate_link: `https://www.movemateth.com`,
         },
       });
+
+      console.log('return user: ', user)
 
       return user;
     } catch (error) {
