@@ -277,13 +277,13 @@ export default class UserResolver {
           await creditDetail.updateOne({
             ...omit(creditPayment, ['businessRegistrationCertificateFile', 'copyIDAuthorizedSignatoryFile', 'certificateValueAddedTaxRegistrationFile']),
             ...(businessRegistrationCertificate
-              ? { profileImage: businessRegistrationCertificate }
+              ? { businessRegistrationCertificateFile: businessRegistrationCertificate }
               : {}),
             ...(copyIDAuthorizedSignatory
-              ? { profileImage: copyIDAuthorizedSignatory }
+              ? { copyIDAuthorizedSignatoryFile: copyIDAuthorizedSignatory }
               : {}),
             ...(certificateValueAddedTaxRegistration
-              ? { profileImage: certificateValueAddedTaxRegistration }
+              ? { certificateValueAddedTaxRegistrationFile: certificateValueAddedTaxRegistration }
               : {}),
           });
         }

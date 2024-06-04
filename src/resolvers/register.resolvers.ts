@@ -525,13 +525,13 @@ export default class RegisterResolver {
           ? new BusinessCustomerCreditPaymentModel({
             ...omit(creditPayment, ['businessRegistrationCertificateFile', 'copyIDAuthorizedSignatoryFile', 'certificateValueAddedTaxRegistrationFile']),
             ...(businessRegistrationCertificate
-              ? { profileImage: businessRegistrationCertificate }
+              ? { businessRegistrationCertificateFile: businessRegistrationCertificate }
               : {}),
             ...(copyIDAuthorizedSignatory
-              ? { profileImage: copyIDAuthorizedSignatory }
+              ? { copyIDAuthorizedSignatoryFile: copyIDAuthorizedSignatory }
               : {}),
             ...(certificateValueAddedTaxRegistration
-              ? { profileImage: certificateValueAddedTaxRegistration }
+              ? { certificateValueAddedTaxRegistrationFile: certificateValueAddedTaxRegistration }
               : {}),
           })
           : null;

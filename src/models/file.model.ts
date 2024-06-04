@@ -1,4 +1,5 @@
 import { prop as Property, getModelForClass } from '@typegoose/typegoose'
+import { get } from 'lodash'
 import { Field, ObjectType, ID } from 'type-graphql'
 
 @ObjectType()
@@ -25,7 +26,7 @@ export class File {
     @Field()
     @Property({ default: Date.now })
     updatedAt: Date
-
+    
     static async remove(fileId: string) {
         return FileModel.deleteOne({ fileId })
     }
