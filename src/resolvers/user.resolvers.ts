@@ -91,23 +91,6 @@ export default class UserResolver {
                   preserveNullAndEmptyArrays: true
                 }
               },
-              {
-                $addFields: {
-                  statusWeight: {
-                    $switch: {
-                      branches: [
-                        {
-                          case: {
-                            $eq: ["$status", "pending"]
-                          },
-                          then: 0
-                        }
-                      ],
-                      default: 1
-                    }
-                  }
-                }
-              }
             ]
           }
         },
@@ -133,6 +116,20 @@ export default class UserResolver {
         },
         {
           $lookup: {
+            from: "admins",
+            localField: "adminDetail",
+            foreignField: "_id",
+            as: "adminDetail"
+          }
+        },
+        {
+          $unwind: {
+            path: "$adminDetail",
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
             from: "files",
             localField: "profileImage",
             foreignField: "_id",
@@ -143,6 +140,23 @@ export default class UserResolver {
           $unwind: {
             path: "$profileImage",
             preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $addFields: {
+            statusWeight: {
+              $switch: {
+                branches: [
+                  {
+                    case: {
+                      $eq: ["$status", "pending"]
+                    },
+                    then: 0
+                  }
+                ],
+                default: 1
+              }
+            }
           }
         }
       ])
