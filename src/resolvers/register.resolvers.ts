@@ -129,6 +129,8 @@ export default class RegisterResolver {
 
         const user = new UserModel({
           userRole: "customer",
+          status: 'active',
+          validationStatus: 'pending',
           userNumber,
           userType,
           username: individualDetail.email,
@@ -196,10 +198,11 @@ export default class RegisterResolver {
           const user = new UserModel({
             userNumber,
             userType,
+            status: 'pending',
+            validationStatus: 'pending',
             username: userNumber,
             password: hashedPassword,
             remark,
-            validationStatus: 'pending',
             registration: platform,
             isVerifiedEmail: false,
             isVerifiedPhoneNumber: false,
@@ -353,6 +356,7 @@ export default class RegisterResolver {
             userType,
             username: userNumber,
             password: hashedPassword,
+            status: 'pending',
             validationStatus: 'pending',
             remark,
             registration: platform,

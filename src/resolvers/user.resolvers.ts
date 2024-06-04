@@ -13,8 +13,8 @@ import { GetCustomersArgs } from "@inputs/user.input";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
 import { get, isArray, isEmpty, isEqual, omit, reduce } from "lodash";
-import { UserPaginationPayload } from "@payloads/user.payloads";
-import { FilterQuery, PaginateOptions } from "mongoose";
+import { UserPaginationAggregatePayload } from "@payloads/user.payloads";
+import { PaginateOptions } from "mongoose";
 import { PaginationArgs } from "@inputs/query.input";
 import { GraphQLError } from "graphql";
 import {
@@ -29,17 +29,13 @@ import BusinessCustomerCreditPaymentModel from "@models/customerBusinessCreditPa
 
 @Resolver(User)
 export default class UserResolver {
-  @Query(() => UserPaginationPayload)
+  @Query(() => UserPaginationAggregatePayload)
   @UseMiddleware(AuthGuard(["customer", "admin", "driver"]))
   async users(
     @Args() query: GetCustomersArgs,
     @Args() { sortField, sortAscending, ...paginationArgs }: PaginationArgs
-  ): Promise<UserPaginationPayload> {
+  ): Promise<UserPaginationAggregatePayload> {
     try {
-      const options: FilterQuery<typeof User> = {
-        ...query,
-      };
-
       const pagination: PaginateOptions = {
         ...paginationArgs,
         ...(isArray(sortField)
@@ -55,10 +51,107 @@ export default class UserResolver {
           : {}),
       };
 
-      const users = (await UserModel.paginate(
-        options,
-        pagination
-      )) as UserPaginationPayload;
+      const aggregate = UserModel.aggregate([
+        {
+          $match: query
+        },
+        {
+          $lookup: {
+            from: "businesscustomers",
+            localField: "businessDetail",
+            foreignField: "_id",
+            as: "businessDetail",
+            pipeline: [
+              {
+                $lookup: {
+                  from: "businesscustomercreditpayments",
+                  localField: "creditPayment",
+                  foreignField: "_id",
+                  as: "creditPayment"
+                }
+              },
+              {
+                $unwind: {
+                  path: "$creditPayment",
+                  preserveNullAndEmptyArrays: true
+                }
+              },
+              {
+                $lookup: {
+                  from: "businesscustomercashpayments",
+                  localField:
+                    "cashPayment",
+                  foreignField: "_id",
+                  as: "cashPayment"
+                }
+              },
+              {
+                $unwind: {
+                  path: "$cashPayment",
+                  preserveNullAndEmptyArrays: true
+                }
+              },
+              {
+                $addFields: {
+                  statusWeight: {
+                    $switch: {
+                      branches: [
+                        {
+                          case: {
+                            $eq: ["$status", "pending"]
+                          },
+                          then: 0
+                        }
+                      ],
+                      default: 1
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          $unwind: {
+            path: "$businessDetail",
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
+            from: "individualcustomers",
+            localField: "individualDetail",
+            foreignField: "_id",
+            as: "individualDetail"
+          }
+        },
+        {
+          $unwind: {
+            path: "$individualDetail",
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
+            from: "files",
+            localField: "profileImage",
+            foreignField: "_id",
+            as: "profileImage"
+          }
+        },
+        {
+          $unwind: {
+            path: "$profileImage",
+            preserveNullAndEmptyArrays: true
+          }
+        }
+      ])
+
+      const users = (await UserModel.aggregatePaginate(aggregate, pagination)) as UserPaginationAggregatePayload
+      // const users = (await UserModel.paginate(
+      //   options,
+      //   pagination
+      // )) as UserPaginationPayload;
 
       return users;
     } catch (error) {
@@ -181,7 +274,7 @@ export default class UserResolver {
     @Arg("data") data: CutomerBusinessInput,
     @Ctx() ctx: GraphQLContext
   ): Promise<User> {
-    const { businessEmail, profileImage, creditPayment, ...formValue } = data;
+    const { businessEmail, profileImage, creditPayment, cashPayment, ...formValue } = data;
     try {
       // Check if the user already exists
       const platform = ctx.req.headers["platform"];

@@ -333,10 +333,10 @@ export class CreditPaymentDetailInput {
   @Field()
   isSameAddress: boolean;
 
-  @Field(() => FileInput)
+  @Field(() => FileInput, { nullable: true })
   businessRegistrationCertificateFile: FileInput;
 
-  @Field(() => FileInput)
+  @Field(() => FileInput, { nullable: true })
   copyIDAuthorizedSignatoryFile: FileInput;
 
   @Field(() => FileInput, { nullable: true })

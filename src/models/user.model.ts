@@ -5,6 +5,7 @@ import { IsNotEmpty, IsString, IsEnum } from "class-validator";
 import bcrypt from "bcrypt";
 import cryptoJs from "crypto-js";
 import mongoosePagination from 'mongoose-paginate-v2'
+import aggregatePaginate from 'mongoose-aggregate-paginate-v2'
 import mongoose from "mongoose";
 import { Admin } from "./admin.model";
 import { IndividualCustomer } from "./customerIndividual.model";
@@ -44,6 +45,7 @@ enum ERegistration {
 
 @plugin(autopopulate)
 @plugin(mongoosePagination)
+@plugin(aggregatePaginate)
 @ObjectType()
 export class User extends TimeStamps {
   @Field(() => ID)
@@ -161,6 +163,7 @@ export class User extends TimeStamps {
   }
 
   static paginate: mongoose.PaginateModel<typeof User>['paginate']
+  static aggregatePaginate: mongoose.AggregatePaginateModel<typeof User>['aggregatePaginate']
 }
 
 const UserModel = getModelForClass(User);
