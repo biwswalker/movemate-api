@@ -7,6 +7,7 @@ import {
 } from "@typegoose/typegoose";
 import mongooseAutoPopulate from "mongoose-autopopulate";
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
+import { File } from "./file.model";
 
 enum EVehicleType {
   FOUR_WHEELER = "4W",
@@ -28,11 +29,6 @@ export class VehicleType extends TimeStamps {
   @Field()
   @Property({ enum: EVehicleType, required: true })
   type: TVehicleType;
-
-  @Field({ nullable: true })
-  //   @Length(0, 255)
-  @Property()
-  details: string;
 
   @Field({ nullable: true })
   @Property()
@@ -62,9 +58,14 @@ export class VehicleType extends TimeStamps {
   @Property({ required: true })
   maxCapacity: number;
 
-  @Field(() => File, { nullable: true })
-  @Property({ autopopulate: true, ref: "File" })
-  image: Ref<File>;
+  @Field(() => File)
+  @Property({ autopopulate: true, ref: 'File' })
+  image: Ref<File>
+
+  @Field({ nullable: true })
+  //   @Length(0, 255)
+  @Property()
+  details: string;
 
   @Field()
   @Property({ default: Date.now })

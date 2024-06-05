@@ -16,6 +16,7 @@
       "@services/*": ["services/*"],
       "@apis/*": ["apis/*"],
       "@assets/*": ["assets/*"],
+      "@validations/*": ["validations/*"],
     },
     "target": "es6",
     "module": "Node16",

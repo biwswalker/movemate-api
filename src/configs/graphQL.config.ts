@@ -12,6 +12,7 @@ import FileResolver from "@resolvers/file.resolvers";
 import PingResolver from "@resolvers/ping.resolvers";
 import AdminResolver from "@resolvers/admin.resolvers";
 import RegisterResolver from "@resolvers/register.resolvers";
+import VehicleTypeResolver from "@resolvers/vehicletype.resolvers";
 
 export interface GraphQLContext {
     req: Request
@@ -29,6 +30,7 @@ export async function createGraphQLServer(httpServer: http.Server) {
             PingResolver,
             AdminResolver,
             RegisterResolver,
+            VehicleTypeResolver,
         ],
         authChecker: ({ context }: { context: GraphQLContext }) => {
             const userId = get(context, 'req.userId', '')
