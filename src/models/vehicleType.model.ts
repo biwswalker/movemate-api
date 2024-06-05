@@ -1,61 +1,80 @@
-import { Field, ID, ObjectType } from "type-graphql"
-import { prop as Property, Ref, Severity, getModelForClass } from '@typegoose/typegoose'
-import { Length } from "class-validator";
-import { VehicleCost } from "./vehicleCost.model";
+import { Field, Float, ID, ObjectType } from "type-graphql";
+import {
+  prop as Property,
+  Ref,
+  getModelForClass,
+  plugin,
+} from "@typegoose/typegoose";
+import mongooseAutoPopulate from "mongoose-autopopulate";
+import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 
 enum EVehicleType {
-    FOUR_WHEELER = 'FOUR_WHEELER',
-    SIX_WHEELER = 'SIX_WHEELER',
-    TEN_WHEELER = 'TEN_WHEELER',
-    TRAILER = 'TRAILER',
+  FOUR_WHEELER = "4W",
+  SIX_WHEELER = "6W",
+  TEN_WHEELER = "10W",
+  OTHER = "other",
 }
 
+@plugin(mongooseAutoPopulate)
 @ObjectType()
-export class VehicleType {
-    @Field(() => ID)
-    readonly _id: string
+export class VehicleType extends TimeStamps {
+  @Field(() => ID)
+  readonly _id: string;
 
-    @Field(() => VehicleCost, { nullable: true })
-    @Property({ allowMixed: Severity.ALLOW })
-    vehicle_cost: Ref<VehicleCost>
+  // @Field(() => VehicleCost, { nullable: true })
+  // @Property({ allowMixed: Severity.ALLOW })
+  // vehicle_cost: Ref<VehicleCost>
 
-    @Field()
-    @Property({ enum: EVehicleType, required: true })
-    vehicle_type: TVehicleType
+  @Field()
+  @Property({ enum: EVehicleType, required: true })
+  type: TVehicleType;
 
-    @Field()
-    @Length(0, 100)
-    @Property({ required: true })
-    description_1: string;
+  @Field({ nullable: true })
+  //   @Length(0, 255)
+  @Property()
+  details: string;
 
-    @Field()
-    @Length(0, 100)
-    @Property({ required: true })
-    description_2: string;
+  @Field({ nullable: true })
+  @Property()
+  isPublic: boolean;
 
-    @Field()
-    @Length(0, 100)
-    @Property({ required: true })
-    description_3: string;
+  @Field({ nullable: true })
+  @Property()
+  isLarger: boolean;
 
-    @Field()
-    @Property({ required: true })
-    full_description: string;
+  @Field()
+  @Property({ required: true })
+  name: string;
 
-    @Field()
-    @Property({ required: true })
-    thumbnail_image: string;
+  @Field(() => Float)
+  @Property({ required: true })
+  width: number;
 
+  @Field(() => Float)
+  @Property({ required: true })
+  length: number;
 
-    @Field()
-    @Property({ default: Date.now })
-    created_at: Date
+  @Field(() => Float)
+  @Property({ required: true })
+  height: number;
 
-    @Field()
-    @Property({ default: Date.now })
-    updated_at: Date
+  @Field(() => Float)
+  @Property({ required: true })
+  maxCapacity: number;
+
+  @Field(() => File, { nullable: true })
+  @Property({ autopopulate: true, ref: "File" })
+  image: Ref<File>;
+
+  @Field()
+  @Property({ default: Date.now })
+  createdAt: Date;
+
+  @Field()
+  @Property({ default: Date.now })
+  updatedAt: Date;
 }
 
-const VehicleTypeModel = getModelForClass(VehicleType)
+const VehicleTypeModel = getModelForClass(VehicleType);
 
-export default VehicleTypeModel
+export default VehicleTypeModel;
