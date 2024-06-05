@@ -7,7 +7,7 @@ import {
 } from "type-graphql";
 import { AuthGuard } from "@guards/auth.guards";
 import VehicleTypeModel, { VehicleType } from "@models/vehicleType.model";
-import { VehicleTypeInput } from "@inputs/vehicle-type.model";
+import { VehicleTypeInput } from "@inputs/vehicle-type.input";
 import { VehicleTypeSchema } from "@validations/vehicletype.validations";
 import FileModel from "@models/file.model";
 import { ValidationError } from "yup";

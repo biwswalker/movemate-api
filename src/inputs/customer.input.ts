@@ -1,6 +1,6 @@
 import { IsEmail } from "class-validator";
 import { Field, Float, InputType, Int } from "type-graphql";
-import { File } from "models/file.model";
+import { FileInput } from "./file.input";
 @InputType()
 export class RegisterIndividualInput {
   @Field()
@@ -45,18 +45,6 @@ export class RegisterIndividualInput {
 export class CashPaymentInput {
   @Field()
   acceptedEReceiptDate: Date;
-}
-
-@InputType()
-export class FileInput {
-  @Field()
-  fileId: string;
-
-  @Field()
-  filename: string;
-
-  @Field()
-  mimetype: string;
 }
 
 @InputType()

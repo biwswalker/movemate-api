@@ -1,5 +1,5 @@
 import { Field, Float, InputType } from "type-graphql";
-import { FileInput } from "./customer.input";
+import { FileInput } from "./file.input";
 
 @InputType()
 export class VehicleTypeInput {

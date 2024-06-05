@@ -1,0 +1,71 @@
+import { Field, ID, ObjectType } from "type-graphql";
+import {
+    Ref,
+    plugin,
+    Severity,
+    prop as Property,
+    getModelForClass,
+} from "@typegoose/typegoose";
+import mongooseAutoPopulate from "mongoose-autopopulate";
+import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
+import { VehicleType } from "./vehicleType.model";
+import { IsEnum } from "class-validator";
+import { Schema } from "mongoose";
+
+enum EServiceType {
+    SERVICES = "services",
+    ACCESSORIES = "accessories",
+}
+
+enum EServiceStatus {
+    ACTIVE = "active",
+    INACTIVE = "inactive",
+}
+
+@plugin(mongooseAutoPopulate)
+@ObjectType()
+export class Description {
+    @Field()
+    @Property()
+    detail: string
+
+    @Field(() => [VehicleType])
+    @Property({ autopopulate: true, ref: 'VehicleType', type: [Schema.Types.ObjectId] })
+    vehicleTypes: Ref<VehicleType>[]
+}
+
+@plugin(mongooseAutoPopulate)
+@ObjectType()
+export class AdditionalService extends TimeStamps {
+    @Field(() => ID)
+    readonly _id: string;
+
+    @Field()
+    @IsEnum(EServiceType)
+    @Property({ enum: EServiceType, default: EServiceType.SERVICES, required: true })
+    type: TServiceType
+
+    @Field()
+    @Property()
+    name: string
+
+    @Field()
+    @Property({ enum: EServiceStatus, default: EServiceStatus.ACTIVE, required: true })
+    status: TServiceStatus
+
+    @Field(() => [Description])
+    @Property({ allowMixed: Severity.ALLOW })
+    descriptions: Description[]
+
+    @Field()
+    @Property({ default: Date.now })
+    createdAt: Date;
+
+    @Field()
+    @Property({ default: Date.now })
+    updatedAt: Date;
+}
+
+const AdditionalServiceModel = getModelForClass(AdditionalService);
+
+export default AdditionalServiceModel;
