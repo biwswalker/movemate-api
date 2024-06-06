@@ -41,7 +41,7 @@ export const AuthGuard: (roles?: TUserRole[]) => MiddlewareFn<GraphQLContext> = 
         }
 
         if (!includes(roles, user_role)) {
-            throw new AuthenticationError('ไม่สามารถใช้งานฟังก์ชั้นนี้ได้ จำกัดสิทธิ์การเข้าถึง');
+            throw new AuthenticationError('ไม่สามารถใช้งานฟังก์ชั้นนี้ได้ เนื่องจากจำกัดสิทธิ์การเข้าถึง');
         }
 
         req.user_id = user_id

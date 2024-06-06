@@ -2,14 +2,13 @@ import { Field, ID, ObjectType } from "type-graphql";
 import {
   Ref,
   plugin,
-  Severity,
   prop as Property,
   getModelForClass,
 } from "@typegoose/typegoose";
 import mongooseAutoPopulate from "mongoose-autopopulate";
+import { IsEnum } from "class-validator";
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { VehicleType } from "./vehicleType.model";
-import { IsEnum } from "class-validator";
 import { Schema } from "mongoose";
 
 enum EServiceType {
@@ -24,7 +23,7 @@ enum EServiceStatus {
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()
-export class Description {
+class AdditionalServiceDescription {
   @Field()
   @Property()
   detail: string;
@@ -65,9 +64,9 @@ export class AdditionalService extends TimeStamps {
   })
   status: TServiceStatus;
 
-  @Field(() => [Description])
-  @Property({ allowMixed: Severity.ALLOW })
-  descriptions: Description[];
+  @Field(() => [AdditionalServiceDescription])
+  @Property()
+  descriptions: AdditionalServiceDescription[];
 
   @Field()
   @Property({ default: Date.now })
