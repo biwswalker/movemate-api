@@ -214,21 +214,21 @@ export default class RegisterResolver {
           await user.save();
 
           // Email sender
-          await emailTranspoter.sendMail({
-            from: process.env.GOOGLE_MAIL,
-            to: businessDetail.businessEmail,
-            subject: "ยืนยันการสมัครสมาชิก Movemate!",
-            template: "register_business",
-            context: {
-              business_title: businessDetail.businessTitle,
-              business_name: businessDetail.businessName,
-              username: userNumber,
-              password: generatedPassword,
-              logo: imageUrl,
-              activate_link: `https://api.movemateth.com/activate/customer/${userNumber}`,
-              movemate_link: `https://www.movemateth.com`,
-            },
-          });
+          // await emailTranspoter.sendMail({
+          //   from: process.env.GOOGLE_MAIL,
+          //   to: businessDetail.businessEmail,
+          //   subject: "ยืนยันการสมัครสมาชิก Movemate!",
+          //   template: "register_business",
+          //   context: {
+          //     business_title: businessDetail.businessTitle,
+          //     business_name: businessDetail.businessName,
+          //     username: userNumber,
+          //     password: generatedPassword,
+          //     logo: imageUrl,
+          //     activate_link: `https://api.movemateth.com/activate/customer/${userNumber}`,
+          //     movemate_link: `https://www.movemateth.com`,
+          //   },
+          // });
 
           return user;
         } else if (

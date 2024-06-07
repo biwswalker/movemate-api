@@ -5,14 +5,16 @@ import {
   Ctx,
   UseMiddleware,
   AuthenticationError,
+  ArgumentValidationError,
   Args,
   Mutation,
+  InvalidDirectiveError,
 } from "type-graphql";
 import UserModel, { User } from "@models/user.model";
 import { GetCustomersArgs } from "@inputs/user.input";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
-import { get, isArray, isEmpty, isEqual, omit, reduce } from "lodash";
+import { find, get, includes, isArray, isEmpty, isEqual, omit, reduce } from "lodash";
 import { UserPaginationAggregatePayload } from "@payloads/user.payloads";
 import { PaginateOptions } from "mongoose";
 import { PaginationArgs } from "@inputs/query.input";
@@ -23,9 +25,15 @@ import {
 } from "@inputs/customer.input";
 import CustomerIndividualModel from "@models/customerIndividual.model";
 import FileModel from "@models/file.model";
-import BusinessCustomerModel from "@models/customerBusiness.model";
+import BusinessCustomerModel, { BusinessCustomer } from "@models/customerBusiness.model";
 import RegisterResolver from "./register.resolvers";
 import BusinessCustomerCreditPaymentModel from "@models/customerBusinessCreditPayment.model";
+import { email_sender } from "@utils/email.utils";
+import imageToBase64 from "image-to-base64";
+import { join } from 'path'
+import { SafeString } from 'handlebars'
+import { generateRandomNumberPattern } from "@utils/string.utils";
+import bcrypt from "bcrypt";
 
 @Resolver(User)
 export default class UserResolver {
@@ -415,6 +423,100 @@ export default class UserResolver {
       });
     } catch (error) {
       console.log(error);
+      throw error;
+    }
+  }
+
+  @Mutation(() => User)
+  @UseMiddleware(AuthGuard(["admin"]))
+  async approvalUser(@Arg("id") id: string, @Arg("result") result: TUserValidationStatus, @Ctx() ctx: GraphQLContext): Promise<User> {
+    try {
+      if (!id) {
+        throw new AuthenticationError("ไม่พบผู้ใช้");
+      }
+      const customer = await UserModel.findById(id).exec();
+      const businessDetail: BusinessCustomer | null = get(customer, 'businessDetail', null)
+
+      if (!customer) {
+        throw new AuthenticationError("ไม่พบผู้ใช้");
+      }
+
+      // Check is Business customer?
+      if (customer.userType !== 'business') {
+        throw new GraphQLError("ประเภทผู้ใช้ไม่สามารถทำรายการได้")
+      }
+      // Check pending status
+      if (customer.validationStatus !== 'pending') {
+        throw new GraphQLError("ผู้ใช้ท่านนี้มีการอนุมัติเรียบร้อยแล้ว")
+      }
+      // Check approval status
+      if (!includes(['approve', 'denied'], result)) {
+        throw new InvalidDirectiveError('สถานะไม่ถูกต้อง')
+      }
+      // Check Business Detail
+      if (typeof businessDetail !== 'object') {
+        throw new InvalidDirectiveError('ไม่พบข้อมูลธุระกิจ')
+      }
+
+      // Link
+      const protocol = get(ctx, 'req.protocol', '')
+      const host = ctx.req.get('host')
+      // Prepare email sender
+      const emailTranspoter = email_sender();
+      // Conver image path to base64 image
+      const base64Image = await imageToBase64(join(__dirname, '..', 'assets', 'email_logo.png'))
+      const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`)
+      const status = result === 'approve' ? 'active' : 'denied'
+      // Title name
+      const BUSINESS_TITLE_NAME_OPTIONS = [
+        { value: 'Co', label: 'บจก.' },
+        { value: 'Part', label: 'หจก.' },
+        { value: 'Pub', label: 'บมจ.' },
+      ]
+      const businessTitleName = find(BUSINESS_TITLE_NAME_OPTIONS, ['value', businessDetail.businessTitle])
+
+      if (result === 'approve') {
+        const rawPassword = generateRandomNumberPattern("MMPWD########").toLowerCase();
+        const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
+        // Update user
+        await customer.updateOne({ status, validationStatus: result, password: hashedPassword })
+
+        const activate_link = `${protocol}://${host}/v1/customer/activate/${customer.userNumber}`
+        await emailTranspoter.sendMail({
+          from: process.env.GOOGLE_MAIL,
+          to: businessDetail.businessEmail,
+          subject: "บัญชี Movemate ของท่านได้รับการอนุมัติ",
+          template: "register_business",
+          context: {
+            business_title: get(businessTitleName, 'label', ''),
+            business_name: businessDetail.businessName,
+            username: customer.username,
+            password: rawPassword,
+            logo: imageUrl,
+            activate_link,
+            movemate_link: `https://www.movemateth.com`,
+          },
+        });
+      } else {
+        // Update user
+        await customer.updateOne({ status, validationStatus: result })
+        await emailTranspoter.sendMail({
+          from: process.env.GOOGLE_MAIL,
+          to: businessDetail.businessEmail,
+          subject: "บัญชี Movemate ของท่านไม่ได้รับการอนุมัติ",
+          template: "register_rejected_account",
+          context: {
+            business_title: get(businessTitleName, 'label', ''),
+            business_name: businessDetail.businessName,
+            logo: imageUrl,
+            movemate_link: `https://www.movemateth.com`,
+          },
+        });
+      }
+
+      return customer;
+    } catch (error) {
       throw error;
     }
   }
