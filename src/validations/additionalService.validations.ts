@@ -24,6 +24,6 @@ export const AdditionalServiceSchema = (isEdit: boolean = false) => Yup.object()
                 return isEmpty(isExistingAdditionalService)
             }
         }),
-    status: Yup.number().required('สถานะ'),
+    status: Yup.string().required('สถานะ'),
     descriptions: Descriptions
 })

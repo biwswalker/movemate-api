@@ -7,8 +7,6 @@ import AdditionalServiceModel, {
   AdditionalService,
 } from "@models/additionalService.model";
 import { AdditionalServiceInput } from "@inputs/additional-service.input";
-import { get, map } from "lodash";
-import { Types, Schema } from "mongoose";
 import { AdditionalServiceSchema } from "@validations/additionalService.validations";
 
 @Resolver(AdditionalService)
@@ -22,19 +20,7 @@ export default class AdditionalServiceResolver {
     try {
       await AdditionalServiceSchema().validate(data, { abortEarly: false })
 
-      const additionalModel = new AdditionalServiceModel({
-        ...values,
-        descriptions: map(descriptions, ({ vehicleTypes, detail }) => {
-          const vehicleType = map(
-            vehicleTypes,
-            (id) => new Schema.Types.ObjectId(id)
-          );
-          return {
-            detail,
-            vehicleTypes: vehicleType,
-          };
-        }),
-      });
+      const additionalModel = new AdditionalServiceModel(data);
       await additionalModel.save();
 
       const result = await AdditionalServiceModel
@@ -62,23 +48,10 @@ export default class AdditionalServiceResolver {
     @Arg("id") id: string,
     @Arg("data") data: AdditionalServiceInput,
   ): Promise<AdditionalService> {
-    const { descriptions, ...values } = data;
     try {
       await AdditionalServiceSchema(true).validate(data, { abortEarly: false })
 
-      await AdditionalServiceModel.findByIdAndUpdate(id, {
-        ...values,
-        descriptions: map(descriptions, ({ vehicleTypes, detail }) => {
-          const vehicleType = map(
-            vehicleTypes,
-            (id) => new Schema.Types.ObjectId(id)
-          );
-          return {
-            detail,
-            vehicleTypes: vehicleType,
-          };
-        }),
-      })
+      await AdditionalServiceModel.findByIdAndUpdate(id, data)
 
       const additionalService = await AdditionalServiceModel.findById(id).populate({
         path: 'descriptions',
