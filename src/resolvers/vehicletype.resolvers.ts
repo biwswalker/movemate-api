@@ -13,6 +13,8 @@ import FileModel from "@models/file.model";
 import { ValidationError } from "yup";
 import { yupValidationThrow } from "@utils/error.utils";
 import { GraphQLError } from "graphql";
+import { PipelineStage } from "mongoose";
+import { VehicleTypeConfigureStatusPayload } from "@payloads/vehicleType.payloads";
 
 @Resolver(VehicleType)
 export default class VehicleTypeResolver {
@@ -104,6 +106,62 @@ export default class VehicleTypeResolver {
                 });
             }
             return vehicleType;
+        } catch (error) {
+            console.log('error: ', error)
+            throw new GraphQLError("ไม่สามารถเรียกข้อมูลประเภทรถได้ โปรดลองอีกครั้ง");
+        }
+    }
+    @Query(() => [VehicleTypeConfigureStatusPayload])
+    @UseMiddleware(AuthGuard(["admin"]))
+    async getVehicleTypeConfigs(): Promise<VehicleTypeConfigureStatusPayload[]> {
+        try {
+            const aggregate: PipelineStage[] = [
+                { $sort: { type: 1 } },
+                {
+                    $lookup: {
+                        from: "vehiclecosts",
+                        localField: "_id",
+                        foreignField: "vehicleType",
+                        as: "vehicleCosts"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$vehicleCosts",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "files",
+                        localField: "image",
+                        foreignField: "_id",
+                        as: "image"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$image",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $addFields: {
+                        isAdditionalServicesConfigured: { $gt: [{ $size: { $ifNull: ["$vehicleCosts.additionalServices", []] } }, 0] },
+                        isDistancesConfigured: { $gt: [{ $size: { $ifNull: ["$vehicleCosts.distance", []] } }, 0] }
+                    }
+                },
+                { $addFields: { isConfigured: { $or: ["$isAdditionalServicesConfigured", "$isDistancesConfigured"] } } },
+                { $project: { vehicleCosts: 0 } },
+            ]
+            const vehicleTypes = await VehicleTypeModel.aggregate(aggregate)
+            if (!vehicleTypes) {
+                const message = `ไม่สามารถเรียกข้อมูลประเภทรถได้`;
+                throw new GraphQLError(message, {
+                    extensions: { code: "NOT_FOUND", errors: [{ message }] },
+                });
+            }
+            return vehicleTypes;
         } catch (error) {
             console.log('error: ', error)
             throw new GraphQLError("ไม่สามารถเรียกข้อมูลประเภทรถได้ โปรดลองอีกครั้ง");

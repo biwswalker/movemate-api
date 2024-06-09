@@ -4,6 +4,7 @@ import {
   plugin,
   prop as Property,
   getModelForClass,
+  Severity,
 } from "@typegoose/typegoose";
 import mongooseAutoPopulate from "mongoose-autopopulate";
 import { IsEnum } from "class-validator";
@@ -65,7 +66,7 @@ export class AdditionalService extends TimeStamps {
   status: TServiceStatus;
 
   @Field(() => [AdditionalServiceDescription])
-  @Property()
+  @Property({ allowMixed: Severity.ALLOW })
   descriptions: AdditionalServiceDescription[];
 
   @Field()

@@ -1,83 +1,37 @@
 import { Field, ID, ObjectType } from "type-graphql"
-import { prop as Property, getModelForClass } from '@typegoose/typegoose'
+import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
+import { VehicleType } from "./vehicleType.model";
+import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
+import { AdditionalServiceCostPricing } from "./additionalServiceCostPricing.model";
+import { DistanceCostPricing } from "./distanceCostPricing.model";
+import mongooseAutoPopulate from "mongoose-autopopulate";
+import { Schema } from "mongoose";
 
+@plugin(mongooseAutoPopulate)
 @ObjectType()
-export class VehicleCost {
+export class VehicleCost extends TimeStamps {
     @Field(() => ID)
     readonly _id: string
-  
-    @Field()
-    @Property({ required: true })
-    shiping_rate: number;
-  
-    @Field()
-    @Property({ required: true })
-    shiping_rate_cost: number;
-  
-    @Field()
-    @Property({ required: true })
-    handling_goods_driver: number;
-  
-    @Field()
-    @Property({ required: true })
-    handling_goods_driver_cost: number;
-  
-    @Field()
-    @Property({ required: true })
-    handling_goods_labor: number;
-  
-    @Field()
-    @Property({ required: true })
-    handling_goods_labor_cost: number;
-  
-    @Field()
-    @Property({ required: true })
-    pod_service_price: number;
-  
-    @Field()
-    @Property({ required: true })
-    pod_service_price_cost: number;
-  
-    @Field()
-    @Property({ required: true })
-    hold_pickup_price: number;
-  
-    @Field()
-    @Property({ required: true })
-    hold_pickup_price_cost: number;
-  
-    @Field()
-    @Property({ required: true })
-    service_vat: number;
-  
-    @Field()
-    @Property({ required: true })
-    service_vat_cost: number;
-  
-    @Field()
-    @Property({ required: true })
-    transpot_wht: number;
-  
-    @Field()
-    @Property({ required: true })
-    transpot_wht_cost: number;
-  
-    @Field()
-    @Property({ required: true })
-    service_wht: number;
-  
-    @Field()
-    @Property({ required: true })
-    service_wht_cost: number;
-  
+
+    @Field(() => VehicleType)
+    @Property({ required: true, unique: true, autopopulate: true, ref: () => VehicleType })
+    vehicleType: Ref<VehicleType>
+
+    @Field(() => [AdditionalServiceCostPricing])
+    @Property({ autopopulate: true, ref: () => AdditionalServiceCostPricing })
+    additionalServices: Ref<AdditionalServiceCostPricing>[]
+
+    @Field(() => [DistanceCostPricing])
+    @Property({ autopopulate: true, ref: () => DistanceCostPricing })
+    distance: Ref<DistanceCostPricing>[]
 
     @Field()
     @Property({ default: Date.now })
-    created_at: Date
+    createdAt: Date
 
     @Field()
     @Property({ default: Date.now })
-    updated_at: Date
+    updatedAt: Date
 }
 
 const VehicleCostModel = getModelForClass(VehicleCost)
