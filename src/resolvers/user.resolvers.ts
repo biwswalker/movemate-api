@@ -34,6 +34,7 @@ import { join } from 'path'
 import { SafeString } from 'handlebars'
 import { generateRandomNumberPattern } from "@utils/string.utils";
 import bcrypt from "bcrypt";
+import { GET_USERS } from "@pipelines/user.pipeline";
 
 @Resolver(User)
 export default class UserResolver {
@@ -59,116 +60,8 @@ export default class UserResolver {
           : {}),
       };
 
-      const aggregate = UserModel.aggregate([
-        {
-          $match: query
-        },
-        {
-          $lookup: {
-            from: "businesscustomers",
-            localField: "businessDetail",
-            foreignField: "_id",
-            as: "businessDetail",
-            pipeline: [
-              {
-                $lookup: {
-                  from: "businesscustomercreditpayments",
-                  localField: "creditPayment",
-                  foreignField: "_id",
-                  as: "creditPayment"
-                }
-              },
-              {
-                $unwind: {
-                  path: "$creditPayment",
-                  preserveNullAndEmptyArrays: true
-                }
-              },
-              {
-                $lookup: {
-                  from: "businesscustomercashpayments",
-                  localField:
-                    "cashPayment",
-                  foreignField: "_id",
-                  as: "cashPayment"
-                }
-              },
-              {
-                $unwind: {
-                  path: "$cashPayment",
-                  preserveNullAndEmptyArrays: true
-                }
-              },
-            ]
-          }
-        },
-        {
-          $unwind: {
-            path: "$businessDetail",
-            preserveNullAndEmptyArrays: true
-          }
-        },
-        {
-          $lookup: {
-            from: "individualcustomers",
-            localField: "individualDetail",
-            foreignField: "_id",
-            as: "individualDetail"
-          }
-        },
-        {
-          $unwind: {
-            path: "$individualDetail",
-            preserveNullAndEmptyArrays: true
-          }
-        },
-        {
-          $lookup: {
-            from: "admins",
-            localField: "adminDetail",
-            foreignField: "_id",
-            as: "adminDetail"
-          }
-        },
-        {
-          $unwind: {
-            path: "$adminDetail",
-            preserveNullAndEmptyArrays: true
-          }
-        },
-        {
-          $lookup: {
-            from: "files",
-            localField: "profileImage",
-            foreignField: "_id",
-            as: "profileImage"
-          }
-        },
-        {
-          $unwind: {
-            path: "$profileImage",
-            preserveNullAndEmptyArrays: true
-          }
-        },
-        {
-          $addFields: {
-            statusWeight: {
-              $switch: {
-                branches: [
-                  {
-                    case: {
-                      $eq: ["$status", "pending"]
-                    },
-                    then: 0
-                  }
-                ],
-                default: 1
-              }
-            }
-          }
-        }
-      ])
 
+      const aggregate = UserModel.aggregate(GET_USERS(query))
       const users = (await UserModel.aggregatePaginate(aggregate, pagination)) as UserPaginationAggregatePayload
       // const users = (await UserModel.paginate(
       //   options,
