@@ -21,7 +21,7 @@ export class AdditionalServiceCostPricing extends TimeStamps {
     available: boolean
 
     @Field(() => AdditionalService)
-    @Property({ required: true, unique: true, autopopulate: true, ref: () => AdditionalService })
+    @Property({ required: true, autopopulate: true, ref: () => AdditionalService })
     additionalService: Ref<AdditionalService>
 
     @Field()
