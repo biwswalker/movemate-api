@@ -54,8 +54,12 @@ export class AdditionalService extends TimeStamps {
   type: TServiceType;
 
   @Field()
-  @Property()
+  @Property({ required: true })
   name: string;
+
+  @Field()
+  @Property({ default: false })
+  permanent: boolean;
 
   @Field()
   @Property({

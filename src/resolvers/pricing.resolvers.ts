@@ -42,6 +42,7 @@ export default class PricingResolver {
 
                 return vehicleCostTemporary
             }
+            console.log('ffffff', vehicleCost[0].additionalServices)
             return vehicleCost[0];
         } catch (error) {
             console.log('error: ', error)

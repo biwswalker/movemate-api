@@ -80,7 +80,7 @@ export default class AdditionalServiceResolver {
           path: 'vehicleTypes',
           model: 'VehicleType'
         }
-      });
+      }).sort({ permanent: -1 });
       if (!additionalServices) {
         const message = `ไม่สามารถเรียกข้อมูลบริการเสริมได้`;
         throw new GraphQLError(message, {
