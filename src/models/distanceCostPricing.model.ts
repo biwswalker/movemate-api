@@ -15,7 +15,7 @@ export class DistanceCostPricing extends TimeStamps {
 
     @Field(() => Float)
     @Property({ required: true })
-    form: number
+    from: number
 
     @Field(() => Float, { nullable: true })
     @Property()

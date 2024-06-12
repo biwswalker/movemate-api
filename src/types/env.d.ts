@@ -6,7 +6,6 @@ declare namespace NodeJS {
         DATABASE_URL: string
         DATABASE_NAME: string
         GOOGLE_MAP_API_KEY: string
-        DOMAINNAME: string
         GOOGLE_MAIL: string
         GOOGLE_SERVICE_ID: string
         GOOGLE_SERVICE_SECRET: string
