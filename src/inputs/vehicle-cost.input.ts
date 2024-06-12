@@ -20,3 +20,25 @@ export class AdditionalServiceCostInput {
     @Field(() => Float)
     price: number
 }
+
+
+@InputType()
+export class DistanceCostPricingInput {
+    @Field()
+    readonly _id: string
+
+    @Field(() => Float)
+    from: number
+
+    @Field(() => Float)
+    to: number
+
+    @Field()
+    unit: TDistanceCostPricingUnit
+
+    @Field(() => Float)
+    cost: number
+
+    @Field(() => Float)
+    price: number
+}
