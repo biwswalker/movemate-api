@@ -17,7 +17,6 @@ import { SafeString } from 'handlebars'
 import { GraphQLError } from 'graphql'
 import AdminModel from "@models/admin.model";
 import { AddAdminInput } from "@inputs/admin.input";
-import cryptoJs from "crypto-js";
 
 @Resolver(User)
 export default class AdminResolver {

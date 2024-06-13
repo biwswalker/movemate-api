@@ -4,13 +4,11 @@ import {
   plugin,
   prop as Property,
   getModelForClass,
-  Severity,
 } from "@typegoose/typegoose";
 import mongooseAutoPopulate from "mongoose-autopopulate";
 import { IsEnum } from "class-validator";
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
-import { VehicleType } from "./vehicleType.model";
-import { Schema } from "mongoose";
+import { AdditionalServiceDescription } from "./additionalServiceDescription.model";
 
 enum EServiceType {
   SERVICES = "services",
@@ -20,22 +18,6 @@ enum EServiceType {
 enum EServiceStatus {
   ACTIVE = "active",
   INACTIVE = "inactive",
-}
-
-@plugin(mongooseAutoPopulate)
-@ObjectType()
-class AdditionalServiceDescription {
-  @Field()
-  @Property()
-  detail: string;
-
-  @Field(() => [VehicleType])
-  @Property({
-    autopopulate: true,
-    ref: () => VehicleType,
-    type: Schema.Types.ObjectId,
-  })
-  vehicleTypes: Ref<VehicleType, string>[];
 }
 
 @plugin(mongooseAutoPopulate)
@@ -70,8 +52,8 @@ export class AdditionalService extends TimeStamps {
   status: TServiceStatus;
 
   @Field(() => [AdditionalServiceDescription])
-  @Property({ allowMixed: Severity.ALLOW })
-  descriptions: AdditionalServiceDescription[];
+  @Property({ autopopulate: true, ref: () => AdditionalServiceDescription })
+  descriptions: Ref<AdditionalServiceDescription>[];
 
   @Field()
   @Property({ default: Date.now })

@@ -8,6 +8,9 @@ import AdditionalServiceModel, {
 } from "@models/additionalService.model";
 import { AdditionalServiceInput } from "@inputs/additional-service.input";
 import { AdditionalServiceSchema } from "@validations/additionalService.validations";
+import AdditionalServiceDescriptionModel, { AdditionalServiceDescription } from "@models/additionalServiceDescription.model";
+import { AnyBulkWriteOperation, Types } from "mongoose";
+import { get, map } from "lodash";
 
 @Resolver(AdditionalService)
 export default class AdditionalServiceResolver {
@@ -20,18 +23,32 @@ export default class AdditionalServiceResolver {
     try {
       await AdditionalServiceSchema().validate(data, { abortEarly: false })
 
-      const additionalModel = new AdditionalServiceModel(data);
+      const bulkOps: AnyBulkWriteOperation<AdditionalServiceDescription>[] =
+        map(descriptions, ({ _id, ...description }) => {
+          const _oid =
+            _id === "-" ? new Types.ObjectId() : new Types.ObjectId(_id);
+          return {
+            updateOne: {
+              filter: { _id: _oid },
+              update: { $set: { _id: _oid, ...description } },
+              upsert: true,
+            },
+          };
+        });
+      const descriptionIds = map(bulkOps, (opt) =>
+        get(opt, "updateOne.filter._id", "")
+      );
+
+      await AdditionalServiceDescriptionModel.bulkWrite(bulkOps);
+
+      const additionalModel = new AdditionalServiceModel({
+        ...values,
+        descriptions: descriptionIds
+      });
       await additionalModel.save();
 
       const result = await AdditionalServiceModel
         .findById(additionalModel._id)
-        .populate({
-          path: 'descriptions',
-          populate: {
-            path: 'vehicleTypes',
-            model: 'VehicleType'
-          }
-        })
 
       return result;
     } catch (errors) {
@@ -48,18 +65,36 @@ export default class AdditionalServiceResolver {
     @Arg("id") id: string,
     @Arg("data") data: AdditionalServiceInput,
   ): Promise<AdditionalService> {
+    const { descriptions, ...values } = data;
     try {
       await AdditionalServiceSchema(true).validate(data, { abortEarly: false })
 
-      await AdditionalServiceModel.findByIdAndUpdate(id, data)
+      const bulkOps: AnyBulkWriteOperation<AdditionalServiceDescription>[] =
+        map(descriptions, ({ _id, ...description }) => {
+          const _oid =
+            _id === "-" ? new Types.ObjectId() : new Types.ObjectId(_id);
+          return {
+            updateOne: {
+              filter: { _id: _oid },
+              update: { $set: { _id: _oid, ...description } },
+              upsert: true,
+            },
+          };
+        });
+      const descriptionIds = map(bulkOps, (opt) =>
+        get(opt, "updateOne.filter._id", "")
+      );
 
-      const additionalService = await AdditionalServiceModel.findById(id).populate({
-        path: 'descriptions',
-        populate: {
-          path: 'vehicleTypes',
-          model: 'VehicleType'
-        }
-      })
+      await AdditionalServiceDescriptionModel.bulkWrite(bulkOps);
+
+      await AdditionalServiceModel.findByIdAndUpdate(id, { ...values, descriptions: descriptionIds })
+
+      await AdditionalServiceDescriptionModel.deleteMany({
+        _id: { $nin: descriptionIds },
+        additionalService: id, // TODO: Recheck again
+      });
+
+      const additionalService = await AdditionalServiceModel.findById(id)
 
       return additionalService
     } catch (errors) {
@@ -74,13 +109,7 @@ export default class AdditionalServiceResolver {
   @UseMiddleware(AuthGuard(["admin"]))
   async getAdditionalServices(): Promise<AdditionalService[]> {
     try {
-      const additionalServices = await AdditionalServiceModel.find().populate({
-        path: 'descriptions',
-        populate: {
-          path: 'vehicleTypes',
-          model: 'VehicleType'
-        }
-      }).sort({ permanent: -1 });
+      const additionalServices = await AdditionalServiceModel.find().sort({ permanent: -1 });
       if (!additionalServices) {
         const message = `ไม่สามารถเรียกข้อมูลบริการเสริมได้`;
         throw new GraphQLError(message, {
@@ -97,13 +126,7 @@ export default class AdditionalServiceResolver {
   @UseMiddleware(AuthGuard(["admin"]))
   async getAdditionalService(@Arg("name") name: string): Promise<AdditionalService> {
     try {
-      const additionalService = await AdditionalServiceModel.findOne({ name }).populate({
-        path: 'descriptions',
-        populate: {
-          path: 'vehicleTypes',
-          model: 'VehicleType'
-        }
-      });
+      const additionalService = await AdditionalServiceModel.findOne({ name })
       if (!additionalService) {
         const message = `ไม่สามารถเรียกข้อมูลประเภทรถได้`;
         throw new GraphQLError(message, {

@@ -3,7 +3,6 @@ import { AuthGuard } from "@guards/auth.guards";
 import VehicleTypeModel, { VehicleType } from "@models/vehicleType.model";
 import { GraphQLError } from "graphql";
 import VehicleCostModel, { VehicleCost } from "@models/vehicleCost.model";
-import { GET_VEHICLE_COST } from "@pipelines/pricing.pipeline";
 import {
   AdditionalServiceCostInput,
   DistanceCostPricingInput,
@@ -21,6 +20,8 @@ import AdditionalServiceModel from "@models/additionalService.model";
 import DistanceCostPricingModel, {
   DistanceCostPricing,
 } from "@models/distanceCostPricing.model";
+import { ValidationError } from "yup";
+import { yupValidationThrow } from "@utils/error.utils";
 
 @Resolver()
 export default class PricingResolver {
@@ -30,10 +31,8 @@ export default class PricingResolver {
     @Arg("vehicleTypeId") vehicleTypeId: string
   ): Promise<VehicleCost> {
     try {
-      const vehicleCost = await VehicleCostModel.aggregate(
-        GET_VEHICLE_COST(vehicleTypeId)
-      );
-      if (!vehicleCost || !vehicleCost[0]) {
+      const vehicleCost = await VehicleCostModel.findOne({ vehicleType: vehicleTypeId })
+      if (!vehicleCost) {
         const vehicleType = await VehicleTypeModel.findById(vehicleTypeId);
         if (!vehicleType) {
           const message = `ไม่สามารถเรียกข้อมูลประเภทรถได้`;
@@ -49,7 +48,7 @@ export default class PricingResolver {
 
         return vehicleCostTemporary;
       }
-      return vehicleCost[0];
+      return vehicleCost;
     } catch (error) {
       console.log("error: ", error);
       throw new GraphQLError("ไม่สามารถเรียกข้อมูลประเภทรถได้ โปรดลองอีกครั้ง");
@@ -90,14 +89,16 @@ export default class PricingResolver {
 
       await AdditionalServiceCostPricingModel.deleteMany({
         _id: { $nin: serviceIds },
-        vehicleCost: id,
+        vehicleCost: id, // TODO: Recheck again
       });
 
       return true;
-    } catch (error) {
-      console.log("error: ", error);
-      const message = get(error, "message", "");
-      throw new GraphQLError(message || "เกิดข้อผิดพลาด โปรดลองอีกครั้ง");
+    } catch (errors) {
+      console.log('error: ', errors)
+      if (errors instanceof ValidationError) {
+        throw yupValidationThrow(errors)
+      }
+      throw errors
     }
   }
 
@@ -135,14 +136,16 @@ export default class PricingResolver {
 
       await DistanceCostPricingModel.deleteMany({
         _id: { $nin: distanceIds },
-        vehicleCost: id,
+        vehicleCost: id, // TODO: Recheck again
       });
 
       return true;
-    } catch (error) {
-      console.log("error: ", error);
-      const message = get(error, "message", "");
-      throw new GraphQLError(message || "เกิดข้อผิดพลาด โปรดลองอีกครั้ง");
+    } catch (errors) {
+      console.log('error: ', errors)
+      if (errors instanceof ValidationError) {
+        throw yupValidationThrow(errors)
+      }
+      throw errors
     }
   }
 

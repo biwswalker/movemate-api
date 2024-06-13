@@ -3,6 +3,9 @@ import { Field, InputType } from "type-graphql";
 @InputType()
 class ServiceDescriptionInput {
     @Field()
+    _id: string
+
+    @Field()
     detail: string
 
     @Field(() => [String])

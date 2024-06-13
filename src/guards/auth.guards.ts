@@ -57,6 +57,39 @@ export const AuthGuard: (roles?: TUserRole[]) => MiddlewareFn<GraphQLContext> = 
     return next()
 }
 
+export const AllowGuard: MiddlewareFn<GraphQLContext> = async ({ context }, next) => {
+    const { req } = context
+
+    const authorization = req.headers['authorization']
+
+    try {
+        if (authorization) {
+            if (!authorization.startsWith('Bearer ')) {
+                throw new AuthenticationError('รหัสระบุตัวตนไม่สมบูรณ์')
+            }
+            const token = authorization.split(' ')[1];
+            const decodedToken = verifyAccessToken(token)
+            if (!decodedToken) {
+                throw new AuthenticationError('รหัสระบุตัวตนไม่สมบูรณ์หรือหมดอายุ');
+            }
+            const user_id = decodedToken.user_id
+            const user_role = decodedToken.user_role
+
+            req.user_id = user_id
+            req.user_role = user_role
+        }
+
+    } catch (error) {
+        if (error instanceof TokenExpiredError) {
+            throw new AuthenticationError('เซสชั่นหมดอายุ');
+        }
+        throw error
+    }
+
+    return next()
+}
+
+
 export const authenticateTokenAccessImage = async (request: Request, response: Response, next: NextFunction) => {
     next()
     // const authorization = request.headers['authorization']
