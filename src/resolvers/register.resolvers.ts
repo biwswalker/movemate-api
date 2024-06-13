@@ -17,6 +17,7 @@ import { SafeString } from "handlebars";
 import { GraphQLError } from "graphql";
 import FileModel from "@models/file.model";
 import { CutomerBusinessInput, CutomerIndividualInput } from "@inputs/customer.input";
+import { decryption } from "@utils/encryption";
 
 @Resolver(User)
 export default class RegisterResolver {
@@ -117,7 +118,8 @@ export default class RegisterResolver {
        * Individual Customer Register
        */
       if (userType === "individual" && individualDetail) {
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const password_decryption = decryption(password)
+        const hashedPassword = await bcrypt.hash(password_decryption, 10);
         const userNumber = await generateId("MMIN", userType);
 
         const individualCustomer = new CustomerIndividualModel({

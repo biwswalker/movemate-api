@@ -57,11 +57,7 @@ export default class AdminResolver {
 
             const userNumber = await generateId("MMAM", 'admin');
             const userPassword = await generateId("ADMIN", 'password');
-            const encryptionPassword = cryptoJs.AES.encrypt(
-                userPassword.toLowerCase(),
-                process.env.MOVEMATE_SHARED_KEY
-            ).toString();
-            const hashedPassword = await bcrypt.hash(encryptionPassword, 10);
+            const hashedPassword = await bcrypt.hash(userPassword, 10);
             const admin = new AdminModel({
                 userNumber,
                 ...data

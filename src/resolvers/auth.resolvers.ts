@@ -4,6 +4,7 @@ import { AuthPayload } from '@payloads/user.payloads'
 import { generateAccessToken } from '@utils/auth.utils'
 import { GraphQLContext } from '@configs/graphQL.config'
 import { GraphQLError } from 'graphql'
+import { get, split } from 'lodash'
 
 @Resolver()
 export default class AuthResolver {
@@ -11,13 +12,19 @@ export default class AuthResolver {
     @Mutation(() => AuthPayload)
     async login(
         @Arg('username') username: string,
-        @Arg('password') password: string,
         @Ctx() ctx: GraphQLContext
     ): Promise<AuthPayload> {
         try {
+            const hashedPassword = get(split(get(ctx, 'req.headers.authorization', ''), ' '), '1', '')
             const user = await User.findByUsername(username)
 
-            if (!user || !user.validatePassword(password)) {
+            if (!user) {
+                throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
+            }
+
+            const validateResult = await user.validatePassword(hashedPassword)
+
+            if (!validateResult) {
                 throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
             }
 

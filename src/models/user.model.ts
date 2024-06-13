@@ -3,7 +3,6 @@ import { prop as Property, Ref, getModelForClass, plugin } from "@typegoose/type
 import autopopulate from 'mongoose-autopopulate'
 import { IsNotEmpty, IsString, IsEnum } from "class-validator";
 import bcrypt from "bcrypt";
-import cryptoJs from "crypto-js";
 import mongoosePagination from 'mongoose-paginate-v2'
 import aggregatePaginate from 'mongoose-aggregate-paginate-v2'
 import mongoose from "mongoose";
@@ -12,6 +11,7 @@ import { IndividualCustomer } from "./customerIndividual.model";
 import { BusinessCustomer } from "./customerBusiness.model";
 import { File } from "./file.model"
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
+import { decryption } from "@utils/encryption";
 
 enum EUserRole {
   CUSTOMER = 'customer',
@@ -151,10 +151,7 @@ export class User extends TimeStamps {
   profileImage?: Ref<File>
 
   async validatePassword(password: string): Promise<boolean> {
-    const password_decryption = cryptoJs.AES.decrypt(
-      password,
-      process.env.MOVEMATE_SHARED_KEY
-    ).toString();
+    const password_decryption = decryption(password)
     return bcrypt.compare(password_decryption, this.password);
   }
 
