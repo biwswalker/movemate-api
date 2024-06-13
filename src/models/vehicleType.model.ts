@@ -63,7 +63,6 @@ export class VehicleType extends TimeStamps {
   image: Ref<File>
 
   @Field({ nullable: true })
-  //   @Length(0, 255)
   @Property()
   details: string;
 
