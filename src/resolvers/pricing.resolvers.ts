@@ -1,5 +1,12 @@
-import { Arg, Resolver, UseMiddleware, Query, Mutation } from "type-graphql";
-import { AuthGuard } from "@guards/auth.guards";
+import {
+  Arg,
+  Resolver,
+  UseMiddleware,
+  Query,
+  Mutation,
+  Ctx,
+} from "type-graphql";
+import { AllowGuard, AuthGuard } from "@guards/auth.guards";
 import VehicleTypeModel, { VehicleType } from "@models/vehicleType.model";
 import { GraphQLError } from "graphql";
 import VehicleCostModel, { VehicleCost } from "@models/vehicleCost.model";
@@ -14,7 +21,15 @@ import {
 import AdditionalServiceCostPricingModel, {
   AdditionalServiceCostPricing,
 } from "@models/additionalServiceCostPricing.model";
-import { filter, get, isEqual, map } from "lodash";
+import {
+  filter,
+  forEach,
+  get,
+  isEmpty,
+  isEqual,
+  map,
+  some,
+} from "lodash";
 import { AnyBulkWriteOperation, Types } from "mongoose";
 import AdditionalServiceModel from "@models/additionalService.model";
 import DistanceCostPricingModel, {
@@ -22,6 +37,7 @@ import DistanceCostPricingModel, {
 } from "@models/distanceCostPricing.model";
 import { ValidationError } from "yup";
 import { yupValidationThrow } from "@utils/error.utils";
+import { GraphQLContext } from "@configs/graphQL.config";
 
 @Resolver()
 export default class PricingResolver {
@@ -31,7 +47,9 @@ export default class PricingResolver {
     @Arg("vehicleTypeId") vehicleTypeId: string
   ): Promise<VehicleCost> {
     try {
-      const vehicleCost = await VehicleCostModel.findOne({ vehicleType: vehicleTypeId })
+      const vehicleCost = await VehicleCostModel.findOne({
+        vehicleType: vehicleTypeId,
+      });
       if (!vehicleCost) {
         const vehicleType = await VehicleTypeModel.findById(vehicleTypeId);
         if (!vehicleType) {
@@ -94,11 +112,11 @@ export default class PricingResolver {
 
       return true;
     } catch (errors) {
-      console.log('error: ', errors)
+      console.log("error: ", errors);
       if (errors instanceof ValidationError) {
-        throw yupValidationThrow(errors)
+        throw yupValidationThrow(errors);
       }
-      throw errors
+      throw errors;
     }
   }
 
@@ -141,11 +159,11 @@ export default class PricingResolver {
 
       return true;
     } catch (errors) {
-      console.log('error: ', errors)
+      console.log("error: ", errors);
       if (errors instanceof ValidationError) {
-        throw yupValidationThrow(errors)
+        throw yupValidationThrow(errors);
       }
-      throw errors
+      throw errors;
     }
   }
 
@@ -160,7 +178,15 @@ export default class PricingResolver {
       let additionalServicesIds = [];
       if (withAdditionalService) {
         const vehicleType = await VehicleTypeModel.findById(vehicleTypeId);
-        const additionalServices = await AdditionalServiceModel.find();
+        const additionalServices =
+          await AdditionalServiceModel.findByVehicleTypeID(vehicleTypeId);
+
+        if (isEmpty(additionalServices)) {
+          const message = `ไม่พบข้อมูลบริการเสริม กรุณาตรวจสอบหน้าบริการเสริมว่าสามารถเพิ่มรายละเอียดสำหรับรถประเภทนี้ได้`;
+          throw new GraphQLError(message, {
+            extensions: { code: "NOT_FOUND", errors: [{ message }] },
+          });
+        }
         const additionalServicesFilter = filter(
           additionalServices,
           (service) => {
@@ -227,16 +253,27 @@ export default class PricingResolver {
 
       let additionalServicesIds = [];
       if (vehicleType) {
-        const additionalServices = await AdditionalServiceModel.find();
+        const additionalServices =
+          await AdditionalServiceModel.findByVehicleTypeID(vehicleType._id);
+
+        if (isEmpty(additionalServices)) {
+          const message = `ไม่พบข้อมูลบริการเสริม กรุณาตรวจสอบหน้าบริการเสริมว่าสามารถเพิ่มรายละเอียดสำหรับรถประเภทนี้ได้`;
+          throw new GraphQLError(message, {
+            extensions: { code: "NOT_FOUND", errors: [{ message }] },
+          });
+        }
+
         const additionalServicesFilter = filter(
           additionalServices,
           (service) => {
+            // Change this additional service included VehicleType descriptions
             if (service.name === "รถขนาดใหญ่") {
               return vehicleType.isLarger;
             }
             return true;
           }
         );
+
         const bulkOps: AnyBulkWriteOperation<AdditionalServiceCostPricing>[] =
           map(additionalServicesFilter, (service) => {
             const _oid = new Types.ObjectId();
@@ -260,6 +297,7 @@ export default class PricingResolver {
               },
             };
           });
+
         await AdditionalServiceCostPricingModel.bulkWrite(bulkOps);
         additionalServicesIds = map(bulkOps, (opt) =>
           get(opt, "updateOne.filter._id", "")
@@ -275,6 +313,54 @@ export default class PricingResolver {
       console.log("error: ", error);
       const message = get(error, "message", "");
       throw new GraphQLError(message || "เกิดข้อผิดพลาด โปรดลองอีกครั้ง");
+    }
+  }
+
+  @Query(() => VehicleCost)
+  @UseMiddleware(AllowGuard)
+  async getVehicleCostByVehicleType(
+    @Ctx() ctx: GraphQLContext,
+    @Arg("id") id: string
+  ): Promise<VehicleCost> {
+    try {
+      // To using login user or not
+      // ctx.req.user_id
+      // const isAuthorized = !isEmpty(ctx.req.user_id);
+
+      const vehicleCost = await VehicleCostModel.findOne({
+        vehicleType: id,
+      });
+
+      if (!vehicleCost) {
+        const message = `ไม่สามารถเรียกข้อมูลประเภทรถได้`;
+        throw new GraphQLError(message, {
+          extensions: { code: "NOT_FOUND", errors: [{ message }] },
+        });
+      }
+
+      const services = get(vehicleCost, "additionalServices", []);
+      forEach(services, (service) => {
+        service.additionalService.descriptions = get(
+          service,
+          "additionalService.descriptions",
+          []
+        )
+          .filter((description) =>
+            some(description.vehicleTypes, (type) => type._id.toString() === id)
+          )
+          .map((description) => {
+            description.vehicleTypes = filter(
+              get(description, "vehicleTypes", []),
+              (type) => type._id.toString() === id
+            );
+            return description;
+          });
+      });
+
+      return vehicleCost;
+    } catch (error) {
+      console.log(error);
+      throw error;
     }
   }
 }

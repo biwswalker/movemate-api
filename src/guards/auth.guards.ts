@@ -1,120 +1,131 @@
-import { AuthenticationError, MiddlewareFn } from 'type-graphql'
-import { verifyAccessToken } from '@utils/auth.utils'
-import { GraphQLContext } from '@configs/graphQL.config'
-import UserModel from '@models/user.model'
-import { NextFunction, Request, Response } from 'express';
-import { TokenExpiredError } from 'jsonwebtoken';
-import { includes } from 'lodash';
+import { AuthenticationError, MiddlewareFn } from "type-graphql";
+import { verifyAccessToken } from "@utils/auth.utils";
+import { GraphQLContext } from "@configs/graphQL.config";
+import UserModel from "@models/user.model";
+import { NextFunction, Request, Response } from "express";
+import { TokenExpiredError } from "jsonwebtoken";
+import { includes } from "lodash";
 
 interface IAccountModel {
-    findById(user_id: string): Promise<any>;
+  findById(user_id: string): Promise<any>;
 }
 
-const findUserById = async (Model: IAccountModel, user_id: string): Promise<any> => {
-    const user = await Model.findById(user_id);
-    if (!user) {
-        throw new Error('Unauthorized');
-    }
-    return user;
+const findUserById = async (
+  Model: IAccountModel,
+  user_id: string
+): Promise<any> => {
+  const user = await Model.findById(user_id);
+  if (!user) {
+    throw new Error("Unauthorized");
+  }
+  return user;
 };
 
-export const AuthGuard: (roles?: TUserRole[]) => MiddlewareFn<GraphQLContext> = (roles = ['customer']) => async ({ context }, next) => {
-    const { req } = context
+export const AuthGuard: (roles?: TUserRole[]) => MiddlewareFn<GraphQLContext> =
+  (roles = ["customer"]) =>
+  async ({ context }, next) => {
+    const { req } = context;
 
-    const authorization = req.headers['authorization']
-    if (!authorization || !authorization.startsWith('Bearer ')) {
-        throw new AuthenticationError('รหัสระบุตัวตนไม่สมบูรณ์')
+    const authorization = req.headers["authorization"];
+    if (!authorization || !authorization.startsWith("Bearer ")) {
+      throw new AuthenticationError("รหัสระบุตัวตนไม่สมบูรณ์");
     }
 
     try {
-        const token = authorization.split(' ')[1];
-        const decodedToken = verifyAccessToken(token)
-        if (!decodedToken) {
-            throw new AuthenticationError('รหัสระบุตัวตนไม่สมบูรณ์หรือหมดอายุ');
-        }
-        const user_id = decodedToken.user_id
-        const user_role = decodedToken.user_role
-        const user = await findUserById(UserModel, user_id);
+      const token = authorization.split(" ")[1];
+      const decodedToken = verifyAccessToken(token);
+      if (!decodedToken) {
+        throw new AuthenticationError("รหัสระบุตัวตนไม่สมบูรณ์หรือหมดอายุ");
+      }
+      const user_id = decodedToken.user_id;
+      const user_role = decodedToken.user_role;
+      const user = await findUserById(UserModel, user_id);
 
-        if (!user) {
-            throw new AuthenticationError('ไม่พบผู้ใช้');
-        }
+      if (!user) {
+        throw new AuthenticationError("ไม่พบผู้ใช้");
+      }
 
-        if (!includes(roles, user_role)) {
-            throw new AuthenticationError('ไม่สามารถใช้งานฟังก์ชั้นนี้ได้ เนื่องจากจำกัดสิทธิ์การเข้าถึง');
-        }
+      if (!includes(roles, user_role)) {
+        throw new AuthenticationError(
+          "ไม่สามารถใช้งานฟังก์ชั้นนี้ได้ เนื่องจากจำกัดสิทธิ์การเข้าถึง"
+        );
+      }
 
-        req.user_id = user_id
-        req.user_role = user_role
-
+      req.user_id = user_id;
+      req.user_role = user_role;
     } catch (error) {
-        if (error instanceof TokenExpiredError) {
-            throw new AuthenticationError('เซสชั่นหมดอายุ');
-        }
-        throw error
+      if (error instanceof TokenExpiredError) {
+        throw new AuthenticationError("เซสชั่นหมดอายุ");
+      }
+      throw error;
     }
 
-    return next()
-}
+    return next();
+  };
 
-export const AllowGuard: MiddlewareFn<GraphQLContext> = async ({ context }, next) => {
-    const { req } = context
+export const AllowGuard: MiddlewareFn<GraphQLContext> = async (
+  { context },
+  next
+) => {
+  const { req } = context;
 
-    const authorization = req.headers['authorization']
+  const authorization = req.headers["authorization"];
 
-    try {
-        if (authorization) {
-            if (!authorization.startsWith('Bearer ')) {
-                throw new AuthenticationError('รหัสระบุตัวตนไม่สมบูรณ์')
-            }
-            const token = authorization.split(' ')[1];
-            const decodedToken = verifyAccessToken(token)
-            if (!decodedToken) {
-                throw new AuthenticationError('รหัสระบุตัวตนไม่สมบูรณ์หรือหมดอายุ');
-            }
-            const user_id = decodedToken.user_id
-            const user_role = decodedToken.user_role
+  try {
+    if (authorization) {
+      if (!authorization.startsWith("Bearer ")) {
+        throw new AuthenticationError("รหัสระบุตัวตนไม่สมบูรณ์");
+      }
+      const token = authorization.split(" ")[1];
+      const decodedToken = verifyAccessToken(token);
+      if (decodedToken) {
+        const user_id = decodedToken.user_id;
+        const user_role = decodedToken.user_role;
 
-            req.user_id = user_id
-            req.user_role = user_role
-        }
-
-    } catch (error) {
-        if (error instanceof TokenExpiredError) {
-            throw new AuthenticationError('เซสชั่นหมดอายุ');
-        }
-        throw error
+        req.user_id = user_id;
+        req.user_role = user_role;
+      }
     }
+  } catch (error) {
+    console.log("error: ", error);
+    if (error instanceof TokenExpiredError) {
+      return next();
+    }
+    throw error;
+  }
 
-    return next()
-}
+  return next();
+};
 
+export const authenticateTokenAccessImage = async (
+  request: Request,
+  response: Response,
+  next: NextFunction
+) => {
+  next();
+  // const authorization = request.headers['authorization']
 
-export const authenticateTokenAccessImage = async (request: Request, response: Response, next: NextFunction) => {
-    next()
-    // const authorization = request.headers['authorization']
+  // if (!authorization || !authorization.startsWith('Bearer ') || authorization === undefined || authorization === null) {
+  //     return response.sendStatus(401)
+  // }
 
-    // if (!authorization || !authorization.startsWith('Bearer ') || authorization === undefined || authorization === null) {
-    //     return response.sendStatus(401)
-    // }
+  // try {
+  //     const token = authorization.split(' ')[1];
+  //     const decodedToken = verifyAccessToken(token)
+  //     if (!decodedToken) {
+  //         return response.sendStatus(403)
+  //     }
+  //     const user_id = decodedToken.user_id
 
-    // try {
-    //     const token = authorization.split(' ')[1];
-    //     const decodedToken = verifyAccessToken(token)
-    //     if (!decodedToken) {
-    //         return response.sendStatus(403)
-    //     }
-    //     const user_id = decodedToken.user_id
+  //     const user = await findUserById(UserModel, user_id)
 
-    //     const user = await findUserById(UserModel, user_id)
+  //     if (!user) {
+  //         return response.sendStatus(403)
+  //     }
 
-    //     if (!user) {
-    //         return response.sendStatus(403)
-    //     }
-
-    //     next()
-    // } catch (error) {
-    //     // console.log(error)
-    //     return response.sendStatus(403)
-    // }
-}
+  //     next()
+  // } catch (error) {
+  //     // console.log(error)
+  //     return response.sendStatus(403)
+  // }
+};
