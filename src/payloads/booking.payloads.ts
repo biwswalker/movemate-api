@@ -8,6 +8,15 @@ export class paymentMethodPayload {
 
     @Field()
     method: string
+
+    @Field()
+    name: string
+
+    @Field()
+    subTitle: string
+
+    @Field()
+    detail: string
 }
 
 @ObjectType()

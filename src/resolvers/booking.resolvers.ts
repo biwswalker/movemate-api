@@ -24,8 +24,8 @@ export default class BookingResolver {
 
       // Get avaialble Payment Method
       const paymentMethods = [
-        { available: true, method: "cash" },
-        { available: isAuthorized, method: "credit" },
+        { available: true, method: "cash", name: "ชำระด้วยเงินสด", subTitle: 'ชำระผ่าน QR Promptpay ขั้นตอนถัดไป', detail: '' },
+        { available: isAuthorized, method: "credit", name: "ออกใบแจ้งหนี้", subTitle: 'สำหรับสมาชิก Movemate แบบองค์กร/บริษัท', detail: '' },
       ];
 
       return {

@@ -39,6 +39,7 @@ async function server() {
     methods: ['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS'],
     origin: [
       'http://localhost:3000',
+      'http://localhost:3001',
       'https://movmateth.space',
       'https://admin.movmateth.space',
     ],
