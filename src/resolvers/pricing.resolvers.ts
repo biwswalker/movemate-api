@@ -31,7 +31,7 @@ import {
   some,
 } from "lodash";
 import { AnyBulkWriteOperation, Types } from "mongoose";
-import AdditionalServiceModel from "@models/additionalService.model";
+import AdditionalServiceModel, { AdditionalService } from "@models/additionalService.model";
 import DistanceCostPricingModel, {
   DistanceCostPricing,
 } from "@models/distanceCostPricing.model";
@@ -327,9 +327,39 @@ export default class PricingResolver {
       // ctx.req.user_id
       // const isAuthorized = !isEmpty(ctx.req.user_id);
 
-      const vehicleCost = await VehicleCostModel.findOne({
-        vehicleType: id,
-      });
+      const vehicleCost = await VehicleCostModel.findOne({ vehicleType: id })
+        .populate({
+          path: 'additionalServices',
+          match: { available: true },
+          populate: {
+            path: 'additionalService',
+            model: 'AdditionalService',
+            populate: {
+              path: 'descriptions',
+              model: 'AdditionalServiceDescription',
+              populate: {
+                path: 'vehicleTypes',
+                model: 'VehicleType',
+                populate: {
+                  path: 'image',
+                  model: 'File'
+                }
+              },
+            }
+          }
+        }).populate({
+          path: 'vehicleType',
+          model: 'VehicleType',
+          populate: {
+            path: 'image',
+            model: 'File'
+          }
+        })
+        .populate({
+          path: 'distance',
+          model: 'DistanceCostPricing'
+        })
+        .lean();
 
       if (!vehicleCost) {
         const message = `ไม่สามารถเรียกข้อมูลประเภทรถได้`;
