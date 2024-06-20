@@ -41,4 +41,7 @@ export class DistanceCostPricingInput {
 
     @Field(() => Float)
     price: number
+
+    @Field(() => Float)
+    benefits: number
 }

@@ -30,6 +30,7 @@
     "fs": "^0.0.1-security",
     "googleapis": "^137.1.0",
     "graphql": "^16.8.1",
+    "graphql-type-json": "^0.3.2",
     "graphql-upload-ts": "^2.1.2",
     "image-to-base64": "^2.2.0",
     "jsonwebtoken": "^9.0.2",

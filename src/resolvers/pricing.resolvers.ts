@@ -28,16 +28,24 @@ import {
   isEmpty,
   isEqual,
   map,
+  omit,
   some,
 } from "lodash";
-import { AnyBulkWriteOperation, Types } from "mongoose";
-import AdditionalServiceModel, { AdditionalService } from "@models/additionalService.model";
-import DistanceCostPricingModel, {
-  DistanceCostPricing,
-} from "@models/distanceCostPricing.model";
+import {
+  AnyBulkWriteOperation,
+  ClientSession,
+  Types,
+  startSession,
+  connection,
+} from "mongoose";
+import AdditionalServiceModel from "@models/additionalService.model";
+import DistanceCostPricingModel from "@models/distanceCostPricing.model";
 import { ValidationError } from "yup";
 import { yupValidationThrow } from "@utils/error.utils";
 import { GraphQLContext } from "@configs/graphQL.config";
+import UpdateHistoryModel, { UpdateHistory } from "@models/UpdateHistory.model";
+import { DocumentType } from "@typegoose/typegoose";
+import UserModel from "@models/user.model";
 
 @Resolver()
 export default class PricingResolver {
@@ -120,45 +128,119 @@ export default class PricingResolver {
     }
   }
 
+  async isReplicaSet(): Promise<boolean> {
+    const admin = connection.db.admin();
+    const result = await admin
+      .command({ replSetGetStatus: 1 })
+      .catch(() => null);
+    return result && result.ok === 1;
+  }
+
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard(["admin"]))
   async updateDistanceCost(
     @Arg("id") id: string,
     @Arg("data", () => [DistanceCostPricingInput])
-    data: DistanceCostPricingInput[]
+    data: DistanceCostPricingInput[],
+    @Ctx() ctx: GraphQLContext
   ): Promise<boolean> {
+    // let session: ClientSession | null = null;
+
     try {
+      // const replicaSet = await this.isReplicaSet();
+      // if (replicaSet) {
+      // session = await startSession();
+      // session.startTransaction();
+      // }
+
       await DistanceCostPricingSchema.validate({ distanceCostPricings: data });
 
-      const bulkOps: AnyBulkWriteOperation<DistanceCostPricing>[] = map(
-        data,
-        ({ _id, ...distance }) => {
-          const _oid =
-            _id === "-" ? new Types.ObjectId() : new Types.ObjectId(_id);
-          return {
+      const bulkOperations = [];
+      const updateHistories: DocumentType<UpdateHistory>[] = [];
+
+
+      // TODO เปลี่ยนเป็น map เพราะ forEach ช้ากว่า
+      forEach(data, async ({ _id, ...distanceConfig }) => {
+        let distanceCostPricing = _id
+          ? _id !== "-"
+            ? await DistanceCostPricingModel.findById(_id) //.session(session)
+            : null
+          : null;
+
+        const beforeUpdate = distanceCostPricing
+          ? distanceCostPricing.toObject()
+          : {};
+        const beforeUpdateOmit = omit(beforeUpdate, ["createdAt", "updatedAt"]);
+
+        if (!distanceCostPricing) {
+          distanceCostPricing = new DistanceCostPricingModel();
+        }
+
+        Object.assign(distanceCostPricing, distanceConfig);
+
+        const afterUpdateOmit = omit(distanceCostPricing, [
+          "createdAt",
+          "updatedAt",
+        ]);
+
+        const hasChanged =
+          JSON.stringify(beforeUpdateOmit) !== JSON.stringify(afterUpdateOmit);
+
+        const userId = ctx.req.user_id;
+        const user = await UserModel.findById(userId); //.session(session);
+        if (hasChanged) {
+          const updateHistory = new UpdateHistoryModel({
+            referenceId: distanceCostPricing._id.toString(),
+            referenceType: "DistanceCostPricing",
+            who: user,
+            beforeUpdate,
+            afterUpdate: afterUpdateOmit.toObject(),
+          });
+          updateHistories.push(updateHistory);
+          bulkOperations.push({
             updateOne: {
-              filter: { _id: _oid },
-              update: { $set: { _id: _oid, ...distance } },
+              filter: {
+                _id: distanceCostPricing._id
+                  ? distanceCostPricing._id
+                  : new Types.ObjectId(),
+              },
+              update: {
+                $set: distanceConfig,
+                $push: { history: updateHistory },
+              },
               upsert: true,
             },
-          };
+          });
+          console.log("bulkOperations----: ", bulkOperations);
         }
-      );
-      const distanceIds = map(bulkOps, (opt) =>
-        get(opt, "updateOne.filter._id", "")
-      );
-
-      await DistanceCostPricingModel.bulkWrite(bulkOps);
-
-      await VehicleCostModel.findByIdAndUpdate(id, { distance: distanceIds });
-
-      await DistanceCostPricingModel.deleteMany({
-        _id: { $nin: distanceIds },
-        vehicleCost: id, // TODO: Recheck again
       });
+
+      console.log("bulkOperations: ", bulkOperations);
+      if (bulkOperations.length > 0) {
+        const distanceIds = map(bulkOperations, (opt) =>
+          get(opt, "updateOne.filter._id", "")
+        );
+        console.log("0000000000", distanceIds);
+        await DistanceCostPricingModel.bulkWrite(bulkOperations);
+        await UpdateHistoryModel.insertMany(updateHistories);
+        await VehicleCostModel.findByIdAndUpdate(id, { distance: distanceIds });
+        // await DistanceCostPricingModel.deleteMany({
+        //   _id: { $nin: distanceIds },
+        //   vehicleCost: id, // TODO: Recheck again
+        // });
+      }
+
+      // if (session) {
+      // await session.commitTransaction();
+      // session.endSession();
+      // }
 
       return true;
     } catch (errors) {
+      // if (session) {
+      // await session.abortTransaction();
+      // session.endSession();
+      // }
       console.log("error: ", errors);
       if (errors instanceof ValidationError) {
         throw yupValidationThrow(errors);
@@ -329,35 +411,36 @@ export default class PricingResolver {
 
       const vehicleCost = await VehicleCostModel.findOne({ vehicleType: id })
         .populate({
-          path: 'additionalServices',
+          path: "additionalServices",
           match: { available: true },
           populate: {
-            path: 'additionalService',
-            model: 'AdditionalService',
+            path: "additionalService",
+            model: "AdditionalService",
             populate: {
-              path: 'descriptions',
-              model: 'AdditionalServiceDescription',
+              path: "descriptions",
+              model: "AdditionalServiceDescription",
               populate: {
-                path: 'vehicleTypes',
-                model: 'VehicleType',
+                path: "vehicleTypes",
+                model: "VehicleType",
                 populate: {
-                  path: 'image',
-                  model: 'File'
-                }
+                  path: "image",
+                  model: "File",
+                },
               },
-            }
-          }
-        }).populate({
-          path: 'vehicleType',
-          model: 'VehicleType',
-          populate: {
-            path: 'image',
-            model: 'File'
-          }
+            },
+          },
         })
         .populate({
-          path: 'distance',
-          model: 'DistanceCostPricing'
+          path: "vehicleType",
+          model: "VehicleType",
+          populate: {
+            path: "image",
+            model: "File",
+          },
+        })
+        .populate({
+          path: "distance",
+          model: "DistanceCostPricing",
         })
         .lean();
 
