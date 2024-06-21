@@ -1,8 +1,9 @@
 import { Field, Float, ID, ObjectType } from "type-graphql";
-import { prop as Property, Ref, getModelForClass } from "@typegoose/typegoose";
+import { prop as Property, Ref, getModelForClass, plugin } from "@typegoose/typegoose";
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { IsEnum, IsNotEmpty } from "class-validator";
 import { UpdateHistory } from "./UpdateHistory.model";
+import mongooseAutoPopulate from "mongoose-autopopulate";
 
 enum EDistanceCostPricingUnit {
   LUMSUM = "lumpsum",
@@ -10,6 +11,7 @@ enum EDistanceCostPricingUnit {
 }
 
 @ObjectType()
+@plugin(mongooseAutoPopulate)
 export class DistanceCostPricing extends TimeStamps {
   @Field(() => ID)
   readonly _id: string;
@@ -45,7 +47,7 @@ export class DistanceCostPricing extends TimeStamps {
   benefits: number;
 
   @Field(() => [UpdateHistory])
-  @Property({ ref: () => UpdateHistory, default: [] })
+  @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
   history: Ref<UpdateHistory>[];
 
   @Field()

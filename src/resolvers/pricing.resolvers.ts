@@ -21,7 +21,7 @@ import {
 import AdditionalServiceCostPricingModel, {
   AdditionalServiceCostPricing,
 } from "@models/additionalServiceCostPricing.model";
-import {
+import lodash, {
   filter,
   forEach,
   get,
@@ -31,6 +31,7 @@ import {
   omit,
   some,
 } from "lodash";
+import Aigle from 'aigle'
 import {
   AnyBulkWriteOperation,
   ClientSession,
@@ -46,6 +47,10 @@ import { GraphQLContext } from "@configs/graphQL.config";
 import UpdateHistoryModel, { UpdateHistory } from "@models/UpdateHistory.model";
 import { DocumentType } from "@typegoose/typegoose";
 import UserModel from "@models/user.model";
+import { populate } from "dotenv";
+
+Aigle.mixin(lodash, {});
+
 
 @Resolver()
 export default class PricingResolver {
@@ -58,6 +63,8 @@ export default class PricingResolver {
       const vehicleCost = await VehicleCostModel.findOne({
         vehicleType: vehicleTypeId,
       });
+
+      console.log('vehicleCost: ', vehicleCost)
       if (!vehicleCost) {
         const vehicleType = await VehicleTypeModel.findById(vehicleTypeId);
         if (!vehicleType) {
@@ -144,26 +151,24 @@ export default class PricingResolver {
     data: DistanceCostPricingInput[],
     @Ctx() ctx: GraphQLContext
   ): Promise<boolean> {
-    // let session: ClientSession | null = null;
+    const replicaSet = await this.isReplicaSet();
+    let session: ClientSession | null = null;
 
     try {
-      // const replicaSet = await this.isReplicaSet();
-      // if (replicaSet) {
-      // session = await startSession();
-      // session.startTransaction();
-      // }
+      if (replicaSet) {
+        session = await startSession();
+        session.startTransaction();
+      }
 
       await DistanceCostPricingSchema.validate({ distanceCostPricings: data });
 
       const bulkOperations = [];
       const updateHistories: DocumentType<UpdateHistory>[] = [];
 
-
-      // TODO เปลี่ยนเป็น map เพราะ forEach ช้ากว่า
-      forEach(data, async ({ _id, ...distanceConfig }) => {
+      await Aigle.forEach(data, async ({ _id, ...distanceConfig }) => {
         let distanceCostPricing = _id
           ? _id !== "-"
-            ? await DistanceCostPricingModel.findById(_id) //.session(session)
+            ? await DistanceCostPricingModel.findById(_id).session(session)
             : null
           : null;
 
@@ -187,15 +192,16 @@ export default class PricingResolver {
           JSON.stringify(beforeUpdateOmit) !== JSON.stringify(afterUpdateOmit);
 
         const userId = ctx.req.user_id;
-        const user = await UserModel.findById(userId); //.session(session);
+        // const user = await UserModel.findById(userId).session(session);
         if (hasChanged) {
           const updateHistory = new UpdateHistoryModel({
             referenceId: distanceCostPricing._id.toString(),
             referenceType: "DistanceCostPricing",
-            who: user,
+            who: userId,
             beforeUpdate,
             afterUpdate: afterUpdateOmit.toObject(),
           });
+          console.log('GGGWWWPP:: ', updateHistory)
           updateHistories.push(updateHistory);
           bulkOperations.push({
             updateOne: {
@@ -211,36 +217,33 @@ export default class PricingResolver {
               upsert: true,
             },
           });
-          console.log("bulkOperations----: ", bulkOperations);
         }
       });
 
-      console.log("bulkOperations: ", bulkOperations);
       if (bulkOperations.length > 0) {
         const distanceIds = map(bulkOperations, (opt) =>
           get(opt, "updateOne.filter._id", "")
         );
-        console.log("0000000000", distanceIds);
-        await DistanceCostPricingModel.bulkWrite(bulkOperations);
-        await UpdateHistoryModel.insertMany(updateHistories);
-        await VehicleCostModel.findByIdAndUpdate(id, { distance: distanceIds });
+        await DistanceCostPricingModel.bulkWrite(bulkOperations, { session });
+        await UpdateHistoryModel.insertMany(updateHistories, { session });
+        await VehicleCostModel.findByIdAndUpdate(id, { distance: distanceIds }, { session });
         // await DistanceCostPricingModel.deleteMany({
         //   _id: { $nin: distanceIds },
         //   vehicleCost: id, // TODO: Recheck again
         // });
       }
 
-      // if (session) {
-      // await session.commitTransaction();
-      // session.endSession();
-      // }
+      if (session) {
+        await session.commitTransaction();
+        session.endSession();
+      }
 
       return true;
     } catch (errors) {
-      // if (session) {
-      // await session.abortTransaction();
-      // session.endSession();
-      // }
+      if (session) {
+        await session.abortTransaction();
+        session.endSession();
+      }
       console.log("error: ", errors);
       if (errors instanceof ValidationError) {
         throw yupValidationThrow(errors);
@@ -441,6 +444,14 @@ export default class PricingResolver {
         .populate({
           path: "distance",
           model: "DistanceCostPricing",
+          populate: {
+            path: "history",
+            model: "UpdateHistory",
+            populate: {
+              path: "who",
+              model: "User"
+            }
+          }
         })
         .lean();
 

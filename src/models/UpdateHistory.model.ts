@@ -1,10 +1,13 @@
 import { Field, ID, ObjectType } from "type-graphql";
-import { prop as Property, Ref, getModelForClass } from "@typegoose/typegoose";
+import { prop as Property, Ref, getModelForClass, plugin } from "@typegoose/typegoose";
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { User } from "./user.model";
 import { GraphQLJSONObject } from 'graphql-type-json'
+import { Schema } from "mongoose";
+import mongooseAutoPopulate from "mongoose-autopopulate";
 
 @ObjectType()
+@plugin(mongooseAutoPopulate)
 export class UpdateHistory extends TimeStamps {
   @Field(() => ID)
   readonly _id: string;
@@ -15,9 +18,9 @@ export class UpdateHistory extends TimeStamps {
 
   @Field()
   @Property({ required: true })
-  referenceType: number;
+  referenceType: string;
 
-  @Field(() => GraphQLJSONObject)
+  @Field(() => GraphQLJSONObject, { nullable: true })
   @Property({ type: Object })
   beforeUpdate: Record<string, any>;
 
@@ -26,8 +29,12 @@ export class UpdateHistory extends TimeStamps {
   afterUpdate: Record<string, any>;
 
   @Field(() => User)
-  @Property({ type: User, required: true })
-  who: Ref<User>;
+  @Property({
+    ref: () => User,
+    type: Schema.Types.ObjectId,
+    autopopulate: true
+  })
+  who: Ref<User, string>;
 
   @Field()
   @Property({ default: Date.now })

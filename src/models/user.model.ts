@@ -54,7 +54,7 @@ export class User extends TimeStamps {
   @Field()
   @IsString()
   @IsNotEmpty()
-  @Property({ required: true, unique: true })
+  @Property({ required: true })
   userNumber: string;
 
   @Field()
