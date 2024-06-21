@@ -31,7 +31,7 @@ import lodash, {
   omit,
   some,
 } from "lodash";
-import Aigle from 'aigle'
+import Aigle from "aigle";
 import {
   AnyBulkWriteOperation,
   ClientSession,
@@ -46,11 +46,8 @@ import { yupValidationThrow } from "@utils/error.utils";
 import { GraphQLContext } from "@configs/graphQL.config";
 import UpdateHistoryModel, { UpdateHistory } from "@models/UpdateHistory.model";
 import { DocumentType } from "@typegoose/typegoose";
-import UserModel from "@models/user.model";
-import { populate } from "dotenv";
 
 Aigle.mixin(lodash, {});
-
 
 @Resolver()
 export default class PricingResolver {
@@ -64,7 +61,6 @@ export default class PricingResolver {
         vehicleType: vehicleTypeId,
       });
 
-      console.log('vehicleCost: ', vehicleCost)
       if (!vehicleCost) {
         const vehicleType = await VehicleTypeModel.findById(vehicleTypeId);
         if (!vehicleType) {
@@ -201,7 +197,7 @@ export default class PricingResolver {
             beforeUpdate,
             afterUpdate: afterUpdateOmit.toObject(),
           });
-          console.log('GGGWWWPP:: ', updateHistory)
+          console.log("GGGWWWPP:: ", updateHistory);
           updateHistories.push(updateHistory);
           bulkOperations.push({
             updateOne: {
@@ -226,7 +222,11 @@ export default class PricingResolver {
         );
         await DistanceCostPricingModel.bulkWrite(bulkOperations, { session });
         await UpdateHistoryModel.insertMany(updateHistories, { session });
-        await VehicleCostModel.findByIdAndUpdate(id, { distance: distanceIds }, { session });
+        await VehicleCostModel.findByIdAndUpdate(
+          id,
+          { distance: distanceIds },
+          { session }
+        );
         // await DistanceCostPricingModel.deleteMany({
         //   _id: { $nin: distanceIds },
         //   vehicleCost: id, // TODO: Recheck again
@@ -365,6 +365,7 @@ export default class PricingResolver {
             const type = isEqual(service.name, "ไป-กลับ")
               ? "percent"
               : "currency";
+            const available = service.permanent;
             return {
               updateOne: {
                 filter: { _id: _oid },
@@ -372,7 +373,7 @@ export default class PricingResolver {
                   $set: {
                     _id: _oid,
                     additionalService: service,
-                    available: false,
+                    available,
                     cost: 0,
                     price: 0,
                     type,
@@ -449,9 +450,9 @@ export default class PricingResolver {
             model: "UpdateHistory",
             populate: {
               path: "who",
-              model: "User"
-            }
-          }
+              model: "User",
+            },
+          },
         })
         .lean();
 

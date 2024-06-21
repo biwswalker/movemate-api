@@ -15,6 +15,7 @@ import { yupValidationThrow } from "@utils/error.utils";
 import { GraphQLError } from "graphql";
 import { PipelineStage } from "mongoose";
 import { VehicleTypeConfigureStatusPayload } from "@payloads/vehicleType.payloads";
+import { GET_VEHICLE_CONFIG } from "@pipelines/vehicletype.pipeline";
 
 @Resolver(VehicleType)
 export default class VehicleTypeResolver {
@@ -115,46 +116,7 @@ export default class VehicleTypeResolver {
     @UseMiddleware(AuthGuard(["admin"]))
     async getVehicleTypeConfigs(): Promise<VehicleTypeConfigureStatusPayload[]> {
         try {
-            const aggregate: PipelineStage[] = [
-                { $sort: { type: 1 } },
-                {
-                    $lookup: {
-                        from: "vehiclecosts",
-                        localField: "_id",
-                        foreignField: "vehicleType",
-                        as: "vehicleCosts"
-                    }
-                },
-                {
-                    $unwind: {
-                        path: "$vehicleCosts",
-                        preserveNullAndEmptyArrays: true
-                    }
-                },
-                {
-                    $lookup: {
-                        from: "files",
-                        localField: "image",
-                        foreignField: "_id",
-                        as: "image"
-                    }
-                },
-                {
-                    $unwind: {
-                        path: "$image",
-                        preserveNullAndEmptyArrays: true
-                    }
-                },
-                {
-                    $addFields: {
-                        isAdditionalServicesConfigured: { $gt: [{ $size: { $ifNull: ["$vehicleCosts.additionalServices", []] } }, 0] },
-                        isDistancesConfigured: { $gt: [{ $size: { $ifNull: ["$vehicleCosts.distance", []] } }, 0] }
-                    }
-                },
-                { $addFields: { isConfigured: { $or: ["$isAdditionalServicesConfigured", "$isDistancesConfigured"] } } },
-                { $project: { vehicleCosts: 0 } },
-            ]
-            const vehicleTypes = await VehicleTypeModel.aggregate(aggregate)
+            const vehicleTypes = await VehicleTypeModel.aggregate(GET_VEHICLE_CONFIG)
             if (!vehicleTypes) {
                 const message = `ไม่สามารถเรียกข้อมูลประเภทรถได้`;
                 throw new GraphQLError(message, {
