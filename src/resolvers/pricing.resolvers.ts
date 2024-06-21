@@ -287,6 +287,7 @@ export default class PricingResolver {
             const type = isEqual(service.name, "ไป-กลับ")
               ? "percent"
               : "currency";
+            const available = service.permanent
             return {
               updateOne: {
                 filter: { _id: _oid },
@@ -294,7 +295,7 @@ export default class PricingResolver {
                   $set: {
                     _id: _oid,
                     additionalService: service,
-                    available: false,
+                    available,
                     cost: 0,
                     price: 0,
                     type,
