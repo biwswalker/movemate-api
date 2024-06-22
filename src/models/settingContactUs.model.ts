@@ -1,7 +1,10 @@
-import { prop as Property, getModelForClass } from '@typegoose/typegoose'
-import { Field, ObjectType, ID } from 'type-graphql'
+import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
+import { Field, ObjectType } from 'type-graphql'
+import { UpdateHistory } from './updateHistory.model'
+import mongooseAutoPopulate from 'mongoose-autopopulate'
 
 @ObjectType()
+@plugin(mongooseAutoPopulate)
 export class SettingContactUs {
     @Field({ nullable: true })
     @Property()
@@ -38,6 +41,10 @@ export class SettingContactUs {
     @Field({ nullable: true })
     @Property()
     lineLink: string
+
+    @Field(() => [UpdateHistory], { nullable: true })
+    @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
+    history: Ref<UpdateHistory>[];
 }
 
 const SettingContactUsModel = getModelForClass(SettingContactUs)

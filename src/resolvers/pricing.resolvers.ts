@@ -197,7 +197,7 @@ export default class PricingResolver {
             beforeUpdate,
             afterUpdate: afterUpdateOmit.toObject(),
           });
-          console.log("GGGWWWPP:: ", updateHistory);
+
           updateHistories.push(updateHistory);
           bulkOperations.push({
             updateOne: {
