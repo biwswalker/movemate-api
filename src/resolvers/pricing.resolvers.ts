@@ -44,7 +44,7 @@ import DistanceCostPricingModel from "@models/distanceCostPricing.model";
 import { ValidationError } from "yup";
 import { yupValidationThrow } from "@utils/error.utils";
 import { GraphQLContext } from "@configs/graphQL.config";
-import UpdateHistoryModel, { UpdateHistory } from "@models/UpdateHistory.model";
+import UpdateHistoryModel, { UpdateHistory } from "@models/updateHistory.model";
 import { DocumentType } from "@typegoose/typegoose";
 
 Aigle.mixin(lodash, {});

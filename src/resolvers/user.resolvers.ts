@@ -5,7 +5,6 @@ import {
   Ctx,
   UseMiddleware,
   AuthenticationError,
-  ArgumentValidationError,
   Args,
   Mutation,
   InvalidDirectiveError,

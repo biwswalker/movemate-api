@@ -13,7 +13,6 @@ import FileModel from "@models/file.model";
 import { ValidationError } from "yup";
 import { yupValidationThrow } from "@utils/error.utils";
 import { GraphQLError } from "graphql";
-import { PipelineStage } from "mongoose";
 import { VehicleTypeConfigureStatusPayload } from "@payloads/vehicleType.payloads";
 import { GET_VEHICLE_CONFIG } from "@pipelines/vehicletype.pipeline";
 

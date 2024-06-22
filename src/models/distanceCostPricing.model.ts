@@ -2,7 +2,7 @@ import { Field, Float, ID, ObjectType } from "type-graphql";
 import { prop as Property, Ref, getModelForClass, plugin } from "@typegoose/typegoose";
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { IsEnum, IsNotEmpty } from "class-validator";
-import { UpdateHistory } from "./UpdateHistory.model";
+import { UpdateHistory } from './updateHistory.model'
 import mongooseAutoPopulate from "mongoose-autopopulate";
 
 enum EDistanceCostPricingUnit {

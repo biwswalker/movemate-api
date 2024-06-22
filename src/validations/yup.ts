@@ -6,6 +6,11 @@ declare module 'yup' {
         maxFileSize(size: number, message: string): Yup.MixedSchema
         fileFormat(format: string[], message: string): Yup.MixedSchema
     }
+
+    interface StringSchema {
+        minmaxNoRequire(min: number, max: number, message: string): Yup.StringSchema
+        matchNoRequire(regex: RegExp, message: string): Yup.StringSchema
+    }
 }
 
 Yup.MixedSchema.prototype.maxFileSize = function (
@@ -27,6 +32,26 @@ Yup.MixedSchema.prototype.fileFormat = function (
     return this.test('fileFormat', message, (file: any) => {
         if (file && !isEmpty(file.type)) {
             return includes(formats, file.type)
+        }
+        return true
+    })
+}
+
+Yup.StringSchema.prototype.minmaxNoRequire = function (min: number, max: number, message: string) {
+    return this.test('minmaxNoRequire', message, (value: string) => {
+        if (value) {
+            if (value.length < min || value.length > max) {
+                return false
+            }
+        }
+        return true
+    })
+}
+
+Yup.StringSchema.prototype.matchNoRequire = function (regex: RegExp, message: string) {
+    return this.test('matchNoRequire', message, (value: string) => {
+        if (value && !isEmpty(value)) {
+            return regex.test(value)
         }
         return true
     })

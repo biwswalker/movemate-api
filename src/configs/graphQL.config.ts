@@ -16,6 +16,7 @@ import VehicleTypeResolver from "@resolvers/vehicletype.resolvers";
 import AdditionalServiceResolver from "@resolvers/additionalservice.resolvers";
 import PricingResolver from "@resolvers/pricing.resolvers";
 import BookingResolver from "@resolvers/booking.resolvers";
+import SettingsResolver from "@resolvers/settings.resolvers";
 
 export interface GraphQLContext {
     req: Request
@@ -37,6 +38,7 @@ export async function createGraphQLServer(httpServer: http.Server) {
             AdditionalServiceResolver,
             PricingResolver,
             BookingResolver,
+            SettingsResolver,
         ],
         authChecker: ({ context }: { context: GraphQLContext }) => {
             const userId = get(context, 'req.userId', '')
