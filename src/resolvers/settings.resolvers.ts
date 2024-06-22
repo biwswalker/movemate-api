@@ -1,13 +1,14 @@
 import { GraphQLContext } from "@configs/graphQL.config";
 import { AuthGuard } from "@guards/auth.guards";
-import { SettingContactUsInput } from "@inputs/settings.input";
+import { SettingBusinessTypeInput, SettingContactUsInput } from "@inputs/settings.input";
 import SettingAboutusModel, { SettingAboutus } from "@models/settingAboutus.mode";
+import SettingBusinessTypeModel, { SettingBusinessType } from "@models/settingBusinessType.model";
 import SettingContactUsModel, { SettingContactUs } from "@models/settingContactUs.model";
 import SettingCustomerPoliciesModel, { SettingCustomerPolicies } from "@models/settingCustomerPolicies.model";
 import SettingDriverPoliciesModel, { SettingDriverPolicies } from "@models/settingDriverPolicies.model";
 import UpdateHistoryModel from "@models/updateHistory.model";
 import { yupValidationThrow } from "@utils/error.utils";
-import { GeneralSchema } from "@validations/settings.validations";
+import { BusinessTypesSchema, GeneralSchema } from "@validations/settings.validations";
 import { GraphQLError } from "graphql";
 import { omit } from "lodash";
 import { Types } from "mongoose";
@@ -266,6 +267,46 @@ export default class SettingsResolver {
         } catch (error) {
             console.log('error: ', error)
             throw new GraphQLError("ไม่สามารถเรียกข้อมูลข้อกำหนดการให้บริการและนโยบายความเป็นส่วนตัวได้ โปรดลองอีกครั้ง");
+        }
+    }
+
+    @Mutation(() => Boolean)
+    @UseMiddleware(AuthGuard(['admin']))
+    async updateBusinessType(
+        @Arg("data", () => [SettingBusinessTypeInput]) data: SettingBusinessTypeInput[],
+        @Ctx() ctx: GraphQLContext
+    ): Promise<boolean> {
+        try {
+            await BusinessTypesSchema.validate({ businessTypes: data })
+
+            const userId = ctx.req.user_id;
+
+            await SettingBusinessTypeModel.bulkUpsertAndMarkUnused(data, userId)
+
+            return true
+        } catch (errors) {
+            console.log('error: ', errors)
+            if (errors instanceof ValidationError) {
+                throw yupValidationThrow(errors)
+            }
+            throw errors
+        }
+    }
+
+    @Query(() => [SettingBusinessType])
+    async getBusinessTypeInfo(): Promise<SettingBusinessType[]> {
+        try {
+            const settingBusinessTypes = await SettingBusinessTypeModel.findAvailable()
+            if (!settingBusinessTypes) {
+                const message = `ไม่สามารถเรียกข้อมูลประเภทธุรกิจได้`;
+                throw new GraphQLError(message, {
+                    extensions: { code: "NOT_FOUND", errors: [{ message }] },
+                });
+            }
+            return settingBusinessTypes;
+        } catch (error) {
+            console.log('error: ', error)
+            throw new GraphQLError("ไม่สามารถเรียกข้อมูลประเภทธุรกิจได้ โปรดลองอีกครั้ง");
         }
     }
 }

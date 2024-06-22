@@ -15,3 +15,11 @@ export const GeneralSchema = Yup.object().shape({
     lineId: Yup.string(),
     lineLink: Yup.string().url('ระบุในรูปแบบ URL เท่านั้น เช่น "https://account.line.biz"'),
 })
+
+const TypeSchema = Yup.object().shape({
+    name: Yup.string().required('ระบุประเภทธุรกิจ'),
+})
+
+export const BusinessTypesSchema = Yup.object().shape({
+    businessTypes: Yup.array(TypeSchema),
+})

@@ -1,5 +1,5 @@
 import { Field, ID, ObjectType } from "type-graphql";
-import { prop as Property, Ref, getModelForClass, plugin } from "@typegoose/typegoose";
+import { prop as Property, Ref, Severity, getModelForClass, plugin } from "@typegoose/typegoose";
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { User } from "./user.model";
 import { GraphQLJSONObject } from 'graphql-type-json'
@@ -21,18 +21,18 @@ export class UpdateHistory extends TimeStamps {
   referenceType: string;
 
   @Field(() => GraphQLJSONObject, { nullable: true })
-  @Property({ type: Object })
+  @Property({ type: Object, allowMixed: Severity.ALLOW })
   beforeUpdate: Record<string, any>;
 
   @Field(() => GraphQLJSONObject)
-  @Property({ type: Object, required: true })
+  @Property({ type: Object, required: true, allowMixed: Severity.ALLOW })
   afterUpdate: Record<string, any>;
 
   @Field(() => User)
   @Property({
     ref: () => User,
     type: Schema.Types.ObjectId,
-    autopopulate: true
+    autopopulate: true,
   })
   who: Ref<User, string>;
 

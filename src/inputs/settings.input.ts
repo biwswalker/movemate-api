@@ -29,3 +29,12 @@ export class SettingContactUsInput {
     @Field()
     lineLink: string
 }
+
+@InputType()
+export class SettingBusinessTypeInput {
+    @Field({ nullable: true })
+    _id: string
+
+    @Field()
+    name: string
+}
