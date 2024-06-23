@@ -5,7 +5,7 @@ import mongooseAutoPopulate from 'mongoose-autopopulate'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import { User } from './user.model'
 import { Schema, Types } from 'mongoose'
-import { SettingFAQInput } from '@inputs/settings.input'
+import { SettingInstructionInput } from '@inputs/settings.input'
 import lodash, { filter, get, isEmpty, map, pick, uniq } from 'lodash'
 import Aigle from 'aigle'
 
@@ -13,17 +13,21 @@ Aigle.mixin(lodash, {});
 
 @ObjectType()
 @plugin(mongooseAutoPopulate)
-export class SettingFAQ extends TimeStamps {
+export class SettingInstruction extends TimeStamps {
     @Field(() => ID)
     readonly _id: string
 
     @Field()
-    @Property({ unique: true })
-    question: string
+    @Property()
+    page: string
+
+    @Field({ nullable: true })
+    @Property()
+    instruction: string
 
     @Field()
     @Property()
-    answer: string
+    instructionTitle: string
 
     @Field(() => [UpdateHistory], { nullable: true })
     @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
@@ -40,26 +44,26 @@ export class SettingFAQ extends TimeStamps {
     @Property({ ref: () => User, type: Schema.Types.ObjectId, required: false })
     modifiedBy?: Ref<User>;
 
-    static async bulkUpsertAndMarkUnused(this: ReturnModelType<typeof SettingFAQ>, data: SettingFAQInput[], userId: string): Promise<DocumentType<SettingFAQ>[]> {
+    static async bulkUpsertAndMarkUnused(this: ReturnModelType<typeof SettingInstruction>, data: SettingInstructionInput[], userId: string): Promise<DocumentType<SettingInstruction>[]> {
 
         const bulkOperations = [];
         const updateHistories: DocumentType<UpdateHistory>[] = [];
 
-        await Aigle.forEach(data, async ({ _id, question, answer }) => {
-            let faq = _id ? await this.findById(_id) : null
+        await Aigle.forEach(data, async ({ _id, instruction, instructionTitle, page }) => {
+            let instructionData = _id ? await this.findById(_id) : null
 
-            const beforeUpdate = faq
-                ? faq.toObject()
+            const beforeUpdate = instructionData
+                ? instructionData.toObject()
                 : {};
-            const beforeUpdatePick = pick(beforeUpdate, ["question", "answer"]);
+            const beforeUpdatePick = pick(beforeUpdate, ["instruction", "instructionTitle", "page"]);
 
-            if (!faq) {
-                faq = new SettingFAQModel();
+            if (!instructionData) {
+                instructionData = new SettingInstructionModel();
             }
 
-            Object.assign(faq, { question, answer });
+            Object.assign(instructionData, { instruction, instructionTitle, page });
 
-            const afterUpdatePick = pick(faq, ["question", "answer"]);
+            const afterUpdatePick = pick(instructionData, ["instruction", "instructionTitle", "page"]);
 
             const hasChanged =
                 JSON.stringify(beforeUpdatePick) !== JSON.stringify(afterUpdatePick);
@@ -80,7 +84,7 @@ export class SettingFAQ extends TimeStamps {
                     updateOne: {
                         filter: { _id: newId },
                         update: {
-                            $set: { question, answer, modifiedBy: new Types.ObjectId(userId) },
+                            $set: { instruction, instructionTitle, page, modifiedBy: new Types.ObjectId(userId) },
                             $push: { history: updateHistory },
                         },
                         upsert: true,
@@ -91,19 +95,19 @@ export class SettingFAQ extends TimeStamps {
 
         if (bulkOperations.length > 0) {
             const originalIds = map(filter(data, item => !isEmpty(item._id)), item => item._id)
-            const businessTypeIds = map(bulkOperations, (opt) =>
+            const instructionIds = map(bulkOperations, (opt) =>
                 get(opt, "updateOne.filter._id", "")
             );
-            const protectedIds = uniq([...originalIds, ...businessTypeIds])
-            await SettingFAQModel.bulkWrite(bulkOperations);
+            const protectedIds = uniq([...originalIds, ...instructionIds])
+            await SettingInstructionModel.bulkWrite(bulkOperations);
             await UpdateHistoryModel.insertMany(updateHistories);
-            await SettingFAQModel.deleteMany({ _id: { $nin: protectedIds } })
+            await SettingInstructionModel.deleteMany({ _id: { $nin: protectedIds } })
         }
 
         return this.find()
     }
 }
 
-const SettingFAQModel = getModelForClass(SettingFAQ)
+const SettingInstructionModel = getModelForClass(SettingInstruction)
 
-export default SettingFAQModel
+export default SettingInstructionModel

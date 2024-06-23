@@ -50,3 +50,18 @@ export class SettingFAQInput {
     @Field()
     answer: string
 }
+
+@InputType()
+export class SettingInstructionInput {
+    @Field({ nullable: true })
+    _id: string
+
+    @Field()
+    page: string
+
+    @Field()
+    instructionTitle: string
+
+    @Field()
+    instruction: string
+}

@@ -32,3 +32,18 @@ const QuestionSchema = Yup.object().shape({
 export const FAQsSchema = Yup.object().shape({
     faqs: Yup.array(QuestionSchema),
 })
+
+const InstructionValueSchema = Yup.object().shape({
+    instruction: Yup.string(),
+    instructionTitle: Yup.string(),
+})
+
+const InstructionsValueSchema = Yup.object().shape({
+    page: Yup.string(),
+    pageTitle: Yup.string(),
+    instructions: Yup.array(InstructionValueSchema),
+})
+
+export const InstructionsSchema = Yup.object().shape({
+    instructions: Yup.array(InstructionsValueSchema),
+})

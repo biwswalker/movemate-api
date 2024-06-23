@@ -1,15 +1,16 @@
 import { GraphQLContext } from "@configs/graphQL.config";
 import { AuthGuard } from "@guards/auth.guards";
-import { SettingBusinessTypeInput, SettingContactUsInput, SettingFAQInput } from "@inputs/settings.input";
+import { SettingBusinessTypeInput, SettingContactUsInput, SettingFAQInput, SettingInstructionInput } from "@inputs/settings.input";
 import SettingAboutusModel, { SettingAboutus } from "@models/settingAboutus.mode";
 import SettingBusinessTypeModel, { SettingBusinessType } from "@models/settingBusinessType.model";
 import SettingContactUsModel, { SettingContactUs } from "@models/settingContactUs.model";
 import SettingCustomerPoliciesModel, { SettingCustomerPolicies } from "@models/settingCustomerPolicies.model";
 import SettingDriverPoliciesModel, { SettingDriverPolicies } from "@models/settingDriverPolicies.model";
 import SettingFAQModel, { SettingFAQ } from "@models/settingFAQ.model";
+import SettingInstructionModel, { SettingInstruction } from "@models/settingInstruction.model";
 import UpdateHistoryModel from "@models/updateHistory.model";
 import { yupValidationThrow } from "@utils/error.utils";
-import { BusinessTypesSchema, FAQsSchema, GeneralSchema } from "@validations/settings.validations";
+import { BusinessTypesSchema, FAQsSchema, GeneralSchema, InstructionsSchema } from "@validations/settings.validations";
 import { GraphQLError } from "graphql";
 import { omit } from "lodash";
 import { Types } from "mongoose";
@@ -348,6 +349,46 @@ export default class SettingsResolver {
         } catch (error) {
             console.log('error: ', error)
             throw new GraphQLError("ไม่สามารถเรียกข้อมูลคำถามที่พบบ่อยได้ โปรดลองอีกครั้ง");
+        }
+    }
+
+    @Mutation(() => Boolean)
+    @UseMiddleware(AuthGuard(['admin']))
+    async updateInstruction(
+        @Arg("data", () => [SettingInstructionInput]) data: SettingInstructionInput[],
+        @Ctx() ctx: GraphQLContext
+    ): Promise<boolean> {
+        try {
+            await InstructionsSchema.validate({ instructions: data })
+
+            const userId = ctx.req.user_id;
+
+            await SettingInstructionModel.bulkUpsertAndMarkUnused(data, userId)
+
+            return true
+        } catch (errors) {
+            console.log('error: ', errors)
+            if (errors instanceof ValidationError) {
+                throw yupValidationThrow(errors)
+            }
+            throw errors
+        }
+    }
+
+    @Query(() => [SettingInstruction])
+    async getInstructionInfo(): Promise<SettingInstruction[]> {
+        try {
+            const settingInstruction = await SettingInstructionModel.find()
+            if (!settingInstruction) {
+                const message = `ไม่สามารถเรียกข้อมูลคำแนะนำได้`;
+                throw new GraphQLError(message, {
+                    extensions: { code: "NOT_FOUND", errors: [{ message }] },
+                });
+            }
+            return settingInstruction;
+        } catch (error) {
+            console.log('error: ', error)
+            throw new GraphQLError("ไม่สามารถเรียกข้อมูลคำแนะนำได้ โปรดลองอีกครั้ง");
         }
     }
 }
