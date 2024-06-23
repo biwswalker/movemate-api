@@ -1,14 +1,15 @@
 import { GraphQLContext } from "@configs/graphQL.config";
 import { AuthGuard } from "@guards/auth.guards";
-import { SettingBusinessTypeInput, SettingContactUsInput } from "@inputs/settings.input";
+import { SettingBusinessTypeInput, SettingContactUsInput, SettingFAQInput } from "@inputs/settings.input";
 import SettingAboutusModel, { SettingAboutus } from "@models/settingAboutus.mode";
 import SettingBusinessTypeModel, { SettingBusinessType } from "@models/settingBusinessType.model";
 import SettingContactUsModel, { SettingContactUs } from "@models/settingContactUs.model";
 import SettingCustomerPoliciesModel, { SettingCustomerPolicies } from "@models/settingCustomerPolicies.model";
 import SettingDriverPoliciesModel, { SettingDriverPolicies } from "@models/settingDriverPolicies.model";
+import SettingFAQModel, { SettingFAQ } from "@models/settingFAQ.model";
 import UpdateHistoryModel from "@models/updateHistory.model";
 import { yupValidationThrow } from "@utils/error.utils";
-import { BusinessTypesSchema, GeneralSchema } from "@validations/settings.validations";
+import { BusinessTypesSchema, FAQsSchema, GeneralSchema } from "@validations/settings.validations";
 import { GraphQLError } from "graphql";
 import { omit } from "lodash";
 import { Types } from "mongoose";
@@ -307,6 +308,46 @@ export default class SettingsResolver {
         } catch (error) {
             console.log('error: ', error)
             throw new GraphQLError("ไม่สามารถเรียกข้อมูลประเภทธุรกิจได้ โปรดลองอีกครั้ง");
+        }
+    }
+
+    @Mutation(() => Boolean)
+    @UseMiddleware(AuthGuard(['admin']))
+    async updateFAQ(
+        @Arg("data", () => [SettingFAQInput]) data: SettingFAQInput[],
+        @Ctx() ctx: GraphQLContext
+    ): Promise<boolean> {
+        try {
+            await FAQsSchema.validate({ faqs: data })
+
+            const userId = ctx.req.user_id;
+
+            await SettingFAQModel.bulkUpsertAndMarkUnused(data, userId)
+
+            return true
+        } catch (errors) {
+            console.log('error: ', errors)
+            if (errors instanceof ValidationError) {
+                throw yupValidationThrow(errors)
+            }
+            throw errors
+        }
+    }
+
+    @Query(() => [SettingFAQ])
+    async getFAQInfo(): Promise<SettingFAQ[]> {
+        try {
+            const settingFAQs = await SettingFAQModel.find()
+            if (!settingFAQs) {
+                const message = `ไม่สามารถเรียกข้อมูลคำถามที่พบบ่อยได้`;
+                throw new GraphQLError(message, {
+                    extensions: { code: "NOT_FOUND", errors: [{ message }] },
+                });
+            }
+            return settingFAQs;
+        } catch (error) {
+            console.log('error: ', error)
+            throw new GraphQLError("ไม่สามารถเรียกข้อมูลคำถามที่พบบ่อยได้ โปรดลองอีกครั้ง");
         }
     }
 }

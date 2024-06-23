@@ -38,3 +38,15 @@ export class SettingBusinessTypeInput {
     @Field()
     name: string
 }
+
+@InputType()
+export class SettingFAQInput {
+    @Field({ nullable: true })
+    _id: string
+
+    @Field()
+    question: string
+
+    @Field()
+    answer: string
+}

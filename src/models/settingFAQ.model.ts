@@ -5,7 +5,7 @@ import mongooseAutoPopulate from 'mongoose-autopopulate'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import { User } from './user.model'
 import { Schema, Types } from 'mongoose'
-import { SettingBusinessTypeInput } from '@inputs/settings.input'
+import { SettingFAQInput } from '@inputs/settings.input'
 import lodash, { filter, get, isEmpty, map, pick, uniq } from 'lodash'
 import Aigle from 'aigle'
 
@@ -13,17 +13,17 @@ Aigle.mixin(lodash, {});
 
 @ObjectType()
 @plugin(mongooseAutoPopulate)
-export class SettingBusinessType extends TimeStamps {
+export class SettingFAQ extends TimeStamps {
     @Field(() => ID)
     readonly _id: string
 
     @Field()
     @Property({ unique: true })
-    name: string
+    question: string
 
     @Field()
     @Property()
-    available: boolean
+    answer: string
 
     @Field(() => [UpdateHistory], { nullable: true })
     @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
@@ -40,26 +40,26 @@ export class SettingBusinessType extends TimeStamps {
     @Property({ ref: () => User, type: Schema.Types.ObjectId, required: false })
     modifiedBy?: Ref<User>;
 
-    static async bulkUpsertAndMarkUnused(this: ReturnModelType<typeof SettingBusinessType>, data: SettingBusinessTypeInput[], userId: string): Promise<DocumentType<SettingBusinessType>[]> {
+    static async bulkUpsertAndMarkUnused(this: ReturnModelType<typeof SettingFAQ>, data: SettingFAQInput[], userId: string): Promise<DocumentType<SettingFAQ>[]> {
 
         const bulkOperations = [];
         const updateHistories: DocumentType<UpdateHistory>[] = [];
 
-        await Aigle.forEach(data, async ({ _id, name }) => {
-            let businessType = _id ? await this.findById(_id) : null
+        await Aigle.forEach(data, async ({ _id, question, answer }) => {
+            let faq = _id ? await this.findById(_id) : null
 
-            const beforeUpdate = businessType
-                ? businessType.toObject()
+            const beforeUpdate = faq
+                ? faq.toObject()
                 : {};
-            const beforeUpdatePick = pick(beforeUpdate, ["name", "available"]);
+            const beforeUpdatePick = pick(beforeUpdate, ["question", "answer"]);
 
-            if (!businessType) {
-                businessType = new SettingBusinessTypeModel();
+            if (!faq) {
+                faq = new SettingFAQModel();
             }
 
-            Object.assign(businessType, { name });
+            Object.assign(faq, { question, answer });
 
-            const afterUpdatePick = pick(businessType, ["name", "available"]);
+            const afterUpdatePick = pick(faq, ["question", "answer"]);
 
             const hasChanged =
                 JSON.stringify(beforeUpdatePick) !== JSON.stringify(afterUpdatePick);
@@ -69,7 +69,7 @@ export class SettingBusinessType extends TimeStamps {
             if (hasChanged) {
                 const updateHistory = new UpdateHistoryModel({
                     referenceId: newId.toString(),
-                    referenceType: "SettingBusinessType",
+                    referenceType: "SettingFAQ",
                     who: userId,
                     beforeUpdate: beforeUpdatePick,
                     afterUpdate: afterUpdatePick,
@@ -80,8 +80,7 @@ export class SettingBusinessType extends TimeStamps {
                     updateOne: {
                         filter: { _id: newId },
                         update: {
-                            $set: { name, modifiedBy: new Types.ObjectId(userId) },
-                            $setOnInsert: { available: true },
+                            $set: { question, answer, modifiedBy: new Types.ObjectId(userId) },
                             $push: { history: updateHistory },
                         },
                         upsert: true,
@@ -96,22 +95,15 @@ export class SettingBusinessType extends TimeStamps {
                 get(opt, "updateOne.filter._id", "")
             );
             const protectedIds = uniq([...originalIds, ...businessTypeIds])
-            await SettingBusinessTypeModel.bulkWrite(bulkOperations);
+            await SettingFAQModel.bulkWrite(bulkOperations);
             await UpdateHistoryModel.insertMany(updateHistories);
-            await SettingBusinessTypeModel.updateMany(
-                { _id: { $nin: protectedIds } },
-                { $set: { available: false } }
-            )
+            await SettingFAQModel.deleteMany({ _id: { $nin: protectedIds } })
         }
 
         return this.find({ available: true })
     }
-
-    static async findAvailable(): Promise<DocumentType<SettingBusinessType>[]> {
-        return SettingBusinessTypeModel.find({ available: true });
-    }
 }
 
-const SettingBusinessTypeModel = getModelForClass(SettingBusinessType)
+const SettingFAQModel = getModelForClass(SettingFAQ)
 
-export default SettingBusinessTypeModel
+export default SettingFAQModel

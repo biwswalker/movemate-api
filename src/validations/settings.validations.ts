@@ -23,3 +23,12 @@ const TypeSchema = Yup.object().shape({
 export const BusinessTypesSchema = Yup.object().shape({
     businessTypes: Yup.array(TypeSchema),
 })
+
+const QuestionSchema = Yup.object().shape({
+    question: Yup.string().required('ระบุคำถาม'),
+    answer: Yup.string().required('ระบุคำตอบ'),
+})
+
+export const FAQsSchema = Yup.object().shape({
+    faqs: Yup.array(QuestionSchema),
+})
