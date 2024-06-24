@@ -42,6 +42,8 @@ async function server() {
       'http://localhost:3001',
       'https://movmateth.space',
       'https://admin.movmateth.space',
+      'https://movematethailand.com',
+      'https://admin.movematethailand.com',
     ],
   })
   app.use(alllowedCors);
