@@ -5,6 +5,7 @@ import {
   Query,
   Mutation,
   Ctx,
+  Args,
 } from "type-graphql";
 import { AllowGuard, AuthGuard } from "@guards/auth.guards";
 import VehicleTypeModel, { VehicleType } from "@models/vehicleType.model";
@@ -13,10 +14,12 @@ import VehicleCostModel, { VehicleCost } from "@models/vehicleCost.model";
 import {
   AdditionalServiceCostInput,
   DistanceCostPricingInput,
+  PricingCalculationMethodArgs,
 } from "@inputs/vehicle-cost.input";
 import {
   AdditionalServiceCostSchema,
   DistanceCostPricingSchema,
+  PricingCalculationMethodSchema,
 } from "@validations/vehiclecost.validations";
 import AdditionalServiceCostPricingModel, {
   AdditionalServiceCostPricing,
@@ -40,12 +43,13 @@ import {
   connection,
 } from "mongoose";
 import AdditionalServiceModel from "@models/additionalService.model";
-import DistanceCostPricingModel from "@models/distanceCostPricing.model";
+import DistanceCostPricingModel, { DistanceCostPricing, EDistanceCostPricingUnit } from "@models/distanceCostPricing.model";
 import { ValidationError } from "yup";
 import { yupValidationThrow } from "@utils/error.utils";
 import { GraphQLContext } from "@configs/graphQL.config";
 import UpdateHistoryModel, { UpdateHistory } from "@models/updateHistory.model";
 import { DocumentType } from "@typegoose/typegoose";
+import { CalculationResultPayload, PricingCalculationMethodPayload, VehicleCostCalculationPayload } from "@payloads/pricing.payloads";
 
 Aigle.mixin(lodash, {});
 
@@ -487,6 +491,84 @@ export default class PricingResolver {
     } catch (error) {
       console.log(error);
       throw error;
+    }
+  }
+
+  @Query(() => [VehicleCost])
+  @UseMiddleware(AuthGuard(["admin"]))
+  async getVehicleCosts(): Promise<VehicleCost[]> {
+    try {
+      const vehicleCosts = await VehicleCostModel.findByAvailableConfig();
+
+      if (!vehicleCosts) {
+        const message = `ไม่สามารถเรียกข้อมูลต้นทุนขนส่งได้`;
+        throw new GraphQLError(message, {
+          extensions: { code: "NOT_FOUND", errors: [{ message }] },
+        });
+      }
+
+      return vehicleCosts;
+    } catch (error) {
+      console.log(error);
+      throw error;
+    }
+  }
+
+  @Query(() => PricingCalculationMethodPayload)
+  @UseMiddleware(AuthGuard(["admin"]))
+  async getPricingCalculationMethod(
+    @Arg("vehicleCostId") vehicleCostId: string,
+    @Args() data: PricingCalculationMethodArgs
+  ): Promise<PricingCalculationMethodPayload> {
+    try {
+      await PricingCalculationMethodSchema.validate(data)
+      const vehicleCost = await VehicleCostModel.calculatePricing(vehicleCostId, data)
+
+      if (!vehicleCost) {
+        const message = `ไม่สามารถเรียกข้อมูลต้นทุนขนส่งได้`;
+        throw new GraphQLError(message, {
+          extensions: { code: "NOT_FOUND", errors: [{ message }] },
+        });
+      }
+
+      return vehicleCost
+    } catch (errors) {
+      console.log("error: ", errors);
+      if (errors instanceof ValidationError) {
+        throw yupValidationThrow(errors);
+      }
+      throw errors;
+    }
+  }
+
+  @Query(() => [VehicleCostCalculationPayload])
+  @UseMiddleware(AuthGuard(["admin"]))
+  async getPricingCalculationMethodAvailableVehicle(@Args() data: PricingCalculationMethodArgs): Promise<VehicleCostCalculationPayload[]> {
+    try {
+      const vehicleCosts = await VehicleCostModel.findByAvailableConfig();
+      if (data.distance <= 0 || data.distance === undefined || data.dropPoint <= 0 || data.dropPoint === undefined) {
+        return vehicleCosts
+      }
+
+      if (!vehicleCosts) {
+        const message = `ไม่สามารถเรียกข้อมูลต้นทุนขนส่งได้`;
+        throw new GraphQLError(message, {
+          extensions: { code: "NOT_FOUND", errors: [{ message }] },
+        });
+      }
+
+      const results = await Aigle.map(vehicleCosts, async (vehicleCost) => {
+        const calculated = await VehicleCostModel.calculatePricing(vehicleCost._id, data)
+        return Object.assign(vehicleCost, calculated)
+      })
+
+      return results
+    } catch (errors) {
+      console.log("error: ", errors);
+      if (errors instanceof ValidationError) {
+        throw yupValidationThrow(errors);
+      }
+      throw errors;
     }
   }
 }

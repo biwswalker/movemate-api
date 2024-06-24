@@ -54,3 +54,10 @@ export const DistanceCostPricingSchema = Yup.object()
     ),
   })
   .required("กรุณาระบุราคาตามระยะทาง");
+
+export const PricingCalculationMethodSchema = Yup.object()
+  .shape({
+    isRounded: Yup.boolean(),
+    distance: Yup.number().typeError('กรุณาระบุเป็นตัวเลข').required('กรุณาระบุจำนวนระยะทาง'),
+    dropPoint: Yup.number().typeError('กรุณาระบุเป็นตัวเลข').required('กรุณาระบุจำนวนจุดส่ง'),
+  })

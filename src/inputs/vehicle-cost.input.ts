@@ -1,4 +1,4 @@
-import { Field, Float, ID, InputType } from "type-graphql";
+import { ArgsType, Field, Float, ID, InputType } from "type-graphql";
 
 @InputType()
 export class AdditionalServiceCostInput {
@@ -44,4 +44,16 @@ export class DistanceCostPricingInput {
 
     @Field(() => Float)
     benefits: number
+}
+
+@ArgsType()
+export class PricingCalculationMethodArgs {
+    @Field(() => Float, { nullable: true })
+    distance: number
+
+    @Field(() => Float, { nullable: true })
+    dropPoint: number
+
+    @Field({ nullable: true })
+    isRounded: boolean
 }

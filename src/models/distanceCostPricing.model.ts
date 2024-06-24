@@ -5,7 +5,7 @@ import { IsEnum, IsNotEmpty } from "class-validator";
 import { UpdateHistory } from './updateHistory.model'
 import mongooseAutoPopulate from "mongoose-autopopulate";
 
-enum EDistanceCostPricingUnit {
+export enum EDistanceCostPricingUnit {
   LUMSUM = "lumpsum",
   KM = "km",
 }

@@ -44,6 +44,7 @@
     "nodemailer": "^6.9.13",
     "nodemailer-express-handlebars": "^6.1.2",
     "reflect-metadata": "^0.2.2",
+    "ts-transformer-keys": "^0.4.4",
     "type-graphql": "^2.0.0-rc.1",
     "type-graphql-filter": "^0.4.0",
     "yup": "^1.4.0"
