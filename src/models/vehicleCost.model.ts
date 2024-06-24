@@ -11,10 +11,11 @@ import { AdditionalServiceCostPricing } from "./additionalServiceCostPricing.mod
 import { DistanceCostPricing, EDistanceCostPricingUnit } from "./distanceCostPricing.model";
 import mongooseAutoPopulate from "mongoose-autopopulate";
 import { Types } from "mongoose";
-import { filter, forEach, get, isEmpty, some } from "lodash";
+import { filter, find, forEach, get, isEmpty, some, sum } from "lodash";
 import { PricingCalculationMethodArgs } from "@inputs/vehicle-cost.input";
 import { GraphQLError } from "graphql";
 import { CalculationResultPayload, PricingCalculationMethodPayload } from "@payloads/pricing.payloads";
+import { AdditionalService } from "./additionalService.model";
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()
@@ -84,14 +85,17 @@ export class VehicleCost extends TimeStamps {
   }
 
   static async calculatePricing(_id: string, data: PricingCalculationMethodArgs): Promise<PricingCalculationMethodPayload> {
-    const vehicleCost = await VehicleCostModel.findById(_id).populate("distance").populate({
-      path: "additionalServices",
-      match: { available: true },
-      populate: {
-        path: "additionalService",
-        model: "AdditionalService",
-      },
-    }).lean();
+    const vehicleCost = await VehicleCostModel.findById(_id)
+      .populate({ path: "distance", options: { sort: { from: 1 } } })
+      .populate({
+        path: "additionalServices",
+        match: { available: true },
+        populate: {
+          path: "additionalService",
+          model: "AdditionalService",
+        },
+      })
+      .lean();
 
     if (!vehicleCost) {
       const message = `ไม่สามารถเรียกข้อมูลต้นทุนขนส่งได้`;
@@ -112,6 +116,7 @@ export class VehicleCost extends TimeStamps {
     let subTotalPrice = 0
     const calculations: CalculationResultPayload[] = []
 
+    // Calculate for each distance
     const { distance } = data
     forEach(steps, (step) => {
       if (distance >= step.from) {
@@ -132,13 +137,61 @@ export class VehicleCost extends TimeStamps {
       }
     })
 
+    // Additional Service
+    const additionalServices = vehicleCost.additionalServices as AdditionalServiceCostPricing[]
+
+    // Calculate drop point
+    const dropPoint = data.dropPoint - 1
+    let subTotalDropPointCost = 0
+    let subTotalDropPointPrice = 0
+    if (dropPoint > 0) {
+      const additionalServiceDroppoint = find(additionalServices, (service: AdditionalServiceCostPricing) => {
+        const coreService = service.additionalService as AdditionalService
+        return coreService.name === 'หลายจุดส่ง'
+      })
+
+      if (additionalServiceDroppoint) {
+        const droppointCost = additionalServiceDroppoint.cost || 0
+        const droppointPrice = additionalServiceDroppoint.price || 0
+
+        subTotalDropPointCost = dropPoint * droppointCost
+        subTotalDropPointPrice = dropPoint * droppointPrice
+      }
+    }
+
+    // Rounded percent
+    let subTotalRoundedCost = 0
+    let subTotalRoundedPrice = 0
+    if (data.isRounded) {
+      const additionalServiceRouned = find(additionalServices, (service: AdditionalServiceCostPricing) => {
+        const coreService = service.additionalService as AdditionalService
+        return coreService.name === 'ไป-กลับ'
+      })
+
+      // As percent
+      if (additionalServiceRouned) {
+        const roundedCostPercent = (additionalServiceRouned.cost || 0) / 100
+        const roundedPricePercent = (additionalServiceRouned.price || 0) / 100
+
+
+        subTotalRoundedCost = roundedCostPercent * subTotalCost
+        subTotalRoundedPrice = roundedPricePercent * subTotalPrice
+      }
+    }
+
+    // Total
+    const totalCost = sum([subTotalDropPointCost, subTotalCost, subTotalRoundedCost])
+    const totalPrice = sum([subTotalDropPointPrice, subTotalPrice, subTotalRoundedPrice])
+
     return {
-      subTotalDropPointCost: 0,
-      subTotalDropPointPrice: 0,
+      subTotalDropPointCost,
+      subTotalDropPointPrice,
       subTotalCost,
       subTotalPrice,
-      totalCost: 0,
-      totalPrice: 0,
+      subTotalRoundedCost,
+      subTotalRoundedPrice,
+      totalCost,
+      totalPrice,
       calculations
     }
   }

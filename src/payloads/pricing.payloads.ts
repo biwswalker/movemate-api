@@ -32,6 +32,12 @@ export class PricingCalculationMethodPayload {
     subTotalPrice: number
 
     @Field(() => Float)
+    subTotalRoundedCost: number
+
+    @Field(() => Float)
+    subTotalRoundedPrice: number
+
+    @Field(() => Float)
     totalCost: number
 
     @Field(() => Float)
@@ -57,6 +63,12 @@ export class VehicleCostCalculationPayload extends VehicleCost {
 
     @Field(() => Float, { nullable: true })
     subTotalPrice?: number
+
+    @Field(() => Float, { nullable: true })
+    subTotalRoundedCost?: number
+
+    @Field(() => Float, { nullable: true })
+    subTotalRoundedPrice?: number
 
     @Field(() => Float, { nullable: true })
     totalCost?: number

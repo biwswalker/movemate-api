@@ -43,13 +43,13 @@ import {
   connection,
 } from "mongoose";
 import AdditionalServiceModel from "@models/additionalService.model";
-import DistanceCostPricingModel, { DistanceCostPricing, EDistanceCostPricingUnit } from "@models/distanceCostPricing.model";
+import DistanceCostPricingModel from "@models/distanceCostPricing.model";
 import { ValidationError } from "yup";
 import { yupValidationThrow } from "@utils/error.utils";
 import { GraphQLContext } from "@configs/graphQL.config";
 import UpdateHistoryModel, { UpdateHistory } from "@models/updateHistory.model";
 import { DocumentType } from "@typegoose/typegoose";
-import { CalculationResultPayload, PricingCalculationMethodPayload, VehicleCostCalculationPayload } from "@payloads/pricing.payloads";
+import { PricingCalculationMethodPayload, VehicleCostCalculationPayload } from "@payloads/pricing.payloads";
 
 Aigle.mixin(lodash, {});
 
@@ -61,9 +61,50 @@ export default class PricingResolver {
     @Arg("vehicleTypeId") vehicleTypeId: string
   ): Promise<VehicleCost> {
     try {
-      const vehicleCost = await VehicleCostModel.findOne({
-        vehicleType: vehicleTypeId,
-      });
+      const vehicleCost = await VehicleCostModel
+        .findOne({ vehicleType: vehicleTypeId })
+        .populate({
+          path: "additionalServices",
+          match: { available: true },
+          populate: {
+            path: "additionalService",
+            model: "AdditionalService",
+            populate: {
+              path: "descriptions",
+              model: "AdditionalServiceDescription",
+              populate: {
+                path: "vehicleTypes",
+                model: "VehicleType",
+                populate: {
+                  path: "image",
+                  model: "File",
+                },
+              },
+            },
+          },
+        })
+        .populate({
+          path: "vehicleType",
+          model: "VehicleType",
+          populate: {
+            path: "image",
+            model: "File",
+          },
+        })
+        .populate({
+          path: "distance",
+          model: "DistanceCostPricing",
+          options: { sort: { from: 1 } },
+          populate: {
+            path: "history",
+            model: "UpdateHistory",
+            populate: {
+              path: "who",
+              model: "User",
+            },
+          },
+        })
+        .lean();
 
       if (!vehicleCost) {
         const vehicleType = await VehicleTypeModel.findById(vehicleTypeId);
