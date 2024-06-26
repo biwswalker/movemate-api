@@ -9,7 +9,7 @@ import UserModel, { User } from "@models/user.model";
 import bcrypt from "bcrypt";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
-import { generateId } from "@utils/string.utils";
+import { generateId, getCurrentHost } from "@utils/string.utils";
 import { email_sender } from "@utils/email.utils";
 import imageToBase64 from 'image-to-base64'
 import { join } from 'path'
@@ -81,9 +81,12 @@ export default class AdminResolver {
 
             await user.save();
 
+            const host = getCurrentHost(ctx)
+            const activate_link = `${host}/v1/activate/admin/${user.userNumber}`
+            const movemate_link = `https://www.movematethailand.com`
             // Email sender
             await emailTranspoter.sendMail({
-                from: process.env.GOOGLE_MAIL,
+                from: process.env.NOREPLY_EMAIL,
                 to: email,
                 subject: 'ยืนยันการเข้าร่วม Movemate!',
                 template: 'register_admin',
@@ -92,8 +95,8 @@ export default class AdminResolver {
                     username: userNumber,
                     password: userPassword.toLowerCase(),
                     logo: imageUrl,
-                    activateLink: `https://api.movemateth.com/activate/admin/${userNumber}`,
-                    movemateLink: `https://www.movemateth.com`,
+                    activate_link,
+                    movemate_link,
                 }
             })
 

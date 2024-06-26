@@ -31,9 +31,12 @@ import { email_sender } from "@utils/email.utils";
 import imageToBase64 from "image-to-base64";
 import { join } from 'path'
 import { SafeString } from 'handlebars'
-import { generateRandomNumberPattern } from "@utils/string.utils";
+import { generateRandomNumberPattern, getCurrentHost } from "@utils/string.utils";
 import bcrypt from "bcrypt";
 import { GET_USERS } from "@pipelines/user.pipeline";
+import { UserSchema } from "@validations/customer.validations";
+import { ValidationError } from "yup";
+import { yupValidationThrow } from "@utils/error.utils";
 
 @Resolver(User)
 export default class UserResolver {
@@ -350,9 +353,6 @@ export default class UserResolver {
         throw new InvalidDirectiveError('ไม่พบข้อมูลธุระกิจ')
       }
 
-      // Link
-      const protocol = get(ctx, 'req.protocol', '')
-      const host = ctx.req.get('host')
       // Prepare email sender
       const emailTranspoter = email_sender();
       // Conver image path to base64 image
@@ -374,9 +374,11 @@ export default class UserResolver {
         // Update user
         await customer.updateOne({ status, validationStatus: result, password: hashedPassword })
 
-        const activate_link = `${protocol}://${host}/v1/customer/activate/${customer.userNumber}`
+        const host = getCurrentHost(ctx)
+        const activate_link = `${host}/v1/activate/customer/${customer.userNumber}`
+        const movemate_link = `https://www.movematethailand.com`
         await emailTranspoter.sendMail({
-          from: process.env.GOOGLE_MAIL,
+          from: process.env.NOREPLY_EMAIL,
           to: businessDetail.businessEmail,
           subject: "บัญชี Movemate ของท่านได้รับการอนุมัติ",
           template: "register_business",
@@ -387,14 +389,14 @@ export default class UserResolver {
             password: rawPassword,
             logo: imageUrl,
             activate_link,
-            movemate_link: `https://www.movemateth.com`,
+            movemate_link,
           },
         });
       } else {
         // Update user
         await customer.updateOne({ status, validationStatus: result })
         await emailTranspoter.sendMail({
-          from: process.env.GOOGLE_MAIL,
+          from: process.env.NOREPLY_EMAIL,
           to: businessDetail.businessEmail,
           subject: "บัญชี Movemate ของท่านไม่ได้รับการอนุมัติ",
           template: "register_rejected_account",
@@ -402,7 +404,7 @@ export default class UserResolver {
             business_title: get(businessTitleName, 'label', ''),
             business_name: businessDetail.businessName,
             logo: imageUrl,
-            movemate_link: `https://www.movemateth.com`,
+            movemate_link: `https://www.movematethailand.com`,
           },
         });
       }
@@ -410,6 +412,75 @@ export default class UserResolver {
       return customer;
     } catch (error) {
       throw error;
+    }
+  }
+
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(["customer"]))
+  async updateIndividualProfile(
+    @Arg("data") data: CutomerIndividualInput,
+    @Ctx() ctx: GraphQLContext
+  ): Promise<boolean> {
+    const userId = ctx.req.user_id
+    const { email, profileImage, ...formValue } = data;
+    try {
+      if (userId) {
+        await UserSchema(userId).validate(data, { abortEarly: false })
+        const userModel = await UserModel.findById(userId);
+        if (!userModel) {
+          const message =
+            "ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน";
+          throw new GraphQLError(message, {
+            extensions: {
+              code: "NOT_FOUND",
+              errors: [{ message }],
+            },
+          });
+        }
+
+        const customerIndividualModel = await CustomerIndividualModel.findById(
+          userModel.individualDetail
+        );
+        if (!customerIndividualModel) {
+          const message =
+            "ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน";
+          throw new GraphQLError(message, {
+            extensions: {
+              code: "NOT_FOUND",
+              errors: [{ message }],
+            },
+          });
+        }
+
+        const uploadedImage = profileImage ? new FileModel(profileImage) : null;
+        if (uploadedImage) {
+          await uploadedImage.save();
+        }
+
+        await userModel.updateOne({
+          ...formValue,
+          username: email,
+          ...(uploadedImage ? { profileImage: uploadedImage } : {}),
+        });
+        await customerIndividualModel.updateOne({ ...formValue });
+
+        return true;
+      }
+      const message =
+        "ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน";
+      throw new GraphQLError(message, {
+        extensions: {
+          code: "NOT_FOUND",
+          errors: [{ message }],
+        },
+      });
+    } catch (errors) {
+      console.log("error: ", errors);
+      if (errors instanceof ValidationError) {
+        throw yupValidationThrow(errors);
+      }
+      throw errors;
     }
   }
 }

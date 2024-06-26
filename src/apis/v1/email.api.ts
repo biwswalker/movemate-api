@@ -10,7 +10,7 @@ email_api.get('/sample', async (req, res) => {
     const email_to = req.query.to as string || 'jennarong.sae@gmail.com'
     const email_transpoter = email_sender()
     await email_transpoter.sendMail({
-        from: process.env.GOOGLE_MAIL,
+        from: process.env.NOREPLY_EMAIL,
         to: email_to,
         subject: 'Testiing email',
         template: 'simple',
@@ -19,10 +19,13 @@ email_api.get('/sample', async (req, res) => {
             message: 'This is GGWP message'
         }
     })
+    // const host = getCurrentHost(ctx)
+    // const activate_link = `${host}/v1/activate/customer/${user.userNumber}`
+    // const movemate_link = `https://www.movematethailand.com`
     // const base64_image = await imageToBase64(join(resolve('.'), 'assets', 'email_logo.png'))
     // const image_url = new SafeString(`data:image/png;base64,${base64_image}`)
     // await email_transpoter.sendMail({
-    //     from: process.env.GOOGLE_MAIL,
+    //     from: process.env.NOREPLY_EMAIL,
     //     to: email_to,
     //     subject: 'ยืนยันการสมัครสมาชิก Movemate!',
     //     template: 'register_individual',
@@ -31,7 +34,7 @@ email_api.get('/sample', async (req, res) => {
     //         username: "jennarong.sae@mail.com",
     //         logo: image_url,
     //         activate_link: `https://api.movemateth.com/activate/customer/44444444`,
-    //         movemate_line: `https://www.movemateth.com`,
+    //         movemate_line: `https://www.movematethailand.com`,
     //     }
     // })
 

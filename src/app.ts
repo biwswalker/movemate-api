@@ -67,7 +67,7 @@ async function server() {
   app.use('/graphql', alllowedCors, express.json(), expressMiddleware(server, {
     context: async ({ req, res }) => ({ req, res }),
   }))
-  app.use("/v1", api_v1);
+  app.use("/api/v1", api_v1);
 
   const PORT = process.env.API_PORT || 5000;
   await new Promise<void>((resolve) => httpServer.listen({ port: PORT }, resolve));

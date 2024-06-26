@@ -9,7 +9,7 @@ import bcrypt from "bcrypt";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
 import { get, isEmpty, isEqual, omit } from "lodash";
-import { generateId, generateRandomNumberPattern } from "@utils/string.utils";
+import { generateId, generateRandomNumberPattern, getCurrentHost } from "@utils/string.utils";
 import { email_sender } from "@utils/email.utils";
 import imageToBase64 from "image-to-base64";
 import { join } from "path";
@@ -147,9 +147,13 @@ export default class RegisterResolver {
         });
 
         await user.save();
+
+        const host = getCurrentHost(ctx)
+        const activate_link = `${host}/v1/activate/customer/${user.userNumber}`
+        const movemate_link = `https://www.movematethailand.com`
         // Email sender
         await emailTranspoter.sendMail({
-          from: process.env.GOOGLE_MAIL,
+          from: process.env.NOREPLY_EMAIL,
           to: individualDetail.email,
           subject: "ยืนยันการสมัครสมาชิก Movemate!",
           template: "register_individual",
@@ -157,8 +161,8 @@ export default class RegisterResolver {
             fullname: individualCustomer.fullname,
             username: individualDetail.email,
             logo: imageUrl,
-            activateLink: `https://api.movemateth.com/activate/customer/${userNumber}`,
-            movemateLink: `https://www.movemateth.com`,
+            activate_link,
+            movemate_link,
           },
         });
 
@@ -217,7 +221,7 @@ export default class RegisterResolver {
 
           // Email sender
           // await emailTranspoter.sendMail({
-          //   from: process.env.GOOGLE_MAIL,
+          //   from: process.env.NOREPLY_EMAIL,
           //   to: businessDetail.businessEmail,
           //   subject: "ยืนยันการสมัครสมาชิก Movemate!",
           //   template: "register_business",
@@ -228,7 +232,7 @@ export default class RegisterResolver {
           //     password: generatedPassword,
           //     logo: imageUrl,
           //     activate_link: `https://api.movemateth.com/activate/customer/${userNumber}`,
-          //     movemate_link: `https://www.movemateth.com`,
+          //     movemate_link: `https://www.movematethailand.com`,
           //   },
           // });
 
@@ -445,9 +449,13 @@ export default class RegisterResolver {
       });
 
       await user.save();
+
+      const host = getCurrentHost(ctx)
+      const activate_link = `${host}/v1/activate/customer/${user.userNumber}`
+      const movemate_link = `https://www.movematethailand.com`
       // Email sender
       await emailTranspoter.sendMail({
-        from: process.env.GOOGLE_MAIL,
+        from: process.env.NOREPLY_EMAIL,
         to: email,
         subject: "ยืนยันการสมัครสมาชิก Movemate!",
         template: "register_individual_withpassword",
@@ -456,8 +464,8 @@ export default class RegisterResolver {
           username: email,
           password: rawPassword,
           logo: imageUrl,
-          activateLink: `https://api.movemateth.com/activate/customer/${userNumber}`,
-          movemateLink: `https://www.movemateth.com`,
+          activate_link,
+          movemate_link,
         },
       });
 
@@ -580,9 +588,12 @@ export default class RegisterResolver {
 
       await user.save();
 
+      const host = getCurrentHost(ctx)
+      const activate_link = `${host}/v1/activate/customer/${user.userNumber}`
+      const movemate_link = `https://www.movematethailand.com`
       // Email sender
       await emailTranspoter.sendMail({
-        from: process.env.GOOGLE_MAIL,
+        from: process.env.NOREPLY_EMAIL,
         to: customer.businessEmail,
         subject: "ยืนยันการสมัครสมาชิก Movemate!",
         template: "register_business",
@@ -592,8 +603,8 @@ export default class RegisterResolver {
           username: userNumber,
           password: rawPassword,
           logo: imageUrl,
-          activate_link: `https://api.movemateth.com/activate/customer/${userNumber}`,
-          movemate_link: `https://www.movemateth.com`,
+          activate_link,
+          movemate_link,
         },
       });
 

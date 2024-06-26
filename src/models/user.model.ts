@@ -12,6 +12,7 @@ import { BusinessCustomer } from "./customerBusiness.model";
 import { File } from "./file.model"
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { decryption } from "@utils/encryption";
+import { isEmpty } from "lodash";
 
 enum EUserRole {
   CUSTOMER = 'customer',
@@ -110,6 +111,10 @@ export class User extends TimeStamps {
   @Property()
   lastestOTPRef: string;
 
+  @Field({ nullable: true })
+  @Property()
+  lastestOTPTime: Date;
+
   @Field()
   @Property()
   isVerifiedEmail: boolean;
@@ -157,6 +162,16 @@ export class User extends TimeStamps {
 
   static async findByUsername(username: string): Promise<User | null> {
     return UserModel.findOne({ username });
+  }
+
+  static async existingEmail(_id: string, email: string, path: 'individual' | 'business' | 'admin'): Promise<boolean> {
+    const populatePath = path === 'individual' ? 'individualDetail' : path === 'business' ? 'businessDetail' : path === 'admin' ? 'adminDetail' : ''
+    const emailKeyName = (path === 'individual' || path === 'admin') ? 'email' : path === 'business' ? 'businessEmail' : ''
+    const exiting = await UserModel.findOne({ _id: { $ne: _id }, userRole: path }).populate({
+      path: populatePath,
+      match: { [emailKeyName]: email },
+    })
+    return !isEmpty(exiting)
   }
 
   static paginate: mongoose.PaginateModel<typeof User>['paginate']
