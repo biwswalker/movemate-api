@@ -82,7 +82,7 @@ export default class AdminResolver {
             await user.save();
 
             const host = getCurrentHost(ctx)
-            const activate_link = `${host}/v1/activate/admin/${user.userNumber}`
+            const activate_link = `${host}/api/v1/activate/admin/${user.userNumber}`
             const movemate_link = `https://www.movematethailand.com`
             // Email sender
             await emailTranspoter.sendMail({

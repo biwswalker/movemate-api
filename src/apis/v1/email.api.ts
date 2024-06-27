@@ -20,7 +20,7 @@ email_api.get('/sample', async (req, res) => {
         }
     })
     // const host = getCurrentHost(ctx)
-    // const activate_link = `${host}/v1/activate/customer/${user.userNumber}`
+    // const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
     // const movemate_link = `https://www.movematethailand.com`
     // const base64_image = await imageToBase64(join(resolve('.'), 'assets', 'email_logo.png'))
     // const image_url = new SafeString(`data:image/png;base64,${base64_image}`)

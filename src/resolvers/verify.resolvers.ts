@@ -39,7 +39,7 @@ export default class VerifyAccountResolver {
             const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`)
 
             const host = getCurrentHost(ctx)
-            const activate_link = `${host}/v1/activate/customer/${user.userNumber}`
+            const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
             const movemate_link = `https://www.movematethailand.com`
 
             if (user.userType === 'individual' && user.individualDetail) {
@@ -62,7 +62,7 @@ export default class VerifyAccountResolver {
             }
 
             const currentDate = new Date()
-            const countdown = addMinutes(currentDate, 2)
+            const countdown = addMinutes(currentDate, 1)
             const duration = `1m`
 
             return {

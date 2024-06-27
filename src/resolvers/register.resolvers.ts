@@ -149,7 +149,7 @@ export default class RegisterResolver {
         await user.save();
 
         const host = getCurrentHost(ctx)
-        const activate_link = `${host}/v1/activate/customer/${user.userNumber}`
+        const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
         const movemate_link = `https://www.movematethailand.com`
         // Email sender
         await emailTranspoter.sendMail({
@@ -451,7 +451,7 @@ export default class RegisterResolver {
       await user.save();
 
       const host = getCurrentHost(ctx)
-      const activate_link = `${host}/v1/activate/customer/${user.userNumber}`
+      const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
       const movemate_link = `https://www.movematethailand.com`
       // Email sender
       await emailTranspoter.sendMail({
@@ -589,7 +589,7 @@ export default class RegisterResolver {
       await user.save();
 
       const host = getCurrentHost(ctx)
-      const activate_link = `${host}/v1/activate/customer/${user.userNumber}`
+      const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
       const movemate_link = `https://www.movematethailand.com`
       // Email sender
       await emailTranspoter.sendMail({

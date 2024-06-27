@@ -375,7 +375,7 @@ export default class UserResolver {
         await customer.updateOne({ status, validationStatus: result, password: hashedPassword })
 
         const host = getCurrentHost(ctx)
-        const activate_link = `${host}/v1/activate/customer/${customer.userNumber}`
+        const activate_link = `${host}/api/v1/activate/customer/${customer.userNumber}`
         const movemate_link = `https://www.movematethailand.com`
         await emailTranspoter.sendMail({
           from: process.env.NOREPLY_EMAIL,
