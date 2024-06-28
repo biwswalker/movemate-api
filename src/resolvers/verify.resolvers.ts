@@ -1,4 +1,4 @@
-import { Resolver, Mutation, UseMiddleware, Ctx } from 'type-graphql'
+import { Resolver, Mutation, UseMiddleware, Ctx, Arg, Args } from 'type-graphql'
 import { AuthGuard } from '@guards/auth.guards'
 import { GraphQLContext } from '@configs/graphQL.config'
 import UserModel from '@models/user.model'
@@ -10,7 +10,10 @@ import { join } from 'path'
 import { SafeString } from 'handlebars'
 import { generateOTP, generateRef, getCurrentHost } from '@utils/string.utils'
 import { addMinutes } from 'date-fns'
-import { VerifyPayload } from '@payloads/verify.payloads'
+import { VerifyOTPPayload, VerifyPayload } from '@payloads/verify.payloads'
+import { BusinessCustomer } from '@models/customerBusiness.model'
+import { VerifyOTPArgs } from '@inputs/verify.payloads'
+import { isEqual } from 'lodash'
 
 @Resolver()
 export default class VerifyAccountResolver {
@@ -42,24 +45,44 @@ export default class VerifyAccountResolver {
             const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
             const movemate_link = `https://www.movematethailand.com`
 
+
+
+            let email = ''
+            let fullname = ''
             if (user.userType === 'individual' && user.individualDetail) {
                 const individualDetail = user.individualDetail as IndividualCustomer
-                const email = individualDetail.email
+                email = individualDetail.email
+                fullname = individualDetail.fullname
+            } else if (user.userType === 'business' && user.businessDetail) {
+                const businessDetail = user.businessDetail as BusinessCustomer
+                email = businessDetail.businessEmail
+                fullname = businessDetail.businessName
+            }
 
-                await emailTranspoter.sendMail({
-                    from: process.env.NOREPLY_EMAIL,
-                    to: email,
-                    subject: "ยืนยันอีเมล Movemate!",
-                    template: "confirm_email",
-                    context: {
-                        fullname: individualDetail.fullname,
-                        username: email,
-                        logo: imageUrl,
-                        activate_link,
-                        movemate_link,
+            if (!email) {
+                const message =
+                    "ไม่สามารถเรียกข้อมูลลูกค้าได้ เนื่องจากไม่พบอีเมลผู้ใช้งาน";
+                throw new GraphQLError(message, {
+                    extensions: {
+                        code: "NOT_FOUND",
+                        errors: [{ message }],
                     },
                 });
             }
+
+            await emailTranspoter.sendMail({
+                from: process.env.NOREPLY_EMAIL,
+                to: email,
+                subject: "ยืนยันอีเมล Movemate!",
+                template: "confirm_email",
+                context: {
+                    fullname,
+                    username: user.username,
+                    logo: imageUrl,
+                    activate_link,
+                    movemate_link,
+                },
+            });
 
             const currentDate = new Date()
             const countdown = addMinutes(currentDate, 1)
@@ -75,9 +98,9 @@ export default class VerifyAccountResolver {
         }
     }
 
-    @Mutation(() => VerifyPayload)
+    @Mutation(() => VerifyOTPPayload)
     @UseMiddleware(AuthGuard(['customer', 'admin']))
-    async resentOTP(@Ctx() ctx: GraphQLContext): Promise<VerifyPayload> {
+    async resentOTP(@Ctx() ctx: GraphQLContext): Promise<VerifyOTPPayload> {
         const userId = ctx.req.user_id
         try {
             const user = await UserModel.findById(userId)
@@ -118,8 +141,52 @@ export default class VerifyAccountResolver {
 
             return {
                 countdown,
-                duration
+                duration,
+                ref
             }
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    @Mutation(() => Boolean)
+    @UseMiddleware(AuthGuard(['customer', 'admin']))
+    async verifyOTP(@Args() data: VerifyOTPArgs): Promise<boolean> {
+        try {
+            const user = await UserModel.findById(data.id)
+            if (!user) {
+                const message =
+                    "ไม่สามารถเรียกข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน";
+                throw new GraphQLError(message, {
+                    extensions: {
+                        code: "NOT_FOUND",
+                        errors: [{ message }],
+                    },
+                });
+            }
+
+            // TODO: Handle time range
+
+            if (user.isVerifiedPhoneNumber) {
+                const message =
+                    "ผู้ใช้ถูกยืนยันหมายเลขโทรศัพท์แล้ว";
+                throw new GraphQLError(message);
+            }
+
+            if (isEqual(user.lastestOTPRef, data.ref) && isEqual(user.lastestOTP, data.otp)) {
+                await user.updateOne({ isVerifiedPhoneNumber: true })
+                return true
+            }
+
+            const message =
+                "OTP ไม่ตรงกัน";
+            throw new GraphQLError(message, {
+                extensions: {
+                    code: "NOT_FOUND",
+                    errors: [{ message }],
+                },
+            });
+
         } catch (error) {
             throw error;
         }

@@ -155,6 +155,10 @@ export class User extends TimeStamps {
   @Property({ autopopulate: true, ref: 'File' })
   profileImage?: Ref<File>
 
+  @Field(() => BusinessCustomer, { nullable: true })
+  @Property({ autopopulate: true, ref: 'BusinessCustomer' })
+  upgradeRequest?: Ref<BusinessCustomer>
+
   async validatePassword(password: string): Promise<boolean> {
     const password_decryption = decryption(password)
     return bcrypt.compare(password_decryption, this.password);

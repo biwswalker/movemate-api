@@ -25,18 +25,18 @@ import {
 import CustomerIndividualModel from "@models/customerIndividual.model";
 import FileModel from "@models/file.model";
 import BusinessCustomerModel, { BusinessCustomer } from "@models/customerBusiness.model";
-import RegisterResolver from "./register.resolvers";
 import BusinessCustomerCreditPaymentModel from "@models/customerBusinessCreditPayment.model";
 import { email_sender } from "@utils/email.utils";
 import imageToBase64 from "image-to-base64";
 import { join } from 'path'
 import { SafeString } from 'handlebars'
-import { generateRandomNumberPattern, getCurrentHost } from "@utils/string.utils";
+import { generateId, generateRandomNumberPattern, getCurrentHost } from "@utils/string.utils";
 import bcrypt from "bcrypt";
 import { GET_USERS } from "@pipelines/user.pipeline";
-import { UserSchema } from "@validations/customer.validations";
+import { BusinessCustomerSchema, UserSchema } from "@validations/customer.validations";
 import { ValidationError } from "yup";
 import { yupValidationThrow } from "@utils/error.utils";
+import BusinessCustomerCashPaymentModel from "@models/customerBusinessCashPayment.model";
 
 @Resolver(User)
 export default class UserResolver {
@@ -113,13 +113,13 @@ export default class UserResolver {
     }
   }
 
-  @Mutation(() => User)
-  @UseMiddleware(AuthGuard(["admin"]))
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(["admin", "customer"]))
   async updateIndividualCustomer(
     @Arg("id") id: string,
     @Arg("data") data: CutomerIndividualInput,
     @Ctx() ctx: GraphQLContext
-  ): Promise<User> {
+  ): Promise<boolean> {
     const { email, profileImage, ...formValue } = data;
     try {
       // Check if the user already exists
@@ -129,6 +129,7 @@ export default class UserResolver {
       }
 
       if (id) {
+        await UserSchema(id).validate(data, { abortEarly: false })
         const userModel = await UserModel.findById(id);
         if (!userModel) {
           const message =
@@ -167,8 +168,7 @@ export default class UserResolver {
         });
         await customerIndividualModel.updateOne({ ...formValue });
 
-        const user = await UserModel.findById(id);
-        return user;
+        return true;
       }
       const message =
         "ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน";
@@ -178,19 +178,22 @@ export default class UserResolver {
           errors: [{ message }],
         },
       });
-    } catch (error) {
-      console.log(error);
-      throw error;
+    } catch (errors) {
+      console.log("error: ", errors);
+      if (errors instanceof ValidationError) {
+        throw yupValidationThrow(errors);
+      }
+      throw errors;
     }
   }
 
-  @Mutation(() => User)
-  @UseMiddleware(AuthGuard(["admin"]))
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(["admin", 'customer']))
   async updateBusinessCustomer(
     @Arg("id") id: string,
     @Arg("data") data: CutomerBusinessInput,
     @Ctx() ctx: GraphQLContext
-  ): Promise<User> {
+  ): Promise<boolean> {
     const { businessEmail, profileImage, creditPayment, cashPayment, ...formValue } = data;
     try {
       // Check if the user already exists
@@ -200,6 +203,8 @@ export default class UserResolver {
       }
 
       if (id) {
+        await BusinessCustomerSchema(id).validate(data, { abortEarly: false })
+
         const userModel = await UserModel.findById(id);
         if (!userModel) {
           const message =
@@ -224,14 +229,6 @@ export default class UserResolver {
               errors: [{ message }],
             },
           });
-        }
-
-        // Check existing email; If user has changed email
-        if (!isEqual(customerBusinesslModel.businessEmail, businessEmail)) {
-          await new RegisterResolver().isExistingEmail(
-            businessEmail,
-            "businessEmail"
-          );
         }
 
         // Profil Image
@@ -305,8 +302,7 @@ export default class UserResolver {
 
         await customerBusinesslModel.updateOne({ ...formValue, businessEmail });
 
-        const user = await UserModel.findById(id);
-        return user;
+        return true;
       }
       const message =
         "ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน";
@@ -316,9 +312,12 @@ export default class UserResolver {
           errors: [{ message }],
         },
       });
-    } catch (error) {
-      console.log(error);
-      throw error;
+    } catch (errors) {
+      console.log("error: ", errors);
+      if (errors instanceof ValidationError) {
+        throw yupValidationThrow(errors);
+      }
+      throw errors;
     }
   }
 
@@ -415,22 +414,28 @@ export default class UserResolver {
     }
   }
 
-
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(["customer"]))
-  async updateIndividualProfile(
-    @Arg("data") data: CutomerIndividualInput,
+  @UseMiddleware(AuthGuard(["admin", 'customer']))
+  async upgradeAccount(
+    @Arg("id") id: string,
+    @Arg("data") data: CutomerBusinessInput,
     @Ctx() ctx: GraphQLContext
   ): Promise<boolean> {
-    const userId = ctx.req.user_id
-    const { email, profileImage, ...formValue } = data;
+    const { businessEmail, profileImage, creditPayment, cashPayment, ...formValue } = data;
     try {
-      if (userId) {
-        await UserSchema(userId).validate(data, { abortEarly: false })
-        const userModel = await UserModel.findById(userId);
+      // Check if the user already exists
+      const platform = ctx.req.headers["platform"];
+      if (isEmpty(platform)) {
+        throw new Error("Bad Request: Platform is require");
+      }
+
+      if (id) {
+        await BusinessCustomerSchema(id).validate(data, { abortEarly: false })
+
+        const userModel = await UserModel.findById(id);
         if (!userModel) {
           const message =
-            "ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน";
+            "ไม่สามารถอัพเกรดได้ เนื่องจากไม่พบผู้ใช้งาน";
           throw new GraphQLError(message, {
             extensions: {
               code: "NOT_FOUND",
@@ -439,31 +444,91 @@ export default class UserResolver {
           });
         }
 
-        const customerIndividualModel = await CustomerIndividualModel.findById(
-          userModel.individualDetail
-        );
-        if (!customerIndividualModel) {
+        if (userModel.userType === 'business' || userModel.businessDetail) {
           const message =
-            "ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน";
-          throw new GraphQLError(message, {
-            extensions: {
-              code: "NOT_FOUND",
-              errors: [{ message }],
-            },
-          });
+            "ไม่สามารถอัพเกรดได้ เนื่องจากเป็นสมาชิกรูปแบบ Business อยู่แล้ว";
+          throw new GraphQLError(message);
         }
 
-        const uploadedImage = profileImage ? new FileModel(profileImage) : null;
-        if (uploadedImage) {
-          await uploadedImage.save();
+        if (userModel.upgradeRequest) {
+          const message =
+            "ไม่สามารถอัพเกรดได้ เนื่องจากมีคำขอก่อนหน้านี้แล้ว";
+          throw new GraphQLError(message);
         }
+
+        const userNumber = await generateId("MMBU", "business");
+
+        const businessRegistrationCertificateFile = get(creditPayment, 'businessRegistrationCertificateFile', null)
+        const copyIDAuthorizedSignatoryFile = get(creditPayment, 'copyIDAuthorizedSignatoryFile', null)
+        const certificateValueAddedTaxRegistrationFile = get(creditPayment, 'certificateValueAddedTaxRegistrationFile', null)
+
+        // Document Image 1
+        const businessRegistrationCertificate =
+          businessRegistrationCertificateFile
+            ? new FileModel(businessRegistrationCertificateFile)
+            : null;
+        if (businessRegistrationCertificate) {
+          await businessRegistrationCertificate.save();
+        }
+        // Document Image 2
+        const copyIDAuthorizedSignatory = copyIDAuthorizedSignatoryFile
+          ? new FileModel(copyIDAuthorizedSignatoryFile)
+          : null;
+        if (copyIDAuthorizedSignatory) {
+          await copyIDAuthorizedSignatory.save();
+        }
+        // Document Image 3
+        const certificateValueAddedTaxRegistration =
+          certificateValueAddedTaxRegistrationFile
+            ? new FileModel(certificateValueAddedTaxRegistrationFile)
+            : null;
+        if (certificateValueAddedTaxRegistration) {
+          await certificateValueAddedTaxRegistration.save();
+        }
+
+        const cashPaymentDetail =
+          (formValue.paymentMethod === 'credit' && cashPayment)
+            ? new BusinessCustomerCashPaymentModel({
+              acceptedEreceiptDate: cashPayment.acceptedEReceiptDate,
+            })
+            : null;
+        if (cashPaymentDetail) {
+          await cashPaymentDetail.save()
+        }
+
+        const creditPaymentDetail =
+          (formValue.paymentMethod === 'credit' && creditPayment)
+            ? new BusinessCustomerCreditPaymentModel({
+              ...omit(creditPayment, ['businessRegistrationCertificateFile', 'copyIDAuthorizedSignatoryFile', 'certificateValueAddedTaxRegistrationFile']),
+              ...(businessRegistrationCertificate
+                ? { businessRegistrationCertificateFile: businessRegistrationCertificate }
+                : {}),
+              ...(copyIDAuthorizedSignatory
+                ? { copyIDAuthorizedSignatoryFile: copyIDAuthorizedSignatory }
+                : {}),
+              ...(certificateValueAddedTaxRegistration
+                ? { certificateValueAddedTaxRegistrationFile: certificateValueAddedTaxRegistration }
+                : {}),
+            })
+            : null;
+        if (creditPaymentDetail) {
+          await creditPaymentDetail.save()
+        }
+
+        const customer = new BusinessCustomerModel({
+          userNumber,
+          businessEmail,
+          ...formValue,
+          ...(cashPaymentDetail ? { cashPayment: cashPaymentDetail } : {}),
+          ...(creditPaymentDetail ? { creditPayment: creditPaymentDetail } : {})
+        });
+
+        await customer.save();
 
         await userModel.updateOne({
-          ...formValue,
-          username: email,
-          ...(uploadedImage ? { profileImage: uploadedImage } : {}),
+          validationStatus: 'pending',
+          upgradeRequest: customer
         });
-        await customerIndividualModel.updateOne({ ...formValue });
 
         return true;
       }

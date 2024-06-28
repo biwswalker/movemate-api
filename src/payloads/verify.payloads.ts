@@ -8,3 +8,15 @@ export class VerifyPayload {
     @Field()
     duration: string
 }
+
+@ObjectType()
+export class VerifyOTPPayload {
+    @Field(() => Date)
+    countdown: Date
+
+    @Field()
+    duration: string
+
+    @Field()
+    ref: string
+}

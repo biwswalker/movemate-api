@@ -399,4 +399,13 @@ export class CutomerBusinessInput {
 
   @Field(() => CreditPaymentDetailInput, { nullable: true })
   creditPayment?: CreditPaymentDetailInput;
+
+  @Field({ nullable: true })
+  acceptedEDocumentDate?: Date
+
+  @Field({ nullable: true })
+  acceptedPoliciesDate?: Date
+
+  @Field({ nullable: true })
+  acceptedTermConditionDate?: Date
 }
