@@ -157,6 +157,7 @@ export default class SettingsResolver {
             const settingCustomerPolicies = await SettingCustomerPoliciesModel.find();
             const settingCustomerPoliciesOldData = settingCustomerPolicies[0]
 
+            const newVersion = settingCustomerPoliciesOldData.version ? settingCustomerPoliciesOldData.version + 1 : 1
             const _id = settingCustomerPoliciesOldData ? settingCustomerPoliciesOldData._id : new Types.ObjectId()
 
             const updateHistory = new UpdateHistoryModel({
@@ -164,14 +165,14 @@ export default class SettingsResolver {
                 referenceType: "SettingCustomerPolicies",
                 who: userId,
                 beforeUpdate: settingCustomerPoliciesOldData ? omit(settingCustomerPoliciesOldData.toObject(), ['history']) : {},
-                afterUpdate: { customerPolicies: data },
+                afterUpdate: { customerPolicies: data, version: newVersion },
             });
 
             const updateData = [{
                 updateOne: {
                     filter: { _id },
                     update: {
-                        $set: { customerPolicies: data },
+                        $set: { customerPolicies: data, version: newVersion },
                         $push: { history: updateHistory },
                     },
                     upsert: true,
@@ -220,6 +221,7 @@ export default class SettingsResolver {
             const settingDriverPolicies = await SettingDriverPoliciesModel.find();
             const settingDriverPoliciesOldData = settingDriverPolicies[0]
 
+            const newVersion = settingDriverPoliciesOldData.version ? settingDriverPoliciesOldData.version + 1 : 1
             const _id = settingDriverPoliciesOldData ? settingDriverPoliciesOldData._id : new Types.ObjectId()
 
             const updateHistory = new UpdateHistoryModel({
@@ -227,14 +229,14 @@ export default class SettingsResolver {
                 referenceType: "SettingDriverPolicies",
                 who: userId,
                 beforeUpdate: settingDriverPoliciesOldData ? omit(settingDriverPoliciesOldData.toObject(), ['history']) : {},
-                afterUpdate: { driverPolicies: data },
+                afterUpdate: { driverPolicies: data, version: newVersion },
             });
 
             const updateData = [{
                 updateOne: {
                     filter: { _id },
                     update: {
-                        $set: { driverPolicies: data },
+                        $set: { driverPolicies: data, version: newVersion },
                         $push: { history: updateHistory },
                     },
                     upsert: true,

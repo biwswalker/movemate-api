@@ -11,6 +11,10 @@ export class SettingCustomerPolicies extends TimeStamps {
     @Property()
     customerPolicies: string
 
+    @Field({ nullable: true })
+    @Property()
+    version: number
+
     @Field(() => [UpdateHistory], { nullable: true })
     @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
     history: Ref<UpdateHistory>[];

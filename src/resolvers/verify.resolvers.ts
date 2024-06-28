@@ -20,10 +20,10 @@ export default class VerifyAccountResolver {
 
     @Mutation(() => VerifyPayload)
     @UseMiddleware(AuthGuard(['customer', 'admin']))
-    async resentEmail(@Ctx() ctx: GraphQLContext): Promise<VerifyPayload> {
-        const userId = ctx.req.user_id
+    async resentEmail(@Ctx() ctx: GraphQLContext, @Arg("userId", { nullable: true }) userId: string): Promise<VerifyPayload> {
+        const _id = userId ? userId : ctx.req.user_id
         try {
-            const user = await UserModel.findById(userId)
+            const user = await UserModel.findById(_id)
 
             if (!user) {
                 const message =
@@ -100,10 +100,10 @@ export default class VerifyAccountResolver {
 
     @Mutation(() => VerifyOTPPayload)
     @UseMiddleware(AuthGuard(['customer', 'admin']))
-    async resentOTP(@Ctx() ctx: GraphQLContext): Promise<VerifyOTPPayload> {
-        const userId = ctx.req.user_id
+    async resentOTP(@Ctx() ctx: GraphQLContext, @Arg("userId", { nullable: true }) userId: string): Promise<VerifyOTPPayload> {
+        const _id = userId ? userId : ctx.req.user_id
         try {
-            const user = await UserModel.findById(userId)
+            const user = await UserModel.findById(_id)
 
             if (!user) {
                 const message =
@@ -187,6 +187,66 @@ export default class VerifyAccountResolver {
                 },
             });
 
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    @Mutation(() => Boolean)
+    @UseMiddleware(AuthGuard(['admin']))
+    async markAsVerifiedEmail(@Arg("userId") userId: string): Promise<boolean> {
+        try {
+            const user = await UserModel.findById(userId)
+            if (!user) {
+                const message =
+                    "ไม่สามารถเรียกข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน";
+                throw new GraphQLError(message, {
+                    extensions: {
+                        code: "NOT_FOUND",
+                        errors: [{ message }],
+                    },
+                });
+            }
+
+            if (user.isVerifiedEmail) {
+                const message =
+                    "ผู้ใช้ถูกยืนยันอีเมลแล้ว";
+                throw new GraphQLError(message);
+            }
+
+            await user.updateOne({ isVerifiedEmail: true })
+
+            return true
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    @Mutation(() => Boolean)
+    @UseMiddleware(AuthGuard(['admin']))
+    async markAsVerifiedOTP(@Arg("userId") userId: string): Promise<boolean> {
+        try {
+            const user = await UserModel.findById(userId)
+            if (!user) {
+                const message =
+                    "ไม่สามารถเรียกข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน";
+                throw new GraphQLError(message, {
+                    extensions: {
+                        code: "NOT_FOUND",
+                        errors: [{ message }],
+                    },
+                });
+            }
+
+            if (user.isVerifiedPhoneNumber) {
+                const message =
+                    "ผู้ใช้ถูกยืนยันหมายเลขโทรศัพท์แล้ว";
+                throw new GraphQLError(message);
+            }
+
+            await user.updateOne({ isVerifiedPhoneNumber: true })
+
+            return true
         } catch (error) {
             throw error;
         }

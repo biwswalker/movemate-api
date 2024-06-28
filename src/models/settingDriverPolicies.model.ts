@@ -11,6 +11,10 @@ export class SettingDriverPolicies extends TimeStamps {
     @Property()
     driverPolicies: string
 
+    @Field({ nullable: true })
+    @Property()
+    version: number
+
     @Field(() => [UpdateHistory], { nullable: true })
     @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
     history: Ref<UpdateHistory>[];
