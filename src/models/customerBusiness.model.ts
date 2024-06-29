@@ -112,6 +112,10 @@ export class BusinessCustomer {
   @Property({ autopopulate: true, ref: 'BusinessCustomerCashPayment' })
   cashPayment?: Ref<BusinessCustomerCashPayment>
 
+  @Field({ nullable: true })
+  @Property({ default: false })
+  changePaymentMethodRequest?: boolean;
+
   static async findByUserNumber(userNumber: string): Promise<BusinessCustomer | null> {
     return BusinessCustomerModel.findOne({ userNumber });
   }

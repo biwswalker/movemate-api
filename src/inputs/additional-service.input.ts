@@ -1,4 +1,4 @@
-import { Field, InputType } from "type-graphql";
+import { ArgsType, Field, InputType } from "type-graphql";
 
 @InputType()
 class ServiceDescriptionInput {
@@ -26,4 +26,13 @@ export class AdditionalServiceInput {
 
     @Field(() => [ServiceDescriptionInput])
     descriptions: ServiceDescriptionInput[]
+}
+
+@ArgsType()
+export class AdditionalServiceQueryArgs {
+    @Field({ nullable: true })
+    status: TServiceStatus;
+
+    @Field({ nullable: true })
+    name: string;
 }

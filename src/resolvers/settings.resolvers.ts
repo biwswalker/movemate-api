@@ -292,13 +292,15 @@ export default class SettingsResolver {
     }
 
     @Query(() => [SettingBusinessType])
-    async getBusinessTypeInfo(): Promise<SettingBusinessType[]> {
+    async getBusinessTypeInfo(@Arg("includeOther", { nullable: true }) oncludeOther: boolean = false): Promise<SettingBusinessType[]> {
         try {
+            const currentDate = new Date()
+            const other: SettingBusinessType = { _id: '', available: true, name: 'อื่นๆ', createdAt: currentDate, updatedAt: currentDate, history: [] }
             const settingBusinessTypes = await SettingBusinessTypeModel.findAvailable()
             if (!settingBusinessTypes) {
-                return []
+                return [...(oncludeOther ? [other] : [])]
             }
-            return settingBusinessTypes;
+            return [...settingBusinessTypes, ...(oncludeOther ? [other] : [])];
         } catch (error) {
             console.log('error: ', error)
             throw new GraphQLError("ไม่สามารถเรียกข้อมูลประเภทธุรกิจได้ โปรดลองอีกครั้ง");

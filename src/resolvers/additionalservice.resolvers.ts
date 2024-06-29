@@ -1,4 +1,4 @@
-import { Arg, Resolver, Mutation, UseMiddleware, Query } from "type-graphql";
+import { Arg, Resolver, Mutation, UseMiddleware, Query, Args } from "type-graphql";
 import { AuthGuard } from "@guards/auth.guards";
 import { ValidationError } from "yup";
 import { yupValidationThrow } from "@utils/error.utils";
@@ -6,13 +6,15 @@ import { GraphQLError } from "graphql";
 import AdditionalServiceModel, {
   AdditionalService,
 } from "@models/additionalService.model";
-import { AdditionalServiceInput } from "@inputs/additional-service.input";
+import { AdditionalServiceInput, AdditionalServiceQueryArgs } from "@inputs/additional-service.input";
 import { AdditionalServiceSchema } from "@validations/additionalService.validations";
 import AdditionalServiceDescriptionModel, {
   AdditionalServiceDescription,
 } from "@models/additionalServiceDescription.model";
-import { AnyBulkWriteOperation, Types } from "mongoose";
-import { get, map } from "lodash";
+import { AnyBulkWriteOperation, PaginateOptions, Types, PaginateResult } from "mongoose";
+import { get, isArray, map, reduce } from "lodash";
+import { PaginationArgs } from "@inputs/query.input";
+import { AdditionalServicePaginationPayload } from "@payloads/additionalService.payloads";
 
 @Resolver(AdditionalService)
 export default class AdditionalServiceResolver {
@@ -109,19 +111,37 @@ export default class AdditionalServiceResolver {
       throw errors;
     }
   }
-  @Query(() => [AdditionalService])
+
+  @Query(() => AdditionalServicePaginationPayload)
   @UseMiddleware(AuthGuard(["admin"]))
-  async getAdditionalServices(): Promise<AdditionalService[]> {
+  async getAdditionalServices(
+    @Args() { name, ...query }: AdditionalServiceQueryArgs,
+    @Args() { sortField, sortAscending, ...paginationArgs }: PaginationArgs
+  ): Promise<AdditionalServicePaginationPayload> {
     try {
-      const additionalServices = await AdditionalServiceModel.find().sort({
-        permanent: -1,
-      });
+      const pagination: PaginateOptions = {
+        ...paginationArgs,
+        ...(isArray(sortField)
+          ? {
+            sort: reduce(
+              sortField,
+              function (result, value) {
+                return { ...result, [value]: sortAscending ? 1 : -1 };
+              },
+              {}
+            ),
+          }
+          : {}),
+      };
+
+      const additionalServices = await AdditionalServiceModel.paginate({ ...query, ...(name ? { name: { $regex: name, $options: 'i' } } : {}) }, pagination) as AdditionalServicePaginationPayload
       if (!additionalServices) {
         const message = `ไม่สามารถเรียกข้อมูลบริการเสริมได้`;
         throw new GraphQLError(message, {
           extensions: { code: "NOT_FOUND", errors: [{ message }] },
         });
       }
+
       return additionalServices;
     } catch (error) {
       console.log("error: ", error);

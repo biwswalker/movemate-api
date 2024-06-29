@@ -73,11 +73,11 @@ export default class RegisterResolver {
     return true;
   }
 
-  @Mutation(() => User)
+  @Mutation(() => Boolean)
   async register(
     @Arg("data") data: RegisterInput,
     @Ctx() ctx: GraphQLContext
-  ): Promise<User> {
+  ): Promise<boolean> {
     const {
       userType,
       password,
@@ -166,7 +166,7 @@ export default class RegisterResolver {
           },
         });
 
-        return user;
+        return true;
       }
 
       /**
@@ -188,7 +188,7 @@ export default class RegisterResolver {
         ) {
           const cashDetail = businessDetail.paymentCashDetail;
           const cashPayment = new BusinessCustomerCashPaymentModel({
-            acceptedEreceiptDate: cashDetail.acceptedEReceiptDate,
+            acceptedEReceiptDate: cashDetail.acceptedEReceiptDate,
           });
 
           await cashPayment.save();
@@ -220,23 +220,17 @@ export default class RegisterResolver {
           await user.save();
 
           // Email sender
-          // await emailTranspoter.sendMail({
-          //   from: process.env.NOREPLY_EMAIL,
-          //   to: businessDetail.businessEmail,
-          //   subject: "ยืนยันการสมัครสมาชิก Movemate!",
-          //   template: "register_business",
-          //   context: {
-          //     business_title: businessDetail.businessTitle,
-          //     business_name: businessDetail.businessName,
-          //     username: userNumber,
-          //     password: generatedPassword,
-          //     logo: imageUrl,
-          //     activate_link: `https://api.movemateth.com/activate/customer/${userNumber}`,
-          //     movemate_link: `https://www.movematethailand.com`,
-          //   },
-          // });
-
-          return user;
+          await emailTranspoter.sendMail({
+            from: process.env.NOREPLY_EMAIL,
+            to: businessDetail.businessEmail,
+            subject: "การลงทะเบียนรอการอนุมัติ",
+            template: "register_business_waiting_approve",
+            context: {
+              logo: imageUrl,
+              movemate_link: `https://www.movematethailand.com`,
+            },
+          });
+          return true;
         } else if (
           businessDetail.paymentMethod === "credit" &&
           businessDetail.paymentCreditDetail
@@ -245,6 +239,7 @@ export default class RegisterResolver {
           const _defaultCreditLimit = 20000.0;
           const _billedDate = 1;
           const _billedRound = 15;
+
           const {
             businessRegistrationCertificateFile,
             copyIDAuthorizedSignatoryFile,
@@ -375,13 +370,24 @@ export default class RegisterResolver {
 
           await user.save();
 
-          return user;
+          // Email sender
+          await emailTranspoter.sendMail({
+            from: process.env.NOREPLY_EMAIL,
+            to: businessDetail.businessEmail,
+            subject: "การลงทะเบียนรอการอนุมัติ",
+            template: "register_business_waiting_approve",
+            context: {
+              logo: imageUrl,
+              movemate_link: `https://www.movematethailand.com`,
+            },
+          });
+          return true;
         } else {
           throw new Error("ไม่พบข้อมูลการชำระ กรุณาติดต่อผู้ดูแลระบบ");
         }
       }
 
-      return null;
+      return false;
     } catch (error) {
       console.log(error);
       throw error;

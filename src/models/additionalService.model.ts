@@ -11,7 +11,9 @@ import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { AdditionalServiceDescription } from "./additionalServiceDescription.model";
 import { filter, isEqual, reduce } from "lodash";
 import { VehicleType } from "./vehicleType.model";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
+import mongoosePagination from 'mongoose-paginate-v2'
+import aggregatePaginate from 'mongoose-aggregate-paginate-v2'
 
 enum EServiceType {
   SERVICES = "services",
@@ -24,6 +26,8 @@ enum EServiceStatus {
 }
 
 @plugin(mongooseAutoPopulate)
+@plugin(mongoosePagination)
+@plugin(aggregatePaginate)
 @ObjectType()
 export class AdditionalService extends TimeStamps {
   @Field(() => ID)
@@ -91,6 +95,8 @@ export class AdditionalService extends TimeStamps {
 
     return additionalServicesFilter;
   }
+  static paginate: mongoose.PaginateModel<typeof AdditionalService>['paginate']
+  static aggregatePaginate: mongoose.AggregatePaginateModel<typeof AdditionalService>['aggregatePaginate']
 }
 
 const AdditionalServiceModel = getModelForClass(AdditionalService);
