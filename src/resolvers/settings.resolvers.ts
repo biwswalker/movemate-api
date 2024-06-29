@@ -66,15 +66,12 @@ export default class SettingsResolver {
         }
     }
 
-    @Query(() => SettingContactUs)
+    @Query(() => SettingContactUs, { nullable: true })
     async getContactusInfo(): Promise<SettingContactUs> {
         try {
             const settingContactUs = await SettingContactUsModel.find();
             if (!settingContactUs) {
-                const message = `ไม่สามารถเรียกข้อมูลการติดต่อได้`;
-                throw new GraphQLError(message, {
-                    extensions: { code: "NOT_FOUND", errors: [{ message }] },
-                });
+                return null
             }
             return settingContactUs[0];
         } catch (error) {
@@ -129,15 +126,12 @@ export default class SettingsResolver {
     }
 
 
-    @Query(() => SettingAboutus)
+    @Query(() => SettingAboutus, { nullable: true })
     async getAboutusInfo(): Promise<SettingAboutus> {
         try {
             const settingAboutus = await SettingAboutusModel.find();
             if (!settingAboutus) {
-                const message = `ไม่สามารถเรียกข้อมูลเกี่ยวกับได้`;
-                throw new GraphQLError(message, {
-                    extensions: { code: "NOT_FOUND", errors: [{ message }] },
-                });
+                return null
             }
             return settingAboutus[0];
         } catch (error) {
@@ -302,10 +296,7 @@ export default class SettingsResolver {
         try {
             const settingBusinessTypes = await SettingBusinessTypeModel.findAvailable()
             if (!settingBusinessTypes) {
-                const message = `ไม่สามารถเรียกข้อมูลประเภทธุรกิจได้`;
-                throw new GraphQLError(message, {
-                    extensions: { code: "NOT_FOUND", errors: [{ message }] },
-                });
+                return []
             }
             return settingBusinessTypes;
         } catch (error) {
@@ -342,10 +333,7 @@ export default class SettingsResolver {
         try {
             const settingFAQs = await SettingFAQModel.find()
             if (!settingFAQs) {
-                const message = `ไม่สามารถเรียกข้อมูลคำถามที่พบบ่อยได้`;
-                throw new GraphQLError(message, {
-                    extensions: { code: "NOT_FOUND", errors: [{ message }] },
-                });
+                return []
             }
             return settingFAQs;
         } catch (error) {
@@ -382,10 +370,7 @@ export default class SettingsResolver {
         try {
             const settingInstruction = await SettingInstructionModel.find()
             if (!settingInstruction) {
-                const message = `ไม่สามารถเรียกข้อมูลคำแนะนำได้`;
-                throw new GraphQLError(message, {
-                    extensions: { code: "NOT_FOUND", errors: [{ message }] },
-                });
+                return []
             }
             return settingInstruction;
         } catch (error) {

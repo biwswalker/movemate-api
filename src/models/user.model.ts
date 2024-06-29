@@ -129,7 +129,7 @@ export class User extends TimeStamps {
 
   @Field({ nullable: true })
   @Property()
-  acceptPolicyTime: string;
+  acceptPolicyTime: Date;
 
   @Field()
   @Property({ default: Date.now })

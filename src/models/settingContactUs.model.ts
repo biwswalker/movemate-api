@@ -42,6 +42,14 @@ export class SettingContactUs {
     @Property()
     lineLink: string
 
+    @Field({ nullable: true })
+    @Property()
+    linkedin: string
+
+    @Field({ nullable: true })
+    @Property()
+    linkedinLink: string
+
     @Field(() => [UpdateHistory], { nullable: true })
     @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
     history: Ref<UpdateHistory>[];

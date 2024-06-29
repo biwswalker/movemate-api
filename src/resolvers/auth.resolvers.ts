@@ -22,6 +22,15 @@ export default class AuthResolver {
                 throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
             }
 
+            if (user.status === 'pending' && !user.isVerifiedEmail) {
+                const email = user.userType === 'individual'
+                    ? get(user, "individualDetail.email", '')
+                    : user.userType === 'business'
+                        ? get(user, 'businessDetail.businessEmail', '') : ''
+                const message = `บัญชี ${email} ยังไม่ได้ยืนยันอีเมล โปรดยืนยันอีเมลก่อน หากไม่ได้รับอีเมลโปรดติดต่อเจ้าหน้าที่`
+                throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })
+            }
+
             const validateResult = await user.validatePassword(hashedPassword)
 
             if (!validateResult) {

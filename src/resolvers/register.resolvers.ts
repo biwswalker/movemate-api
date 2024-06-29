@@ -131,7 +131,7 @@ export default class RegisterResolver {
 
         const user = new UserModel({
           userRole: "customer",
-          status: 'active',
+          status: 'pending',
           validationStatus: 'pending',
           userNumber,
           userType,

@@ -17,7 +17,7 @@ export class RegisterInput {
   acceptPolicyVersion: number;
 
   @Field()
-  acceptPolicyTime: string;
+  acceptPolicyTime: Date;
 
   @Field(() => RegisterIndividualInput, { nullable: true })
   individualDetail: RegisterIndividualInput;

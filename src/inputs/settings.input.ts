@@ -28,6 +28,12 @@ export class SettingContactUsInput {
 
     @Field()
     lineLink: string
+
+    @Field()
+    linkedin: string
+
+    @Field()
+    linkedinLink: string
 }
 
 @InputType()
