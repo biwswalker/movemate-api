@@ -12,7 +12,16 @@ export class SettingContactUsInput {
     taxId: string
 
     @Field()
-    email: string
+    email1: string
+
+    @Field()
+    email1Detail: string
+
+    @Field()
+    email2: string
+
+    @Field()
+    email2Detail: string
 
     @Field()
     phoneNumber: string

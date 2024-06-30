@@ -20,7 +20,19 @@ export class SettingContactUs {
 
     @Field({ nullable: true })
     @Property()
-    email: string
+    email1: string
+
+    @Field({ nullable: true })
+    @Property()
+    email1Detail: string
+
+    @Field({ nullable: true })
+    @Property()
+    email2: string
+
+    @Field({ nullable: true })
+    @Property()
+    email2Detail: string
 
     @Field({ nullable: true })
     @Property()

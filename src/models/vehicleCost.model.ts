@@ -79,7 +79,10 @@ export class VehicleCost extends TimeStamps {
     });
 
 
-    const filterNoConfig = filter(vehicleCosts, (cost) => !isEmpty(cost.distance))
+    const filterNoConfig = filter(vehicleCosts, (cost) => {
+      const isPublic = get(cost, 'vehicleType.isPublic', false)
+      return !isEmpty(cost.distance) && isPublic
+    })
 
     return filterNoConfig;
   }
