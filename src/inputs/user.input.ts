@@ -123,4 +123,17 @@ export class GetCustomersArgs {
 
   @Field({ nullable: true })
   isVerifiedPhoneNumber: boolean;
+
+  // Other
+  @Field({ nullable: true })
+  email: string
+
+  @Field({ nullable: true })
+  name: string
+
+  @Field({ nullable: true })
+  phoneNumber: string
+
+  @Field({ nullable: true })
+  taxId: string
 }

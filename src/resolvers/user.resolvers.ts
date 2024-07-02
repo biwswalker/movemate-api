@@ -13,7 +13,7 @@ import UserModel, { User } from "@models/user.model";
 import { GetCustomersArgs } from "@inputs/user.input";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
-import { find, get, includes, isArray, isEmpty, isEqual, omit, reduce } from "lodash";
+import { find, get, includes, isArray, isEmpty, map, omit, omitBy, reduce } from "lodash";
 import { UserPaginationAggregatePayload } from "@payloads/user.payloads";
 import { PaginateOptions } from "mongoose";
 import { PaginationArgs } from "@inputs/query.input";
@@ -62,15 +62,27 @@ export default class UserResolver {
           : {}),
       };
 
-
-      const aggregate = UserModel.aggregate(GET_USERS(query))
+      const filterQuery = omitBy(query, isEmpty)
+      const aggregate = UserModel.aggregate(GET_USERS(filterQuery))
       const users = (await UserModel.aggregatePaginate(aggregate, pagination)) as UserPaginationAggregatePayload
-      // const users = (await UserModel.paginate(
-      //   options,
-      //   pagination
-      // )) as UserPaginationPayload;
 
       return users;
+    } catch (error) {
+      console.log(error);
+      throw new GraphQLError("ไม่สามารถเรียกรายการลูกค้าได้ โปรดลองอีกครั้ง");
+    }
+  }
+
+  @Query(() => [String])
+  @UseMiddleware(AuthGuard(["admin"]))
+  async alluserIds(@Args() query: GetCustomersArgs): Promise<string[]> {
+    try {
+      const filterQuery = omitBy(query, isEmpty)
+      const users = (await UserModel.aggregate(GET_USERS(filterQuery)))
+      const ids = map(users, ({ _id }) => _id)
+      console.log('users: ', ids)
+
+      return ids;
     } catch (error) {
       console.log(error);
       throw new GraphQLError("ไม่สามารถเรียกรายการลูกค้าได้ โปรดลองอีกครั้ง");
