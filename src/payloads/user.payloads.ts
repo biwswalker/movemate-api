@@ -10,6 +10,12 @@ export class AuthPayload {
 
     @Field(() => User)
     user: User
+    
+    @Field()
+    requireAcceptedPolicy: boolean
+    
+    @Field()
+    requirePasswordChange: boolean
 }
 
 @ObjectType()

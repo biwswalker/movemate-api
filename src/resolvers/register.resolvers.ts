@@ -18,6 +18,9 @@ import { GraphQLError } from "graphql";
 import FileModel from "@models/file.model";
 import { CutomerBusinessInput, CutomerIndividualInput } from "@inputs/customer.input";
 import { decryption } from "@utils/encryption";
+import { BusinessCustomerSchema, IndividualCustomerSchema } from "@validations/customer.validations";
+import { ValidationError } from "yup";
+import { yupValidationThrow } from "@utils/error.utils";
 
 @Resolver(User)
 export default class RegisterResolver {
@@ -144,6 +147,7 @@ export default class RegisterResolver {
           acceptPolicyVersion,
           acceptPolicyTime,
           individualDetail: individualCustomer,
+          isChangePasswordRequire: false
         });
 
         await user.save();
@@ -400,8 +404,9 @@ export default class RegisterResolver {
     @Arg("data") data: CutomerIndividualInput,
     @Ctx() ctx: GraphQLContext
   ): Promise<User> {
-    const { email, profileImage, ...formValue } = data;
+    const { email, profileImage, status, ...formValue } = data;
     try {
+      await IndividualCustomerSchema().validate(data, { abortEarly: false })
       // Check if the user already exists
       const platform = ctx.req.headers["platform"];
       if (isEmpty(platform)) {
@@ -415,9 +420,6 @@ export default class RegisterResolver {
         join(__dirname, "..", "assets", "email_logo.png")
       );
       const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`);
-
-      // Check existing email
-      await this.isExistingEmail(email);
 
       const rawPassword =
         generateRandomNumberPattern("MMPWD########").toLowerCase();
@@ -444,8 +446,8 @@ export default class RegisterResolver {
         ...formValue,
         userRole: "customer",
         userType: 'individual',
-        status: 'active',
         validationStatus: 'approve',
+        status,
         userNumber,
         username: data.email,
         profileImage: image,
@@ -476,9 +478,12 @@ export default class RegisterResolver {
       });
 
       return user;
-    } catch (error) {
-      console.log(error);
-      throw error;
+    } catch (errors) {
+      console.log("error: ", errors);
+      if (errors instanceof ValidationError) {
+        throw yupValidationThrow(errors);
+      }
+      throw errors;
     }
   }
 
@@ -490,6 +495,7 @@ export default class RegisterResolver {
   ): Promise<User> {
     const { businessEmail, profileImage, creditPayment, cashPayment, ...formValue } = data;
     try {
+      await BusinessCustomerSchema().validate(data, { abortEarly: false })
       // Check if the user already exists
       const platform = ctx.req.headers["platform"];
       if (isEmpty(platform)) {
@@ -503,9 +509,6 @@ export default class RegisterResolver {
         join(__dirname, "..", "assets", "email_logo.png")
       );
       const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`);
-
-      // Check existing email
-      await this.isExistingEmail(businessEmail, 'businessEmail');
 
       const rawPassword =
         generateRandomNumberPattern("MMPWD########").toLowerCase();
@@ -580,7 +583,6 @@ export default class RegisterResolver {
         ...formValue,
         userRole: "customer",
         userType: 'business',
-        status: 'active',
         validationStatus: 'approve',
         userNumber,
         username: userNumber,
@@ -617,9 +619,12 @@ export default class RegisterResolver {
       console.log('return user: ', user)
 
       return user;
-    } catch (error) {
-      console.log(error);
-      throw error;
+    } catch (errors) {
+      console.log("error: ", errors);
+      if (errors instanceof ValidationError) {
+        throw yupValidationThrow(errors);
+      }
+      throw errors;
     }
   }
 

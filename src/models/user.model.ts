@@ -159,6 +159,9 @@ export class User extends TimeStamps {
   @Property({ autopopulate: true, ref: 'BusinessCustomer' })
   upgradeRequest?: Ref<BusinessCustomer>
 
+  @Property({ required: false, default: true })
+  isChangePasswordRequire: boolean;
+
   async validatePassword(password: string): Promise<boolean> {
     const password_decryption = decryption(password)
     return bcrypt.compare(password_decryption, this.password);

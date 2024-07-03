@@ -1,14 +1,27 @@
 import UserModel from "@models/user.model";
 import Yup from "./yup";
 import { isEmpty, isEqual } from "lodash";
+import IndividualCustomerModel from "@models/customerIndividual.model";
+import BusinessCustomerModel from "@models/customerBusiness.model";
 
-export const UserSchema = (userId: string) => Yup.object().shape({
-    email: Yup.string().email('ระบุในรูปแบบอีเมลเท่านั้น').required('ระบุอีเมล').test('exiting-email', 'อีเมลซ้ำ', async (value) => {
-        const individualResult = await UserModel.existingEmail(userId, value, 'individual')
-        const businessResult = await UserModel.existingEmail(userId, value, 'business')
+export const IndividualCustomerSchema = (userId?: string) => Yup.object().shape({
+    userType: Yup.string(),
+    remark: Yup.string(),
+    status: Yup.string(),
+    email: Yup.string().email('ระบุในรูปแบบอีเมลเท่านั้น').required('ระบุอีเมล').test('exiting-email', 'อีเมลถูกใช้งานแล้ว', async (value) => {
+        if (userId) {
+            const individualResult = await UserModel.existingEmail(userId, value, 'individual')
+            const businessResult = await UserModel.existingEmail(userId, value, 'business')
+            return !individualResult && !businessResult
+        }
+        const individualResult = await IndividualCustomerModel.findOne({ email: value })
+        const businessResult = await BusinessCustomerModel.findOne({ businessEmail: value })
         return !individualResult && !businessResult
     }),
     title: Yup.string().required('กรุณาเลือกคำนำหน้าชื่อ'),
+    otherTitle: Yup.string().when('title', ([title], schema) =>
+        isEqual(title, 'other') ? schema.required('ระบุคำนำหน้าชื่อ') : schema.notRequired(),
+    ),
     firstname: Yup.string().required('ระบุชื่อ'),
     lastname: Yup.string().required('ระบุนามสกุล'),
     phoneNumber: Yup.string()
@@ -23,11 +36,8 @@ export const UserSchema = (userId: string) => Yup.object().shape({
     province: Yup.string(),
     district: Yup.string(),
     subDistrict: Yup.string(),
-    postcode: Yup.string().notRequired(),
-    // .min(5, 'รหัสไปรษณีย์ 5 หลัก')
-    // .max(5, 'รหัสไปรษณีย์ 5 หลัก'),
-    profileImage: Yup.mixed(),
-    afterSubmit: Yup.string(),
+    postcode: Yup.string().minmaxNoRequire(5, 5, 'รหัสไปรษณีย์ 5 หลัก'),
+    profileImage: Yup.mixed()
 })
 
 const creditMethodValidation: any =
@@ -109,16 +119,21 @@ const CreditPaymentSchema = Yup.object().shape({
     certificateValueAddedTaxRegistrationFile: Yup.mixed(),
 })
 
-export const BusinessCustomerSchema = (userId: string) => Yup.object().shape({
+export const BusinessCustomerSchema = (userId?: string) => Yup.object().shape({
     userType: Yup.string(),
     remark: Yup.string(),
     isVerifiedEmail: Yup.boolean(),
     isVerifiedPhoneNumber: Yup.boolean(),
     status: Yup.string().required('ระบุสถานะ'),
     profileImage: Yup.mixed(),
-    businessEmail: Yup.string().email('ระบุในรูปแบบอีเมลเท่านั้น').required('ระบุอีเมล').test('exiting-email', 'อีเมลซ้ำ', async (value) => {
-        const individualResult = await UserModel.existingEmail(userId, value, 'individual')
-        const businessResult = await UserModel.existingEmail(userId, value, 'business')
+    businessEmail: Yup.string().email('ระบุในรูปแบบอีเมลเท่านั้น').required('ระบุอีเมล').test('exiting-email', 'อีเมลถูกใช้งานแล้ว', async (value) => {
+        if (userId) {
+            const individualResult = await UserModel.existingEmail(userId, value, 'individual')
+            const businessResult = await UserModel.existingEmail(userId, value, 'business')
+            return !individualResult && !businessResult
+        }
+        const individualResult = await IndividualCustomerModel.findOne({ email: value })
+        const businessResult = await BusinessCustomerModel.findOne({ businessEmail: value })
         return !individualResult && !businessResult
     }),
     businessTitle: Yup.string().required('กรุณาเลือกคำนำหน้าบริษัท/องค์กร'),

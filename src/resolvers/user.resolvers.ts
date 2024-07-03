@@ -33,7 +33,7 @@ import { SafeString } from 'handlebars'
 import { generateId, generateRandomNumberPattern, getCurrentHost } from "@utils/string.utils";
 import bcrypt from "bcrypt";
 import { GET_USERS } from "@pipelines/user.pipeline";
-import { BusinessCustomerSchema, UserSchema } from "@validations/customer.validations";
+import { BusinessCustomerSchema, IndividualCustomerSchema } from "@validations/customer.validations";
 import { ValidationError } from "yup";
 import { yupValidationThrow } from "@utils/error.utils";
 import BusinessCustomerCashPaymentModel from "@models/customerBusinessCashPayment.model";
@@ -141,7 +141,7 @@ export default class UserResolver {
       }
 
       if (id) {
-        await UserSchema(id).validate(data, { abortEarly: false })
+        await IndividualCustomerSchema(id).validate(data, { abortEarly: false })
         const userModel = await UserModel.findById(id);
         if (!userModel) {
           const message =
