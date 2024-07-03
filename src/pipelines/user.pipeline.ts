@@ -1,5 +1,5 @@
 import { GetCustomersArgs } from "@inputs/user.input"
-import { PipelineStage } from "mongoose"
+import { PipelineStage, Types } from "mongoose"
 
 export const GET_USERS = ({ email, name, phoneNumber, taxId, userNumber, username, ...query }: Partial<GetCustomersArgs>): PipelineStage[] => {
 
@@ -39,13 +39,22 @@ export const GET_USERS = ({ email, name, phoneNumber, taxId, userNumber, usernam
     return [
         {
             $match: {
-                ...query,
-                ...(userNumber
-                    ? { userNumber: { $regex: userNumber, $options: "i" } }
-                    : {}),
-                ...(username
-                    ? { username: { $regex: username, $options: "i" } }
-                    : {}),
+                $or: [
+                    {
+                        ...query,
+                        ...(userNumber
+                            ? { userNumber: { $regex: userNumber, $options: "i" } }
+                            : {}),
+                        ...(username
+                            ? { username: { $regex: username, $options: "i" } }
+                            : {}),
+                    },
+                    ...((query.userType === 'business' && query.status === 'pending') || (query.userType === 'business' && query.status === undefined) ? [{
+                        userType: 'individual',
+                        validationStatus: 'pending',
+                        upgradeRequest: { $ne: null }
+                    }] : [])
+                ]
             }
         },
         {
@@ -90,6 +99,51 @@ export const GET_USERS = ({ email, name, phoneNumber, taxId, userNumber, usernam
         {
             $unwind: {
                 path: "$businessDetail",
+                preserveNullAndEmptyArrays: true
+            }
+        },
+        {
+            $lookup: {
+                from: "businesscustomers",
+                localField: "upgradeRequest",
+                foreignField: "_id",
+                as: "upgradeRequest",
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "businesscustomercreditpayments",
+                            localField: "creditPayment",
+                            foreignField: "_id",
+                            as: "creditPayment"
+                        }
+                    },
+                    {
+                        $unwind: {
+                            path: "$creditPayment",
+                            preserveNullAndEmptyArrays: true
+                        }
+                    },
+                    {
+                        $lookup: {
+                            from: "businesscustomercashpayments",
+                            localField:
+                                "cashPayment",
+                            foreignField: "_id",
+                            as: "cashPayment"
+                        }
+                    },
+                    {
+                        $unwind: {
+                            path: "$cashPayment",
+                            preserveNullAndEmptyArrays: true
+                        }
+                    },
+                ]
+            }
+        },
+        {
+            $unwind: {
+                path: "$upgradeRequest",
                 preserveNullAndEmptyArrays: true
             }
         },
@@ -155,3 +209,51 @@ export const GET_USERS = ({ email, name, phoneNumber, taxId, userNumber, usernam
         { $match: detailMatch }
     ]
 }
+
+export const EXISTING_USERS = (_id: string, email: string, userType: TUserType, userRole: TUserRole) => [
+    {
+        $match: {
+            _id: { $ne: new Types.ObjectId(_id) },
+            userRole,
+            userType,
+        }
+    },
+    ...(userRole === 'customer'
+        ? userType === 'individual'
+            ? [
+                {
+                    $lookup: {
+                        from: "individualcustomers",
+                        localField: "individualDetail",
+                        foreignField: "_id",
+                        as: "individualDetail"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$individualDetail",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                { $match: { "individualDetail.email": email } }
+            ]
+            : [
+                {
+                    $lookup: {
+                        from: "businesscustomers",
+                        localField: "businessDetail",
+                        foreignField: "_id",
+                        as: "businessDetail"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$businessDetail",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                { $match: { "businessDetail.businessEmail": email } }
+            ]
+        : [])
+
+]

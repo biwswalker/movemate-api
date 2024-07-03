@@ -13,6 +13,7 @@ import { File } from "./file.model"
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { decryption } from "@utils/encryption";
 import { isEmpty } from "lodash";
+import { EXISTING_USERS } from "@pipelines/user.pipeline";
 
 enum EUserRole {
   CUSTOMER = 'customer',
@@ -171,13 +172,8 @@ export class User extends TimeStamps {
     return UserModel.findOne({ username });
   }
 
-  static async existingEmail(_id: string, email: string, path: 'individual' | 'business' | 'admin'): Promise<boolean> {
-    const populatePath = path === 'individual' ? 'individualDetail' : path === 'business' ? 'businessDetail' : path === 'admin' ? 'adminDetail' : ''
-    const emailKeyName = (path === 'individual' || path === 'admin') ? 'email' : path === 'business' ? 'businessEmail' : ''
-    const exiting = await UserModel.findOne({ _id: { $ne: _id }, userRole: path }).populate({
-      path: populatePath,
-      match: { [emailKeyName]: email },
-    })
+  static async existingEmail(_id: string, email: string, userType: TUserType, userRole: TUserRole): Promise<boolean> {
+    const exiting = await UserModel.aggregate(EXISTING_USERS(_id, email, userType, userRole))
     return !isEmpty(exiting)
   }
 

@@ -22,7 +22,7 @@ import {
   CutomerBusinessInput,
   CutomerIndividualInput,
 } from "@inputs/customer.input";
-import CustomerIndividualModel from "@models/customerIndividual.model";
+import CustomerIndividualModel, { IndividualCustomer } from "@models/customerIndividual.model";
 import FileModel from "@models/file.model";
 import BusinessCustomerModel, { BusinessCustomer } from "@models/customerBusiness.model";
 import BusinessCustomerCreditPaymentModel from "@models/customerBusinessCreditPayment.model";
@@ -341,16 +341,15 @@ export default class UserResolver {
         throw new AuthenticationError("ไม่พบผู้ใช้");
       }
       const customer = await UserModel.findById(id).exec();
+      const individualDetail: IndividualCustomer | null = get(customer, 'individualDetail', null)
       const businessDetail: BusinessCustomer | null = get(customer, 'businessDetail', null)
+      const upgradeRequest: BusinessCustomer | null = get(customer, 'upgradeRequest', null)
+      const businesData: BusinessCustomer | null = customer.userType === 'individual' ? upgradeRequest : businessDetail
 
       if (!customer) {
         throw new AuthenticationError("ไม่พบผู้ใช้");
       }
 
-      // Check is Business customer?
-      if (customer.userType !== 'business') {
-        throw new GraphQLError("ประเภทผู้ใช้ไม่สามารถทำรายการได้")
-      }
       // Check pending status
       if (customer.validationStatus !== 'pending') {
         throw new GraphQLError("ผู้ใช้ท่านนี้มีการอนุมัติเรียบร้อยแล้ว")
@@ -360,7 +359,7 @@ export default class UserResolver {
         throw new InvalidDirectiveError('สถานะไม่ถูกต้อง')
       }
       // Check Business Detail
-      if (typeof businessDetail !== 'object') {
+      if (typeof businesData !== 'object') {
         throw new InvalidDirectiveError('ไม่พบข้อมูลธุระกิจ')
       }
 
@@ -376,49 +375,85 @@ export default class UserResolver {
         { value: 'Part', label: 'หจก.' },
         { value: 'Pub', label: 'บมจ.' },
       ]
-      const businessTitleName = find(BUSINESS_TITLE_NAME_OPTIONS, ['value', businessDetail.businessTitle])
+
+      const businessTitleName = find(BUSINESS_TITLE_NAME_OPTIONS, ['value', businesData.businessTitle])
 
       if (result === 'approve') {
         const rawPassword = generateRandomNumberPattern("MMPWD########").toLowerCase();
         const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
-        // Update user
-        await customer.updateOne({ status, validationStatus: result, password: hashedPassword })
-
-        const host = getCurrentHost(ctx)
-        const activate_link = `${host}/api/v1/activate/customer/${customer.userNumber}`
-        const movemate_link = `https://www.movematethailand.com`
-        await emailTranspoter.sendMail({
-          from: process.env.NOREPLY_EMAIL,
-          to: businessDetail.businessEmail,
-          subject: "บัญชี Movemate ของท่านได้รับการอนุมัติ",
-          template: "register_business",
-          context: {
-            business_title: get(businessTitleName, 'label', ''),
-            business_name: businessDetail.businessName,
-            username: customer.username,
-            password: rawPassword,
-            logo: imageUrl,
-            activate_link,
-            movemate_link,
-          },
-        });
+        if (customer.userType === 'individual') {
+          const userNumber = await generateId("MMBU", 'business');
+          const newBusinessDetail = {
+            userNumber,
+            username: userNumber,
+            userType: 'business',
+            businessDetail: businesData,
+            upgradeRequest: null,
+            isChangePasswordRequire: true,
+          }
+          await customer.updateOne({ status, validationStatus: result, password: hashedPassword, ...newBusinessDetail })
+          const movemate_link = `https://www.movematethailand.com`
+          await emailTranspoter.sendMail({
+            from: process.env.NOREPLY_EMAIL,
+            to: businesData.businessEmail,
+            subject: "บัญชี Movemate ของท่านได้รับการอนุมัติ",
+            template: "register_business_upgrade",
+            context: {
+              business_title: get(businessTitleName, 'label', ''),
+              business_name: businesData.businessName,
+              username: userNumber,
+              password: rawPassword,
+              logo: imageUrl,
+              movemate_link,
+            },
+          });
+        } else {
+          await customer.updateOne({ status, validationStatus: result, password: hashedPassword })
+          const host = getCurrentHost(ctx)
+          const activate_link = `${host}/api/v1/activate/customer/${customer.userNumber}`
+          const movemate_link = `https://www.movematethailand.com`
+          await emailTranspoter.sendMail({
+            from: process.env.NOREPLY_EMAIL,
+            to: businesData.businessEmail,
+            subject: "บัญชี Movemate ของท่านได้รับการอนุมัติ",
+            template: "register_business",
+            context: {
+              business_title: get(businessTitleName, 'label', ''),
+              business_name: businesData.businessName,
+              username: customer.username,
+              password: rawPassword,
+              logo: imageUrl,
+              activate_link,
+              movemate_link,
+            },
+          });
+        }
       } else {
         // Update user
-        await customer.updateOne({ status, validationStatus: result })
+        const newBusinessDetail = customer.userType === 'individual' ? {
+          upgradeRequest: null,
+          validationStatus: 'pending',
+          status: 'active'
+        } : {}
+
+        const sentemail = customer.userType === 'individual' ? individualDetail.email : businesData.businessEmail
+
+        await customer.updateOne({ status, validationStatus: result, ...newBusinessDetail })
         await emailTranspoter.sendMail({
           from: process.env.NOREPLY_EMAIL,
-          to: businessDetail.businessEmail,
+          to: sentemail,
           subject: "บัญชี Movemate ของท่านไม่ได้รับการอนุมัติ",
           template: "register_rejected_account",
           context: {
             business_title: get(businessTitleName, 'label', ''),
-            business_name: businessDetail.businessName,
+            business_name: businesData.businessName,
             logo: imageUrl,
             movemate_link: `https://www.movematethailand.com`,
           },
         });
       }
+      // TODO: Add Notification for result
 
       return customer;
     } catch (error) {

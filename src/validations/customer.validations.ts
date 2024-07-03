@@ -10,8 +10,8 @@ export const IndividualCustomerSchema = (userId?: string) => Yup.object().shape(
     status: Yup.string(),
     email: Yup.string().email('ระบุในรูปแบบอีเมลเท่านั้น').required('ระบุอีเมล').test('exiting-email', 'อีเมลถูกใช้งานแล้ว', async (value) => {
         if (userId) {
-            const individualResult = await UserModel.existingEmail(userId, value, 'individual')
-            const businessResult = await UserModel.existingEmail(userId, value, 'business')
+            const individualResult = await UserModel.existingEmail(userId, value, 'individual', 'customer')
+            const businessResult = await UserModel.existingEmail(userId, value, 'business', 'customer')
             return !individualResult && !businessResult
         }
         const individualResult = await IndividualCustomerModel.findOne({ email: value })
@@ -128,8 +128,8 @@ export const BusinessCustomerSchema = (userId?: string) => Yup.object().shape({
     profileImage: Yup.mixed(),
     businessEmail: Yup.string().email('ระบุในรูปแบบอีเมลเท่านั้น').required('ระบุอีเมล').test('exiting-email', 'อีเมลถูกใช้งานแล้ว', async (value) => {
         if (userId) {
-            const individualResult = await UserModel.existingEmail(userId, value, 'individual')
-            const businessResult = await UserModel.existingEmail(userId, value, 'business')
+            const individualResult = await UserModel.existingEmail(userId, value, 'individual', 'customer')
+            const businessResult = await UserModel.existingEmail(userId, value, 'business', 'customer')
             return !individualResult && !businessResult
         }
         const individualResult = await IndividualCustomerModel.findOne({ email: value })
