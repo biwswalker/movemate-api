@@ -14,11 +14,12 @@ import { GetCustomersArgs } from "@inputs/user.input";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
 import { find, get, includes, isArray, isEmpty, map, omit, omitBy, reduce } from "lodash";
-import { UserPaginationAggregatePayload } from "@payloads/user.payloads";
+import { RequireDataBeforePayload, UserPaginationAggregatePayload } from "@payloads/user.payloads";
 import { PaginateOptions } from "mongoose";
 import { PaginationArgs } from "@inputs/query.input";
 import { GraphQLError } from "graphql";
 import {
+  AcceptedPolicyInput,
   CutomerBusinessInput,
   CutomerIndividualInput,
 } from "@inputs/customer.input";
@@ -37,6 +38,8 @@ import { BusinessCustomerSchema, IndividualCustomerSchema } from "@validations/c
 import { ValidationError } from "yup";
 import { yupValidationThrow } from "@utils/error.utils";
 import BusinessCustomerCashPaymentModel from "@models/customerBusinessCashPayment.model";
+import SettingCustomerPoliciesModel from "@models/settingCustomerPolicies.model";
+import SettingDriverPoliciesModel from "@models/settingDriverPolicies.model";
 
 @Resolver(User)
 export default class UserResolver {
@@ -120,6 +123,48 @@ export default class UserResolver {
       }
 
       return user;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  @Query(() => RequireDataBeforePayload)
+  @UseMiddleware(AuthGuard(["customer", "admin", "driver"]))
+  async requireBeforeSignin(@Ctx() ctx: GraphQLContext): Promise<RequireDataBeforePayload> {
+    try {
+      const userId = ctx.req.user_id;
+      if (!userId) {
+        throw new AuthenticationError("ไม่พบผู้ใช้");
+      }
+      const user = await UserModel.findById(userId);
+      if (!user) {
+        throw new AuthenticationError("ไม่พบผู้ใช้");
+      }
+
+      // Check policy
+      let requireAcceptedPolicy = true
+      if (user.userRole === 'customer') {
+        const settingCustomerPolicies = await SettingCustomerPoliciesModel.find();
+        const policyVersion = get(settingCustomerPolicies, '0.version', 0)
+        if (user.acceptPolicyVersion >= policyVersion) {
+          requireAcceptedPolicy = false
+        } else {
+          requireAcceptedPolicy = true
+        }
+      } else if (user.userRole === 'driver') {
+        const settingDriverPolicies = await SettingDriverPoliciesModel.find();
+        const policyVersion = get(settingDriverPolicies, '0.version', 0)
+        if (user.acceptPolicyVersion >= policyVersion) {
+          requireAcceptedPolicy = false
+        } else {
+          requireAcceptedPolicy = true
+        }
+      }
+
+      return {
+        requireAcceptedPolicy,
+        requirePasswordChange: user.isChangePasswordRequire
+      };
     } catch (error) {
       throw error;
     }
@@ -595,4 +640,52 @@ export default class UserResolver {
       throw errors;
     }
   }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(["customer", 'driver']))
+  async acceptedPolicy(
+    @Arg("data") data: AcceptedPolicyInput,
+    @Ctx() ctx: GraphQLContext
+  ): Promise<boolean> {
+    try {
+      const userId = ctx.req.user_id;
+      if (userId) {
+        if (data.version <= 0) {
+          const message =
+            "ข้อมูลไม่ครบ โปรลองอีกครั้ง";
+          throw new GraphQLError(message);
+        }
+
+        const userModel = await UserModel.findById(userId);
+        if (!userModel) {
+          const message =
+            "ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน";
+          throw new GraphQLError(message, {
+            extensions: {
+              code: "NOT_FOUND",
+              errors: [{ message }],
+            },
+          });
+        }
+
+        await userModel.updateOne({ acceptPolicyVersion: data.version, acceptPolicyTime: new Date() })
+        return true;
+      }
+      const message =
+        "ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน";
+      throw new GraphQLError(message, {
+        extensions: {
+          code: "NOT_FOUND",
+          errors: [{ message }],
+        },
+      });
+    } catch (errors) {
+      console.log("error: ", errors);
+      if (errors instanceof ValidationError) {
+        throw yupValidationThrow(errors);
+      }
+      throw errors;
+    }
+  }
+
 }

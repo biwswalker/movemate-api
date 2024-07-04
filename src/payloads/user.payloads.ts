@@ -10,13 +10,24 @@ export class AuthPayload {
 
     @Field(() => User)
     user: User
-    
+
     @Field()
     requireAcceptedPolicy: boolean
-    
+
     @Field()
     requirePasswordChange: boolean
 }
+
+@ObjectType()
+export class RequireDataBeforePayload {
+    @Field()
+    requireAcceptedPolicy: boolean
+
+    @Field()
+    requirePasswordChange: boolean
+}
+
+
 
 @ObjectType()
 export class UserPaginationPayload extends PaginationPayload implements PaginateResult<User> {

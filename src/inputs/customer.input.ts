@@ -409,3 +409,18 @@ export class CutomerBusinessInput {
   @Field({ nullable: true })
   acceptedTermConditionDate?: Date
 }
+
+@InputType()
+export class AcceptedPolicyInput {
+  @Field(() => Int)
+  version: number
+}
+
+@InputType()
+export class PasswordChangeInput {
+  @Field()
+  password: string
+
+  @Field()
+  confirmPassword: string
+}

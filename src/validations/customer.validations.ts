@@ -163,3 +163,15 @@ export const BusinessCustomerSchema = (userId?: string) => Yup.object().shape({
     cashPayment: CashPaymentSchema,
     creditPayment: CreditPaymentSchema,
 })
+
+export const ChangePasswordSchema = Yup.object().shape({
+    password: Yup.string()
+        .matches(/^[a-zA-Z0-9_.-]*$/, 'รหัสผ่านสามารถระบุตัวเลขและตัวอักษร ห้ามมีสัญลักษณ์')
+        .min(8, 'รหัสผ่านจำเป็นต้องมี 8 ตัวขึ้นไป')
+        .required('รหัสผ่านสามารถระบุตัวเลขและตัวอักษร ห้ามมีสัญลักษณ์'),
+    confirmPassword: Yup.string()
+        .matches(/^[a-zA-Z0-9_.-]*$/, 'รหัสผ่านสามารถระบุตัวเลขและตัวอักษร ห้ามมีสัญลักษณ์')
+        .min(8, 'รหัสผ่านจำเป็นต้องมี 8 ตัวขึ้นไป')
+        .required('รหัสผ่านยืนยันสามารถระบุตัวเลขและตัวอักษร ห้ามมีสัญลักษณ์')
+        .oneOf([Yup.ref('password')], 'รหัสผ่านไม่ตรงกัน'),
+})
