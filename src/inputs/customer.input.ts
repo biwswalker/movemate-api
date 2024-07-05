@@ -1,5 +1,5 @@
 import { IsEmail } from "class-validator";
-import { Field, Float, InputType, Int } from "type-graphql";
+import { ArgsType, Field, Float, InputType, Int } from "type-graphql";
 import { FileInput } from "./file.input";
 @InputType()
 export class RegisterIndividualInput {
@@ -423,4 +423,16 @@ export class PasswordChangeInput {
 
   @Field()
   confirmPassword: string
+}
+
+@ArgsType()
+export class ResetPasswordInput {
+  @Field()
+  email: string
+
+  @Field()
+  code: string
+
+  @Field()
+  password: string
 }

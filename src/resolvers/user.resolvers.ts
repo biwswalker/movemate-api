@@ -13,7 +13,7 @@ import UserModel, { User } from "@models/user.model";
 import { GetCustomersArgs } from "@inputs/user.input";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
-import { find, get, includes, isArray, isEmpty, map, omit, omitBy, reduce } from "lodash";
+import { find, get, includes, isArray, isEmpty, isEqual, map, omit, omitBy, reduce } from "lodash";
 import { RequireDataBeforePayload, UserPaginationAggregatePayload } from "@payloads/user.payloads";
 import { PaginateOptions } from "mongoose";
 import { PaginationArgs } from "@inputs/query.input";
@@ -22,6 +22,7 @@ import {
   AcceptedPolicyInput,
   CutomerBusinessInput,
   CutomerIndividualInput,
+  ResetPasswordInput,
 } from "@inputs/customer.input";
 import CustomerIndividualModel, { IndividualCustomer } from "@models/customerIndividual.model";
 import FileModel from "@models/file.model";
@@ -31,7 +32,7 @@ import { email_sender } from "@utils/email.utils";
 import imageToBase64 from "image-to-base64";
 import { join } from 'path'
 import { SafeString } from 'handlebars'
-import { generateId, generateRandomNumberPattern, getCurrentHost } from "@utils/string.utils";
+import { generateId, generateOTP, generateRandomNumberPattern, getCurrentHost } from "@utils/string.utils";
 import bcrypt from "bcrypt";
 import { GET_USERS } from "@pipelines/user.pipeline";
 import { BusinessCustomerSchema, IndividualCustomerSchema } from "@validations/customer.validations";
@@ -40,6 +41,9 @@ import { yupValidationThrow } from "@utils/error.utils";
 import BusinessCustomerCashPaymentModel from "@models/customerBusinessCashPayment.model";
 import SettingCustomerPoliciesModel from "@models/settingCustomerPolicies.model";
 import SettingDriverPoliciesModel from "@models/settingDriverPolicies.model";
+import { VerifyPayload } from "@payloads/verify.payloads";
+import { addMinutes, addSeconds } from "date-fns";
+import { decryption } from "@utils/encryption";
 
 @Resolver(User)
 export default class UserResolver {
@@ -642,7 +646,7 @@ export default class UserResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(["customer", 'driver']))
+  @UseMiddleware(AuthGuard(["customer"]))
   async acceptedPolicy(
     @Arg("data") data: AcceptedPolicyInput,
     @Ctx() ctx: GraphQLContext
@@ -688,4 +692,98 @@ export default class UserResolver {
     }
   }
 
+  @Mutation(() => VerifyPayload)
+  async forgotPassword(@Arg("email") email: string): Promise<VerifyPayload> {
+    try {
+      if (email) {
+        const user = await UserModel.findCustomerByEmail(email)
+        if (!user) {
+          const message = "ไม่สามารถเรียกข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน";
+          throw new GraphQLError(message, { extensions: { code: "NOT_FOUND", errors: [{ message }] } });
+        }
+
+        const emailTranspoter = email_sender();
+        const code = generateOTP()
+
+        const currentDate = new Date()
+        const resend_countdown = addSeconds(currentDate, 45)
+        const reset_time = addMinutes(currentDate, 30)
+
+        await UserModel.findByIdAndUpdate(user._id, { resetPasswordCode: code, lastestResetPassword: reset_time })
+        const movemate_link = `https://www.movematethailand.com`
+        await emailTranspoter.sendMail({
+          from: process.env.NOREPLY_EMAIL,
+          to: email,
+          subject: "ยืนยันตัวตนคุณ",
+          template: "forgot_password",
+          context: {
+            code,
+            movemate_link,
+          },
+        });
+        return {
+          countdown: resend_countdown,
+          duration: '45s',
+        }
+      }
+      const message =
+        "ไม่สามารถรีเซ็ทรหัสผ่านได้ เนื่องจากไม่พบอีเมลผู้ใช้งาน";
+      throw new GraphQLError(message, {
+        extensions: {
+          code: "NOT_FOUND",
+          errors: [{ message }],
+        },
+      });
+    } catch (errors) {
+      console.log("error: ", errors);
+      if (errors instanceof ValidationError) {
+        throw yupValidationThrow(errors);
+      }
+      throw errors;
+    }
+  }
+
+  @Mutation(() => Boolean)
+  async verifyResetPassword(@Args() data: ResetPasswordInput): Promise<boolean> {
+    try {
+      const user = await UserModel.findCustomerByEmail(data.email)
+      if (!user) {
+        const message =
+          "ไม่สามารถเรียกข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน";
+        throw new GraphQLError(message, {
+          extensions: {
+            code: "NOT_FOUND",
+            errors: [{ message }],
+          },
+        });
+      }
+      // Prepare Email
+      const emailTranspoter = email_sender();
+      // TODO: Verify time range
+
+      // Verify code
+      if (!isEmpty(user.resetPasswordCode) && isEqual(data.code, user.resetPasswordCode)) {
+        // Decryption password from frontend
+        const password_decryption = decryption(data.password)
+        const hashedPassword = await bcrypt.hash(password_decryption, 10);
+        // Save password and return
+        await UserModel.findByIdAndUpdate(user._id, { password: hashedPassword, resetPasswordCode: null })
+        // Email sender
+        const movemate_link = `https://www.movematethailand.com`
+        await emailTranspoter.sendMail({
+          from: process.env.NOREPLY_EMAIL,
+          to: data.email,
+          subject: "เปลี่ยนรหัสผ่านบัญชีสำเร็จ",
+          template: "passwordchanged",
+          context: { movemate_link },
+        });
+        return true
+      }
+      const message = "รหัสไม่ถูกต้อง";
+      throw new GraphQLError(message, { extensions: { code: "NOT_MATCH", errors: [{ message }] } });
+
+    } catch (error) {
+      throw error;
+    }
+  }
 }

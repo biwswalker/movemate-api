@@ -13,7 +13,7 @@ import { File } from "./file.model"
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { decryption } from "@utils/encryption";
 import { isEmpty } from "lodash";
-import { EXISTING_USERS } from "@pipelines/user.pipeline";
+import { EXISTING_USERS, GET_CUSTOMER_BY_EMAIL } from "@pipelines/user.pipeline";
 
 enum EUserRole {
   CUSTOMER = 'customer',
@@ -163,6 +163,12 @@ export class User extends TimeStamps {
   @Property({ required: false, default: true })
   isChangePasswordRequire: boolean;
 
+  @Property()
+  lastestResetPassword?: Date;
+
+  @Property()
+  resetPasswordCode?: string;
+
   async validatePassword(password: string): Promise<boolean> {
     const password_decryption = decryption(password)
     return bcrypt.compare(password_decryption, this.password);
@@ -170,6 +176,11 @@ export class User extends TimeStamps {
 
   static async findByUsername(username: string): Promise<User | null> {
     return UserModel.findOne({ username });
+  }
+
+  static async findCustomerByEmail(email: string): Promise<User | null> {
+    const user = await UserModel.aggregate(GET_CUSTOMER_BY_EMAIL(email))
+    return user.length > 0 ? user[0] : null
   }
 
   static async existingEmail(_id: string, email: string, userType: TUserType, userRole: TUserRole): Promise<boolean> {

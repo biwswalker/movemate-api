@@ -257,3 +257,42 @@ export const EXISTING_USERS = (_id: string, email: string, userType: TUserType, 
         : [])
 
 ]
+
+export const GET_CUSTOMER_BY_EMAIL = (email: string) => [
+    {
+        $lookup: {
+            from: 'individualcustomers',
+            localField: 'individualDetail',
+            foreignField: '_id',
+            as: 'individualDetail'
+        }
+    },
+    {
+        $lookup: {
+            from: 'businesscustomers',
+            localField: 'businessDetail',
+            foreignField: '_id',
+            as: 'businessDetail'
+        }
+    },
+    {
+        $match: {
+            $or: [
+                { 'individualDetail.email': email },
+                { 'businessDetail.businessEmail': email }
+            ]
+        }
+    },
+    {
+        $unwind: {
+            path: '$individualDetail',
+            preserveNullAndEmptyArrays: true
+        }
+    },
+    {
+        $unwind: {
+            path: '$businessDetail',
+            preserveNullAndEmptyArrays: true
+        }
+    }
+]
