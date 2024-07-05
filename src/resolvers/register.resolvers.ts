@@ -11,9 +11,6 @@ import { GraphQLContext } from "@configs/graphQL.config";
 import { get, isEmpty, isEqual, omit } from "lodash";
 import { generateId, generateRandomNumberPattern, getCurrentHost } from "@utils/string.utils";
 import { email_sender } from "@utils/email.utils";
-import imageToBase64 from "image-to-base64";
-import { join } from "path";
-import { SafeString } from "handlebars";
 import { GraphQLError } from "graphql";
 import FileModel from "@models/file.model";
 import { CutomerBusinessInput, CutomerIndividualInput } from "@inputs/customer.input";
@@ -101,12 +98,6 @@ export default class RegisterResolver {
       // Prepare email sender
       const emailTranspoter = email_sender();
 
-      // Conver image path to base64 image
-      const base64Image = await imageToBase64(
-        join(__dirname, "..", "assets", "email_logo.png")
-      );
-      const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`);
-
       // Exist email
       const email = isEqual(userType, "individual")
         ? get(individualDetail, "email", "")
@@ -164,7 +155,6 @@ export default class RegisterResolver {
           context: {
             fullname: individualCustomer.fullname,
             username: individualDetail.email,
-            logo: imageUrl,
             activate_link,
             movemate_link,
           },
@@ -229,10 +219,7 @@ export default class RegisterResolver {
             to: businessDetail.businessEmail,
             subject: "การลงทะเบียนรอการอนุมัติ",
             template: "register_business_waiting_approve",
-            context: {
-              logo: imageUrl,
-              movemate_link: `https://www.movematethailand.com`,
-            },
+            context: { movemate_link: `https://www.movematethailand.com` },
           });
           return true;
         } else if (
@@ -380,10 +367,7 @@ export default class RegisterResolver {
             to: businessDetail.businessEmail,
             subject: "การลงทะเบียนรอการอนุมัติ",
             template: "register_business_waiting_approve",
-            context: {
-              logo: imageUrl,
-              movemate_link: `https://www.movematethailand.com`,
-            },
+            context: { movemate_link: `https://www.movematethailand.com` },
           });
           return true;
         } else {
@@ -415,11 +399,6 @@ export default class RegisterResolver {
 
       // Prepare email sender
       const emailTranspoter = email_sender();
-      // Conver image path to base64 image
-      const base64Image = await imageToBase64(
-        join(__dirname, "..", "assets", "email_logo.png")
-      );
-      const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`);
 
       const rawPassword =
         generateRandomNumberPattern("MMPWD########").toLowerCase();
@@ -471,7 +450,6 @@ export default class RegisterResolver {
           fullname: customer.fullname,
           username: email,
           password: rawPassword,
-          logo: imageUrl,
           activate_link,
           movemate_link,
         },
@@ -504,11 +482,6 @@ export default class RegisterResolver {
 
       // Prepare email sender
       const emailTranspoter = email_sender();
-      // Conver image path to base64 image
-      const base64Image = await imageToBase64(
-        join(__dirname, "..", "assets", "email_logo.png")
-      );
-      const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`);
 
       const rawPassword =
         generateRandomNumberPattern("MMPWD########").toLowerCase();
@@ -610,7 +583,6 @@ export default class RegisterResolver {
           business_name: customer.businessName,
           username: userNumber,
           password: rawPassword,
-          logo: imageUrl,
           activate_link,
           movemate_link,
         },

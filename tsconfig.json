@@ -15,9 +15,8 @@
       "@utils/*": ["utils/*"],
       "@services/*": ["services/*"],
       "@apis/*": ["apis/*"],
-      "@assets/*": ["assets/*"],
       "@validations/*": ["validations/*"],
-      "@pipelines/*": ["pipelines/*"],
+      "@pipelines/*": ["pipelines/*"]
     },
     "target": "es6",
     "module": "Node16",
@@ -36,5 +35,5 @@
   "exclude": ["node_modules", "dist"],
   "ts-node": {
     "require": ["tsconfig-paths/register"]
-  },
+  }
 }

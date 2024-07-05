@@ -5,9 +5,6 @@ import UserModel from '@models/user.model'
 import { GraphQLError } from 'graphql'
 import { IndividualCustomer } from '@models/customerIndividual.model'
 import { email_sender } from '@utils/email.utils'
-import imageToBase64 from 'image-to-base64'
-import { join } from 'path'
-import { SafeString } from 'handlebars'
 import { generateOTP, generateRef, getCurrentHost } from '@utils/string.utils'
 import { addMinutes } from 'date-fns'
 import { VerifyOTPPayload, VerifyPayload } from '@payloads/verify.payloads'
@@ -37,15 +34,9 @@ export default class VerifyAccountResolver {
             }
 
             const emailTranspoter = email_sender();
-            // Conver image path to base64 image
-            const base64Image = await imageToBase64(join(__dirname, '..', 'assets', 'email_logo.png'))
-            const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`)
-
             const host = getCurrentHost(ctx)
             const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
             const movemate_link = `https://www.movematethailand.com`
-
-
 
             let email = ''
             let fullname = ''
@@ -78,7 +69,6 @@ export default class VerifyAccountResolver {
                 context: {
                     fullname,
                     username: user.username,
-                    logo: imageUrl,
                     activate_link,
                     movemate_link,
                 },

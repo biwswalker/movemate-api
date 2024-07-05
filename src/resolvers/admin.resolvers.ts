@@ -11,9 +11,6 @@ import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
 import { generateId, getCurrentHost } from "@utils/string.utils";
 import { email_sender } from "@utils/email.utils";
-import imageToBase64 from 'image-to-base64'
-import { join } from 'path'
-import { SafeString } from 'handlebars'
 import { GraphQLError } from 'graphql'
 import AdminModel from "@models/admin.model";
 import { AddAdminInput } from "@inputs/admin.input";
@@ -31,9 +28,6 @@ export default class AdminResolver {
         try {
             // Prepare email sender
             const emailTranspoter = email_sender()
-            // Conver image path to base64 image
-            const base64Image = await imageToBase64(join(__dirname, '..', 'assets', 'email_logo.png'))
-            const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`)
             // Exist email
             if (email) {
                 const isExistingEmail = await AdminModel.findOne({ email })
@@ -94,7 +88,6 @@ export default class AdminResolver {
                     fullname: admin.fullname,
                     username: userNumber,
                     password: userPassword.toLowerCase(),
-                    logo: imageUrl,
                     activate_link,
                     movemate_link,
                 }

@@ -29,9 +29,6 @@ import FileModel from "@models/file.model";
 import BusinessCustomerModel, { BusinessCustomer } from "@models/customerBusiness.model";
 import BusinessCustomerCreditPaymentModel from "@models/customerBusinessCreditPayment.model";
 import { email_sender } from "@utils/email.utils";
-import imageToBase64 from "image-to-base64";
-import { join } from 'path'
-import { SafeString } from 'handlebars'
 import { generateId, generateOTP, generateRandomNumberPattern, getCurrentHost } from "@utils/string.utils";
 import bcrypt from "bcrypt";
 import { GET_USERS } from "@pipelines/user.pipeline";
@@ -414,9 +411,6 @@ export default class UserResolver {
 
       // Prepare email sender
       const emailTranspoter = email_sender();
-      // Conver image path to base64 image
-      const base64Image = await imageToBase64(join(__dirname, '..', 'assets', 'email_logo.png'))
-      const imageUrl = new SafeString(`data:image/png;base64,${base64Image}`)
       const status = result === 'approve' ? 'active' : 'denied'
       // Title name
       const BUSINESS_TITLE_NAME_OPTIONS = [
@@ -453,7 +447,6 @@ export default class UserResolver {
               business_name: businesData.businessName,
               username: userNumber,
               password: rawPassword,
-              logo: imageUrl,
               movemate_link,
             },
           });
@@ -472,7 +465,6 @@ export default class UserResolver {
               business_name: businesData.businessName,
               username: customer.username,
               password: rawPassword,
-              logo: imageUrl,
               activate_link,
               movemate_link,
             },
@@ -497,7 +489,6 @@ export default class UserResolver {
           context: {
             business_title: get(businessTitleName, 'label', ''),
             business_name: businesData.businessName,
-            logo: imageUrl,
             movemate_link: `https://www.movematethailand.com`,
           },
         });
