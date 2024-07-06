@@ -14,6 +14,7 @@ import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { decryption } from "@utils/encryption";
 import { isEmpty } from "lodash";
 import { EXISTING_USERS, GET_CUSTOMER_BY_EMAIL } from "@pipelines/user.pipeline";
+import { Notification } from "./notification.model";
 
 enum EUserRole {
   CUSTOMER = 'customer',
@@ -168,6 +169,10 @@ export class User extends TimeStamps {
 
   @Property()
   resetPasswordCode?: string;
+
+  @Field(() => [Notification], { nullable: true })
+  @Property({ ref: () => Notification, default: [] })
+  notifications: Ref<Notification>[];
 
   async validatePassword(password: string): Promise<boolean> {
     const password_decryption = decryption(password)

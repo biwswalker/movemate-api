@@ -18,6 +18,7 @@ import PricingResolver from "@resolvers/pricing.resolvers";
 import BookingResolver from "@resolvers/booking.resolvers";
 import SettingsResolver from "@resolvers/settings.resolvers";
 import VerifyAccountResolver from "@resolvers/verify.resolvers";
+import NotificationResolver from "@resolvers/notification.resolvers";
 
 export interface GraphQLContext {
     req: Request
@@ -41,6 +42,7 @@ export async function createGraphQLServer(httpServer: http.Server) {
             BookingResolver,
             SettingsResolver,
             VerifyAccountResolver,
+            NotificationResolver,
         ],
         authChecker: ({ context }: { context: GraphQLContext }) => {
             const userId = get(context, 'req.userId', '')

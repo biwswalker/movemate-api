@@ -41,6 +41,8 @@ import SettingDriverPoliciesModel from "@models/settingDriverPolicies.model";
 import { VerifyPayload } from "@payloads/verify.payloads";
 import { addMinutes, addSeconds } from "date-fns";
 import { decryption } from "@utils/encryption";
+import NotificationModel from "@models/notification.model";
+import { fDateTime } from "@utils/formatTime";
 
 @Resolver(User)
 export default class UserResolver {
@@ -450,6 +452,15 @@ export default class UserResolver {
               movemate_link,
             },
           });
+          await NotificationModel.sendNotification({
+            userId: customer._id,
+            varient: 'success',
+            title: 'บัญชีของท่านได้รับการอัพเกรดแล้ว',
+            message: [`บัญชี ${userNumber} ได้อัพเกรดเป็นรูปแบบ corporate แล้ว ท่านสามารถใช้งานได้ในขณะนี้`],
+            infoText: 'ดูโปรไฟล์',
+            infoLink: '/main/profile',
+          })
+
         } else {
           await customer.updateOne({ status, validationStatus: result, password: hashedPassword })
           const host = getCurrentHost(ctx)
@@ -492,9 +503,16 @@ export default class UserResolver {
             movemate_link: `https://www.movematethailand.com`,
           },
         });
-      }
-      // TODO: Add Notification for result
 
+        if (customer.userType === 'individual') {
+          await NotificationModel.sendNotification({
+            userId: customer._id,
+            varient: 'error',
+            title: 'การอัพเกรดบัญชีไม่ได้รับการอนุมัติ',
+            message: [`บัญชี ${businesData.businessName} ไม่ผ่านพิจารณาการอัพเกรดเป็นรูปแบบ corporate หากมีข้อสงสัยโปรดติดต่อเรา`],
+          })
+        }
+      }
       return customer;
     } catch (error) {
       throw error;
@@ -768,6 +786,14 @@ export default class UserResolver {
           template: "passwordchanged",
           context: { movemate_link },
         });
+        // Notification
+        const currentTime = fDateTime(new Date())
+        await NotificationModel.sendNotification({
+          userId: user._id,
+          varient: 'master',
+          title: 'เปลี่ยนรหัสผ่านบัญชีสำเร็จ',
+          message: [`บัญชีของท่านถูกเปลี่ยนรหัสผ่านเมื่อเวลา ${currentTime} หากมีข้อสงสัยโปรดติดต่อเรา`],
+        })
         return true
       }
       const message = "รหัสไม่ถูกต้อง";
