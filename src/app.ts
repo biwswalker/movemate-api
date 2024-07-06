@@ -7,13 +7,14 @@ import { connectToMongoDB } from "@configs/mongodb.config";
 import { createGraphQLServer } from "@configs/graphQL.config";
 import { authenticateTokenAccessImage } from "@guards/auth.guards";
 import { graphqlUploadExpress } from "graphql-upload-ts";
-import initialGoogleOAuth from "@configs/google.config";
+import { requestCounter, requestDuration } from '@configs/metrics'
 import api_v1 from "@apis/v1";
 import bodyParser from "body-parser";
 import morgan from 'morgan'
 import cors from "cors";
 import http from 'http'
 import "reflect-metadata";
+import limiter from "@configs/rateLimit";
 
 morgan.token('graphql-query', (req: Request) => {
   const ip = req.ip || undefined
@@ -34,18 +35,18 @@ async function server() {
   const app = express();
   const httpServer = http.createServer(app)
 
-  console.log('ENV: ', process.env.NODE_ENV)
+  const environment = process.env.NODE_ENV
   const alllowedCors = cors<cors.CorsRequest>({
     maxAge: 600,
     credentials: true,
     methods: ['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS'],
     origin: [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'https://movmateth.space',
-      'https://admin.movmateth.space',
       'https://movematethailand.com',
       'https://admin.movematethailand.com',
+      ...(environment === 'development' ? [
+        'http://localhost:3000',
+        'http://localhost:3001',
+      ] : [])
     ],
   })
   app.use(alllowedCors);
@@ -54,6 +55,19 @@ async function server() {
   app.use(bodyParser.urlencoded({ extended: false }));
   app.use(graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }));
   app.use("/source", authenticateTokenAccessImage, express.static("uploads"));
+  app.use(limiter)
+  app.use((req, res, next) => {
+    const end = requestDuration.startTimer()
+    res.on('finish', () => {
+      requestCounter.inc({
+        method: req.method,
+        route: req.path,
+        status: res.statusCode
+      })
+      end({ method: req.method, route: req.path, status: res.statusCode })
+    })
+    next()
+  })
 
   app.engine("hbs", engine({ extname: ".hbs", defaultLayout: false }));
   app.set("view engine", "hbs");
@@ -63,7 +77,6 @@ async function server() {
 
   await connectToMongoDB();
   await server.start();
-  await initialGoogleOAuth();
 
   app.use('/graphql', alllowedCors, express.json(), expressMiddleware(server, {
     context: async ({ req, res }) => ({ req, res }),

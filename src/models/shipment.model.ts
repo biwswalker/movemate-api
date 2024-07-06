@@ -24,7 +24,7 @@ enum EIssueType {
 
 @ObjectType()
 @modelOptions({ options: { allowMixed: Severity.ALLOW } })
-export class Route {
+export class ShipmentRoute {
     @Field()
     name: string
 
@@ -96,11 +96,11 @@ export class Shipment {
 
     @Field()
     @Property({ required: true })
-    origin: Route
+    origin: ShipmentRoute
 
-    @Field(() => [Route])
+    @Field(() => [ShipmentRoute])
     @Property({ required: true, allowMixed: Severity.ALLOW })
-    destinations: Route[]
+    destinations: ShipmentRoute[]
 
     @Field(() => ShipmentPricing)
     @Property({ ref: () => ShipmentPricing, required: true })
