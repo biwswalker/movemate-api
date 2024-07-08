@@ -1,4 +1,4 @@
-import { ArgsType, Field, Float } from "type-graphql"
+import { ArgsType, Field, Float, InputType } from "type-graphql"
 
 @ArgsType()
 export class SearchLocationsArgs {
@@ -10,4 +10,13 @@ export class SearchLocationsArgs {
 
     @Field()
     query: string
+}
+
+@InputType()
+export class LocationInput {
+    @Field(() => Float)
+    latitude: number
+
+    @Field(() => Float)
+    longitude: number
 }

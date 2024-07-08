@@ -7,14 +7,12 @@ import { connectToMongoDB } from "@configs/mongodb.config";
 import { createGraphQLServer } from "@configs/graphQL.config";
 import { authenticateTokenAccessImage } from "@guards/auth.guards";
 import { graphqlUploadExpress } from "graphql-upload-ts";
-import { requestCounter, requestDuration } from '@configs/metrics'
 import api_v1 from "@apis/v1";
 import bodyParser from "body-parser";
 import morgan from 'morgan'
 import cors from "cors";
 import http from 'http'
 import "reflect-metadata";
-import limiter from "@configs/rateLimit";
 
 morgan.token('graphql-query', (req: Request) => {
   const ip = req.ip || undefined
@@ -55,19 +53,6 @@ async function server() {
   app.use(bodyParser.urlencoded({ extended: false }));
   app.use(graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }));
   app.use("/source", authenticateTokenAccessImage, express.static("uploads"));
-  app.use(limiter)
-  app.use((req, res, next) => {
-    const end = requestDuration.startTimer()
-    res.on('finish', () => {
-      requestCounter.inc({
-        method: req.method,
-        route: req.path,
-        status: res.statusCode
-      })
-      end({ method: req.method, route: req.path, status: res.statusCode })
-    })
-    next()
-  })
 
   app.engine("hbs", engine({ extname: ".hbs", defaultLayout: false }));
   app.set("view engine", "hbs");

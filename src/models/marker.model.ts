@@ -6,6 +6,10 @@ import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses"
 export class Marker extends TimeStamps {
     @Field()
     @Property()
+    placeId: string;
+
+    @Field()
+    @Property()
     displayName: string;
 
     @Field()
