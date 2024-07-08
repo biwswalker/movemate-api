@@ -1,8 +1,7 @@
 import { Resolver, Query, UseMiddleware, Arg, Args, Ctx } from 'type-graphql'
 import { AllowGuard } from '@guards/auth.guards'
-import { getAutocomplete, getCalculateRoute, getGeocode, getPlaceLocationDetail } from '@services/maps/location'
+import { getAutocomplete, getGeocode, getPlaceLocationDetail, getRoute } from '@services/maps/location'
 import logger from '@configs/logger'
-import { loadCache, saveCache } from '@configs/cache'
 import { GraphQLError } from 'graphql'
 import { LocationAutocomplete } from '@models/locationAutocomplete.model'
 import { LocationInput, SearchLocationsArgs } from '@inputs/location.input'
@@ -90,20 +89,12 @@ export default class LocationResolver {
         @Arg('destinations', () => [LocationInput]) destinations: LocationInput[],
     ): Promise<DirectionsResult> {
         try {
-            const cacheType = 'routes';
-            const key = `${origin}:${destinations.join(':')}`;
-            const cached = await loadCache(cacheType, key);
-            if (cached) {
-                logger.info('Cache hit for calculateRoute');
-                return cached;
-            }
-
-            const routes = await getCalculateRoute(origin, destinations)
-            await saveCache(cacheType, key, routes)
+            const routes = await getRoute(origin, destinations)
             return routes
         } catch (error) {
-            logger.error(`Error in calculateRoute: ${error}`);
-            throw new Error('Failed to calculate route');
+            console.log('error', error)
+            logger.error(`Error in searchLocations: `, error);
+            throw new GraphQLError(error.message)
         }
     }
 }

@@ -45,34 +45,37 @@ class DirectionsStep {
     @Field(() => Duration, { nullable: true })
     duration?: Duration // google.maps.Duration;
 
-    @Field()
+    @Field({ nullable: true })
     encoded_lat_lngs: string;
 
-    @Field(() => GraphQLJSONObject)
+    @Field(() => GraphQLJSONObject, { nullable: true })
     end_location: any // google.maps.LatLng;
 
-    @Field(() => GraphQLJSONObject)
+    @Field(() => GraphQLJSONObject, { nullable: true })
     end_point: any // google.maps.LatLng;
 
-    @Field()
-    instructions: string;
+    @Field({ nullable: true })
+    instructions?: string;
 
-    @Field(() => [GraphQLJSONObject])
+    @Field({ nullable: true })
+    html_instructions?: string;
+
+    @Field(() => [GraphQLJSONObject], { nullable: true })
     lat_lngs: any[] // google.maps.LatLng[];
 
-    @Field()
+    @Field({ nullable: true })
     maneuver: string;
 
-    @Field(() => [GraphQLJSONObject])
+    @Field(() => [GraphQLJSONObject], { nullable: true })
     path: any[] // google.maps.LatLng[];
 
     @Field(() => DirectionsPolyline, { nullable: true })
     polyline?: DirectionsPolyline // google.maps.DirectionsPolyline;
 
-    @Field(() => GraphQLJSONObject)
+    @Field(() => GraphQLJSONObject, { nullable: true })
     start_location: any // google.maps.LatLng;
 
-    @Field(() => GraphQLJSONObject)
+    @Field(() => GraphQLJSONObject, { nullable: true })
     start_point: any // google.maps.LatLng;
     /**
      * Sub-steps of this step. Specified for non-transit sections of transit
@@ -87,7 +90,7 @@ class DirectionsStep {
     @Field(() => GraphQLJSONObject, { nullable: true })
     transit_details?: any // google.maps.TransitDetails;
 
-    @Field(() => String)
+    @Field(() => String, { nullable: true })
     travel_mode: string // google.maps.TravelMode;
 }
 
@@ -127,7 +130,7 @@ class DirectionsLeg {
     @Field(() => [GraphQLJSONObject])
     traffic_speed_entry: any[];
 
-    @Field(() => [GraphQLJSONObject])
+    @Field(() => [GraphQLJSONObject], { nullable: true })
     via_waypoints: any[] // google.maps.LatLng[];
 }
 
@@ -147,11 +150,11 @@ class DirectionsRoute {
     @Field(() => [DirectionsLeg], { nullable: true })
     legs?: DirectionsLeg[];
 
-    @Field(() => [GraphQLJSONObject])
+    @Field(() => [GraphQLJSONObject], { nullable: true })
     overview_path: any[] // google.maps.LatLng[];
 
-    @Field()
-    overview_polyline: string;
+    @Field(() => GraphQLJSONObject)
+    overview_polyline: any;
 
     @Field()
     summary: string;
@@ -174,6 +177,9 @@ export class DirectionsResult {
     @Field(() => GraphQLJSONObject, { nullable: true })
     request?: any // google.maps.DirectionsRequest
 
-    @Field(() => [DirectionsRoute], { nullable: true })
-    routes: DirectionsRoute[];
+    @Field(() => [GraphQLJSONObject], { nullable: true })
+    routes: any[];
+
+    @Field({ nullable: true })
+    status?: string
 }

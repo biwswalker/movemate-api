@@ -7,7 +7,6 @@ import http from 'http'
 import AuthResolver from '@resolvers/auth.resolvers'
 import UserResolver from '@resolvers/user.resolvers'
 import ShipmentResolver from "@resolvers/shipment.resolvers";
-import MapsResolver from "@resolvers/maps.resolvers";
 import FileResolver from "@resolvers/file.resolvers";
 import PingResolver from "@resolvers/ping.resolvers";
 import AdminResolver from "@resolvers/admin.resolvers";
@@ -32,7 +31,6 @@ export async function createGraphQLServer(httpServer: http.Server) {
             AuthResolver,
             UserResolver,
             ShipmentResolver,
-            MapsResolver,
             FileResolver,
             PingResolver,
             AdminResolver,

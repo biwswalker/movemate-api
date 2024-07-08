@@ -1,5 +1,5 @@
 import axios from "axios";
-import { GOOGLEAPI_AUTOCOMPLETE, GOOGLEAPI_DIRECTIONS, GOOGLEAPI_GEOCODE, GOOGLEAPI_PLACE_DETAIL } from "./constants";
+import { GOOGLEAPI_AUTOCOMPLETE, GOOGLEAPI_DIRECTIONS, GOOGLEAPI_GEOCODE, GOOGLEAPI_PLACE_DETAIL, GOOGLEAPI_ROUTE_DIRECTIONS } from "./constants";
 import { get, map } from 'lodash'
 import MarkerModel, { Marker } from "@models/marker.model";
 import LocationAutocompleteModel, { LocationAutocomplete } from "@models/locationAutocomplete.model";
@@ -87,7 +87,6 @@ export async function getPlaceLocationDetail(placeId: string, session?: string):
     const headers = { 'X-Goog-Api-Key': process.env.GOOGLE_MAP_API_KEY }
     const response = await axios.get<google.maps.places.Place>(`${GOOGLEAPI_PLACE_DETAIL}/${placeId}`, { params, headers })
 
-    console.log('response.data : ', response.data)
     const { displayName, formattedAddress, location } = response.data
 
     const marker = new MarkerModel({
@@ -141,7 +140,18 @@ export async function getGeocode(latitude: number, longitude: number, session?: 
     return places
 }
 
-export async function getCalculateRoute(origin: LocationInput, destinations: LocationInput[]) {
+// TODO: Can not using with Client
+export async function getRoute(origin: LocationInput, destinations: LocationInput[]) {
+    // Get cache
+    const cacheType = 'routes';
+    const key = `${origin.latitude}:${origin.longitude}:${destinations.map(desti => `${desti.latitude}:${desti.longitude}`).join(':')}`;
+    const cached = await loadCache(cacheType, key);
+    if (cached) {
+        logger.info('Cache hit for getRoute');
+        console.log('cached:', JSON.stringify(cached))
+        return cached;
+    }
+    // ------
 
     const originStr = `${origin.latitude},${origin.longitude}`;
     const waypointsStrArray = destinations.map(point => `${point.latitude},${point.longitude}`)
@@ -163,9 +173,40 @@ export async function getCalculateRoute(origin: LocationInput, destinations: Loc
         },
     });
 
-    console.log('response.data: ', response.data.routes)
+    const data = response.data
+    console.log('\n', JSON.stringify(data), '\n')
+    await saveCache(cacheType, key, data)
+    return data
+}
 
-    return response.data
+// Unused
+export async function getRouteCompute(origin: LocationInput, destinations: LocationInput[]) {
+    const waypoints = destinations.slice(0, -1)
+    const destination = destinations[destinations.length - 1];
+
+    const data = {
+        origin: { location: { latLng: origin } },
+        destination: { location: { latLng: destination } },
+        ...(waypoints ? { intermediates: waypoints.map((point) => ({ location: { latLng: point } })) } : {}),
+        travelMode: "DRIVE",
+        routeModifiers: {
+            avoidTolls: false,
+            avoidHighways: false,
+            avoidFerries: false
+        },
+        languageCode: "th-TH",
+        regionCode: 'th',
+        units: "METRIC"
+    }
+    const headers = { 'X-Goog-Api-Key': process.env.GOOGLE_MAP_API_KEY, 'X-Goog-FieldMask': '*' }
+
+    const response = await axios.post<google.maps.DirectionsResult>(GOOGLEAPI_ROUTE_DIRECTIONS, data, { headers });
+
+    const resp = response.data
+
+    console.log('\n', JSON.stringify(data), '\n')
+
+    return resp
 }
 
 

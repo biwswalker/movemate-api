@@ -33,18 +33,17 @@ async function server() {
   const app = express();
   const httpServer = http.createServer(app)
 
-  const environment = process.env.NODE_ENV
+  // const environment = process.env.NODE_ENV
   const alllowedCors = cors<cors.CorsRequest>({
     maxAge: 600,
     credentials: true,
     methods: ['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS'],
     origin: [
       'https://movematethailand.com',
+      'https://www.movematethailand.com',
       'https://admin.movematethailand.com',
-      ...(environment === 'development' ? [
-        'http://localhost:3000',
-        'http://localhost:3001',
-      ] : [])
+      'http://localhost:3000',
+      'http://localhost:3001',
     ],
   })
   app.use(alllowedCors);
