@@ -1,5 +1,5 @@
 import { VehicleCost } from '@models/vehicleCost.model'
-import { ObjectType, Field } from 'type-graphql'
+import { ObjectType, Field, Float } from 'type-graphql'
 
 @ObjectType()
 export class paymentMethodPayload {
@@ -30,4 +30,29 @@ export class BookingConfigPayload {
 
     @Field(() => [paymentMethodPayload])
     paymentMethods: paymentMethodPayload[]
+}
+
+@ObjectType()
+export class PriceItem {
+    @Field()
+    label: string
+
+    @Field(() => Float)
+    price: number
+}
+
+
+@ObjectType()
+export class SubtotalCalculatedPayload {
+    @Field(() => [PriceItem])
+    shippingPrices: PriceItem[]
+
+    @Field(() => [PriceItem])
+    discounts: PriceItem[]
+
+    @Field(() => [PriceItem])
+    additionalServices: PriceItem[]
+
+    @Field(() => Float)
+    total: number
 }

@@ -10,7 +10,7 @@ declare namespace NodeJS {
         NOREPLY_SECRET: string
         GOOGLE_MAP_API_KEY: string
         GOOGLE_SERVICE_ID: string
-        GOOGLE_SERVICE_SECRET: string
-        GOOGLE_SERVICE_REFRESH_TOKEN: string
+        GOOGLE_CLIENT_ID: string
+        GOOGLE_CLIENT_SECERT: string
     }
 }

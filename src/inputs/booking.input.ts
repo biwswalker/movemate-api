@@ -1,0 +1,46 @@
+import { ArgsType, Field, Float, InputType, Int } from "type-graphql"
+
+@InputType()
+export class PODAddressInput {
+    @Field()
+    fullname: string
+
+    @Field()
+    address: string
+
+    @Field()
+    province: string;
+
+    @Field()
+    district: string;
+
+    @Field()
+    subDistrict: string;
+
+    @Field()
+    postcode: string;
+
+    @Field()
+    phoneNumber: string
+}
+
+@ArgsType()
+export class SubtotalCalculationArgs {
+    @Field(() => Int)
+    dropPoint: number
+
+    @Field(() => Float)
+    distanceMeter: number
+
+    @Field(() => Boolean)
+    isRounded: boolean
+
+    @Field()
+    vehicleTypeId: string
+
+    @Field(() => [String], { nullable: true })
+    serviceIds?: string[]
+
+    @Field({ nullable: true })
+    discountId?: string
+}

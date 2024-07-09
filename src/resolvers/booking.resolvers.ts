@@ -1,9 +1,13 @@
-import { Resolver, Ctx, UseMiddleware, Query } from "type-graphql";
+import { Resolver, Ctx, UseMiddleware, Query, Mutation, Arg, Args } from "type-graphql";
 import { GraphQLContext } from "@configs/graphQL.config";
-import { isEmpty } from "lodash";
-import { BookingConfigPayload } from "@payloads/booking.payloads";
-import { AllowGuard } from "@guards/auth.guards";
+import { get, isEmpty, sum } from "lodash";
+import { BookingConfigPayload, SubtotalCalculatedPayload } from "@payloads/booking.payloads";
+import { AllowGuard, AuthGuard } from "@guards/auth.guards";
 import VehicleCostModel from "@models/vehicleCost.model";
+import { PODAddressInput, SubtotalCalculationArgs } from "@inputs/booking.input";
+import PODAddressModel from "@models/podAddress.model";
+import { fNumber } from "@utils/formatNumber";
+import AdditionalServiceCostPricingModel from "@models/additionalServiceCostPricing.model";
 
 @Resolver()
 export default class BookingResolver {
@@ -34,6 +38,57 @@ export default class BookingResolver {
       };
     } catch (error) {
       console.log(error);
+      throw error;
+    }
+  }
+
+  @Mutation(() => String)
+  @UseMiddleware(AuthGuard(['customer']))
+  async addPODAddress(@Ctx() ctx: GraphQLContext, @Arg("data") data: PODAddressInput): Promise<string> {
+    try {
+      const address = new PODAddressModel({ data, user: ctx.req.user_id })
+      await address.save()
+      return address._id
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  @Mutation(() => SubtotalCalculatedPayload)
+  async subtotalCalculation(
+    @Ctx() ctx: GraphQLContext,
+    @Args() { vehicleTypeId, distanceMeter, dropPoint, isRounded, discountId, serviceIds }: SubtotalCalculationArgs
+  ): Promise<SubtotalCalculatedPayload> {
+    try {
+      const vehicleCost = await VehicleCostModel.findByVehicleId(vehicleTypeId)
+      const distanceKilometers = (distanceMeter / 1000) // TODO: Recheck decimal calculation with owner
+      const calculated = await VehicleCostModel.calculatePricing(vehicleCost._id, {
+        distance: distanceKilometers, // TODO: Recheck decimal calculation with owner
+        dropPoint,
+        isRounded
+      })
+
+      const vehicleName = get(vehicleCost, 'vehicleType.name', '')
+      const distanceKM = fNumber(distanceKilometers, '0.0')
+
+      const additionalservices = await AdditionalServiceCostPricingModel.getServicesPricing(serviceIds)
+
+      // TODO: Discount
+
+      const total = sum([calculated.totalPrice, additionalservices.price])
+      return {
+        shippingPrices: [
+          { label: `${vehicleName} (${distanceKM})`, price: calculated.subTotalPrice },
+          ...(isRounded ? [{ label: 'ไป-กลับ', price: calculated.subTotalRoundedPrice }] : []),
+        ],
+        additionalServices: [
+          ...(dropPoint > 1 ? [{ label: 'หลายจุดส่ง', price: calculated.subTotalDropPointPrice }] : []),
+          ...additionalservices.priceItems
+        ],
+        discounts: [],
+        total: total,
+      }
+    } catch (error) {
       throw error;
     }
   }

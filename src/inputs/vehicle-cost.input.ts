@@ -48,9 +48,15 @@ export class DistanceCostPricingInput {
 
 @ArgsType()
 export class PricingCalculationMethodArgs {
+    /**
+     * @description Kilometers
+     */
     @Field(() => Float, { nullable: true })
     distance: number
 
+    /**
+     * @description Drop point not included start point
+     */
     @Field(() => Float, { nullable: true })
     dropPoint: number
 

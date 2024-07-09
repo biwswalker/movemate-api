@@ -16,6 +16,7 @@ import { PricingCalculationMethodArgs } from "@inputs/vehicle-cost.input";
 import { GraphQLError } from "graphql";
 import { CalculationResultPayload, PricingCalculationMethodPayload } from "@payloads/pricing.payloads";
 import { AdditionalService } from "./additionalService.model";
+import { GET_VEHICLE_COST } from "@pipelines/pricing.pipeline";
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()
@@ -47,6 +48,11 @@ export class VehicleCost extends TimeStamps {
   @Field()
   @Property({ default: Date.now })
   updatedAt: Date;
+
+  static async findByVehicleId(id: string): Promise<VehicleCost> {
+    const vehicleCost = await VehicleCostModel.aggregate(GET_VEHICLE_COST(id))
+    return vehicleCost[0]
+  }
 
   static async findByAvailableConfig(): Promise<VehicleCost[]> {
     const vehicleCosts = await VehicleCostModel.find();

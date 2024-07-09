@@ -4,6 +4,8 @@ import { AdditionalService } from "./additionalService.model";
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { IsEnum, IsNotEmpty } from "class-validator";
 import mongooseAutoPopulate from "mongoose-autopopulate";
+import { get, map, reduce, sum } from "lodash";
+import { PriceItem } from "@payloads/booking.payloads";
 
 enum EAdditionalServiceCostPricingUnit {
     PERCENT = "percent",
@@ -45,6 +47,17 @@ export class AdditionalServiceCostPricing extends TimeStamps {
     @Field()
     @Property({ default: Date.now })
     updatedAt: Date
+
+    static async getServicesPricing(ids: string[]): Promise<{ additionalServices: AdditionalServiceCostPricing[], priceItems: PriceItem[], price: number }> {
+        const additionalServices = await AdditionalServiceCostPricingModel.find({ _id: { $in: ids } }).exec();
+        const servicePrices = map<AdditionalServiceCostPricing, PriceItem>(additionalServices, service => ({ label: get(service, 'additionalService.name', ''), price: service.price }))
+        const servicePrice = reduce(servicePrices, (prev, curr) => sum([prev, curr.price]), 0)
+        return {
+            additionalServices,
+            priceItems: servicePrices,
+            price: servicePrice
+        };
+    }
 }
 
 const AdditionalServiceCostPricingModel = getModelForClass(AdditionalServiceCostPricing)
