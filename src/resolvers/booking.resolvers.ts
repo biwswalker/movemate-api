@@ -8,6 +8,7 @@ import { PODAddressInput, SubtotalCalculationArgs } from "@inputs/booking.input"
 import PODAddressModel from "@models/podAddress.model";
 import { fNumber } from "@utils/formatNumber";
 import AdditionalServiceCostPricingModel from "@models/additionalServiceCostPricing.model";
+import UserModel from "@models/user.model";
 
 @Resolver()
 export default class BookingResolver {
@@ -21,6 +22,11 @@ export default class BookingResolver {
       // ctx.req.user_id
       // TODO
       const isAuthorized = !isEmpty(ctx.req.user_id);
+      let isBusinessUser = false
+      if (isAuthorized) {
+        const user = await UserModel.findById(ctx.req.user_id).lean()
+        isBusinessUser = user.userType === 'business'
+      }
 
       // Get available
       // What is available: distance config are necessary to using for pricing calculation
@@ -29,7 +35,7 @@ export default class BookingResolver {
       // Get avaialble Payment Method
       const paymentMethods = [
         { available: true, method: "cash", name: "ชำระด้วยเงินสด", subTitle: 'ชำระผ่าน QR Promptpay ขั้นตอนถัดไป', detail: '' },
-        { available: isAuthorized, method: "credit", name: "ออกใบแจ้งหนี้", subTitle: 'สำหรับสมาชิก Movemate แบบองค์กร/บริษัท', detail: '' },
+        { available: isAuthorized && isBusinessUser, method: "credit", name: "ออกใบแจ้งหนี้", subTitle: 'สำหรับสมาชิก Movemate แบบองค์กร/บริษัท', detail: '' },
       ];
 
       return {
