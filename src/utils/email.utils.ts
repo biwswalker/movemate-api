@@ -5,18 +5,18 @@ import { join } from 'path'
 export const email_sender = () => {
     const transporter = createTransport<HbsTransporter>({
         host: "smtpout.secureserver.net",
-        secure: true,
-        secureConnection: false,
-        tls: {
-            ciphers: 'SSLv3'
-        },
-        requireTLS: true,
-        port: 465,
-        debug: true,
+        port: 587,
         auth: {
             user: process.env.NOREPLY_EMAIL,
             pass: process.env.NOREPLY_SECRET
         }
+        // secure: true,
+        // secureConnection: false,
+        // tls: {
+        //     ciphers: 'SSLv3'
+        // },
+        // requireTLS: true,
+        // debug: true,
     } as TransportOptions) as HbsTransporter
 
     transporter.use('compile', nodemailerExpressHandlebars({
