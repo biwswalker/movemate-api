@@ -2,6 +2,9 @@ import { ArgsType, Field, Float, InputType, Int } from "type-graphql"
 
 @InputType()
 export class PODAddressInput {
+    @Field({ nullable: true })
+    _id?: string
+    
     @Field()
     fullname: string
 

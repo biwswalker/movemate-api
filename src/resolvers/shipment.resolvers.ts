@@ -1,13 +1,11 @@
 import { GraphQLContext } from "@configs/graphQL.config";
 import { AuthGuard } from "@guards/auth.guards";
-import PaymentModel, { Payment } from "@models/payment.model";
-import PrivilegeModel from "@models/privilege.model";
-import ShipmentModel, { Shipment, ShipmentInput } from "@models/shipment.model";
+import { ShipmentInput } from "@inputs/shipment.input";
+import PaymentModel from "@models/payment.model";
+import ShipmentModel, { Shipment } from "@models/shipment.model";
 import ShipmentPricingModel from "@models/shipmentPricing.model";
-import UserModel, { User } from "@models/user.model";
 import { generateId } from "@utils/string.utils";
-import { get } from "lodash";
-import { Arg, Ctx, FieldResolver, Mutation, Query, Resolver, Root, UseMiddleware } from "type-graphql";
+import { Arg, Ctx, Mutation, Query, Resolver, UseMiddleware } from "type-graphql";
 
 @Resolver(Shipment)
 export default class ShipmentResolver {
@@ -46,45 +44,6 @@ export default class ShipmentResolver {
         }
     }
 
-    @FieldResolver(() => User)
-    async customer(@Root() shipment: Shipment): Promise<User | null> {
-        try {
-            const customerId = get(shipment, '_doc.customer', '') || get(shipment, 'customer', '')
-            const customer = await UserModel.findById(customerId)
-            if (!customer) { return null }
-            return customer
-        } catch (error) {
-            console.error('Error get customer:', error);
-            return null;
-        }
-    }
-
-    @FieldResolver(() => User)
-    async driver(@Root() shipment: Shipment): Promise<User | null> {
-        try {
-            const driverId = get(shipment, '_doc.driver', '') || get(shipment, 'driver', '')
-            const driver = await UserModel.findById(driverId)
-            if (!driver) { return null }
-            return driver
-        } catch (error) {
-            console.error('Error get driver:', error);
-            return null;
-        }
-    }
-
-    @FieldResolver(() => Payment)
-    async payment(@Root() shipment: Shipment): Promise<Payment | null> {
-        try {
-            const paymentId = get(shipment, '_doc.payment', '') || get(shipment, 'payment', '')
-            const payment = await PaymentModel.findById(paymentId)
-            if (!payment) { return null }
-            return payment
-        } catch (error) {
-            console.error('Error get payment:', error);
-            return null;
-        }
-    }
-
     @Mutation(() => Shipment)
     @UseMiddleware(AuthGuard(['customer', 'admin']))
     async createShipment(@Arg('data') data: ShipmentInput, @Ctx() ctx: GraphQLContext): Promise<Shipment> {
@@ -96,16 +55,16 @@ export default class ShipmentResolver {
 
             // data.privilege
             let discount = 0
-            if (data.privilege) {
-                const privilege = await PrivilegeModel.findById(data.privilege)
-                if (privilege.discount_unit === 'CURRENCY') {
-                    discount = privilege.discount_number
-                } else if (privilege.discount_unit === 'PERCENTAGE') {
-                    // before this must calculate route sub total first
-                    // privilege.discount_number
+            // if (data.privilege) {
+            //     const privilege = await PrivilegeModel.findById(data.privilege)
+            //     if (privilege.discount_unit === 'CURRENCY') {
+            //         discount = privilege.discount_number
+            //     } else if (privilege.discount_unit === 'PERCENTAGE') {
+            //         // before this must calculate route sub total first
+            //         // privilege.discount_number
 
-                }
-            }
+            //     }
+            // }
 
             // TODO
             const shipmentPricing = new ShipmentPricingModel({ amount })

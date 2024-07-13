@@ -1,31 +1,15 @@
-import { Field, ID, ObjectType } from "type-graphql"
+import { Field, ObjectType } from "type-graphql"
 import { prop as Property, getModelForClass } from '@typegoose/typegoose'
-import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses"
 
 @ObjectType()
-export class Location extends TimeStamps {
-    @Field(() => ID)
-    readonly _id: string
+export class Location {
+    @Field()
+    @Property()
+    lat: number
 
     @Field()
     @Property()
-    name: string;
-
-    @Field()
-    @Property()
-    latitude: number;
-
-    @Field()
-    @Property()
-    longitude: number;
-
-    @Field()
-    @Property({ default: Date.now })
-    createdAt: Date
-
-    @Field()
-    @Property({ default: Date.now })
-    updatedAt: Date
+    lng: number
 }
 
 const LocationModel = getModelForClass(Location)

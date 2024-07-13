@@ -78,7 +78,7 @@ export default class BookingResolver {
       const total = sum([calculated.totalPrice, additionalservices.price])
       return {
         shippingPrices: [
-          { label: `${vehicleName} (${distanceKM})`, price: calculated.subTotalPrice },
+          { label: `${vehicleName} (${distanceKM} กม.)`, price: calculated.subTotalPrice },
           ...(isRounded ? [{ label: 'ไป-กลับ', price: calculated.subTotalRoundedPrice }] : []),
         ],
         additionalServices: [

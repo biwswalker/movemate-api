@@ -111,6 +111,23 @@ export default class VehicleTypeResolver {
             throw new GraphQLError("ไม่สามารถเรียกข้อมูลประเภทรถได้ โปรดลองอีกครั้ง");
         }
     }
+    @Query(() => VehicleType)
+    @UseMiddleware(AuthGuard(["customer", "driver"]))
+    async getVehicleTypeById(@Arg("id") id: string): Promise<VehicleType> {
+        try {
+            const vehicleType = await VehicleTypeModel.findById(id)
+            if (!vehicleType) {
+                const message = `ไม่สามารถเรียกข้อมูลประเภทรถได้`;
+                throw new GraphQLError(message, {
+                    extensions: { code: "NOT_FOUND", errors: [{ message }] },
+                });
+            }
+            return vehicleType;
+        } catch (error) {
+            console.log('error: ', error)
+            throw new GraphQLError("ไม่สามารถเรียกข้อมูลประเภทรถได้ โปรดลองอีกครั้ง");
+        }
+    }
     @Query(() => [VehicleTypeConfigureStatusPayload])
     @UseMiddleware(AuthGuard(["admin"]))
     async getVehicleTypeConfigs(): Promise<VehicleTypeConfigureStatusPayload[]> {
