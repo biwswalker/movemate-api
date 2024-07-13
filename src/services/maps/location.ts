@@ -132,10 +132,17 @@ export async function getGeocode(latitude: number, longitude: number, session?: 
         },
     });
 
-    const result = get(response, 'data.results.0')
-    const places = await getPlaceLocationDetail(result.place_id, session)
+    const result = get(response, 'data.results.0', undefined) as google.maps.GeocoderResult | undefined
+    const places = await getPlaceLocationDetail(result?.place_id, session)
+    const marker = new MarkerModel({
+        placeId: places.placeId,
+        displayName: places.displayName,
+        formattedAddress: places.formattedAddress,
+        latitude,
+        longitude,
+    })
 
-    await saveCache(cacheType, key, places);
+    await saveCache(cacheType, key, marker);
 
     return places
 }
