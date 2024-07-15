@@ -29,4 +29,5 @@ export class Vehicle {
 
 const VehicleModel = getModelForClass(Vehicle)
 
+// Rewrite ->
 export default VehicleModel

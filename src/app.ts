@@ -62,7 +62,7 @@ async function server() {
   await connectToMongoDB();
   await server.start();
 
-  app.use('/graphql', alllowedCors, express.json(), expressMiddleware(server, {
+  app.use('/graphql', alllowedCors, express.json({ limit: '3mb' }), expressMiddleware(server, {
     context: async ({ req, res }) => ({ req, res }),
   }))
   app.use("/api/v1", api_v1);

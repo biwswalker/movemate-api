@@ -1,6 +1,6 @@
 import { Field, Float, InputType } from "type-graphql";
 import { FileInput } from "./file.input";
-import { GraphQLJSONObject } from "graphql-type-json";
+// import { GraphQLJSONObject } from "graphql-type-json";
 import { LocationInput } from "./location.input";
 import { PODAddressInput } from "./booking.input";
 
@@ -22,7 +22,7 @@ class DestinationInput {
     contactName: string
 
     @Field()
-    contectNumber: string
+    contactNumber: string
 
     @Field({ nullable: true })
     customerRemark: string
@@ -30,9 +30,6 @@ class DestinationInput {
 
 @InputType()
 class PaymentDetailInput {
-    @Field()
-    _id?: string
-
     @Field()
     name: string
 
@@ -57,9 +54,6 @@ class PaymentDetailInput {
 
 @InputType()
 class TransferPaymentDetailInput {
-    @Field()
-    _id?: string
-
     @Field(() => FileInput)
     imageEvidence: FileInput
 
@@ -73,10 +67,10 @@ class TransferPaymentDetailInput {
     bankNumber: string
 
     @Field()
-    paymentDate: string
+    paymentDate: Date
 
     @Field()
-    paymentTime: string
+    paymentTime: Date
 }
 
 @InputType()
@@ -96,11 +90,11 @@ export class ShipmentInput {
     @Field()
     vehicleId: string
 
-    @Field()
-    favoriteDriverId: string;
+    @Field({ nullable: true })
+    favoriteDriverId?: string;
 
-    @Field(() => [String])
-    additionalServices: string[]
+    @Field(() => [String], { nullable: true })
+    additionalServices?: string[]
 
     @Field(() => PODAddressInput, { nullable: true })
     podDetail?: PODAddressInput
@@ -120,8 +114,8 @@ export class ShipmentInput {
     @Field()
     isBookingWithDate: boolean;
 
-    @Field()
-    bookingDateTime: Date;
+    @Field({ nullable: true })
+    bookingDateTime?: Date;
 
     @Field(() => [FileInput], { nullable: true })
     additionalImage?: FileInput[]
@@ -132,6 +126,8 @@ export class ShipmentInput {
     @Field({ nullable: true })
     remark?: string
 
-    @Field(() => GraphQLJSONObject)
-    directionRoutes: google.maps.DirectionsResult
+    // @Field(() => GraphQLJSONObject)
+    // directionRoutes: google.maps.DirectionsResult
+    @Field()
+    directionRoutes: string
 }

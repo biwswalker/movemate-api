@@ -6,15 +6,12 @@ import { Privilege } from "./privilege.model"
 import { VehicleType } from "./vehicleType.model"
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses"
 import { Schema } from "mongoose"
-import { AdditionalServiceCostPricing } from "./additionalServiceCostPricing.model"
 import { File } from "./file.model"
 import { DirectionsResult } from "@payloads/direction.payloads"
 import { Location } from "./location.model"
-
-enum TPaymentMethod {
-    CASH = 'cash',
-    CREDIT = 'credit'
-}
+import { ShipmentAdditionalServicePrice } from "./shipmentAdditionalServicePrice.model"
+import { ShipmentDistancePricing } from "./shipmentDistancePricing.model"
+import { Payment } from "./payment.model"
 
 enum EShipingStatus {
     PENDING = 'PENDING',
@@ -54,7 +51,7 @@ export class Destination {
 
     @Field()
     @Property()
-    contectNumber: string
+    contactNumber: string
 
     @Field({ nullable: true })
     @Property()
@@ -94,74 +91,6 @@ export class PODAddress {
     @Field()
     @Property()
     phoneNumber: string
-
-    @Field()
-    @Property()
-    saveFavorite?: boolean
-}
-
-@ObjectType()
-export class PaymentDetail {
-    @Field()
-    _id?: string
-
-    @Field()
-    @Property()
-    name: string
-
-    @Field()
-    @Property()
-    address: string
-
-    @Field()
-    @Property()
-    province: string
-
-    @Field()
-    @Property()
-    district: string
-
-    @Field()
-    @Property()
-    subDistrict: string
-
-    @Field()
-    @Property()
-    postcode: string
-
-    @Field()
-    @Property()
-    contactNumber: string
-}
-
-@ObjectType()
-export class CashPaymentDetail {
-    @Field()
-    _id?: string
-
-    @Field(() => File)
-    @Property({ ref: () => File })
-    imageEvidence: Ref<File>
-
-    @Field()
-    @Property()
-    bank: string
-
-    @Field()
-    @Property()
-    bankName: string
-
-    @Field()
-    @Property()
-    bankNumber: string
-
-    @Field()
-    @Property()
-    paymentDate: string
-
-    @Field()
-    @Property()
-    paymentTime: string
 }
 
 @ObjectType()
@@ -175,12 +104,16 @@ export class Shipment extends TimeStamps {
 
     @Field()
     @IsEnum(EShipingStatus)
-    @Property({ required: true, enum: EShipingStatus })
+    @Property({ enum: EShipingStatus, default: EShipingStatus.PENDING })
     status: TShipingStatus;
 
     @Field(() => User)
     @Property({ ref: () => User, required: true })
     customer: Ref<User>
+
+    @Field(() => User, { nullable: true })
+    @Property({ ref: () => User, required: false })
+    requestedDriver: Ref<User>
 
     @Field(() => [Destination])
     @Property({ allowMixed: Severity.ALLOW })
@@ -194,8 +127,8 @@ export class Shipment extends TimeStamps {
     @Property()
     estimatedTime: number
 
-
-    @Field()
+    @Field(() => Boolean)
+    @Property()
     isRoundedReturn: boolean
 
     @Field(() => VehicleType)
@@ -203,53 +136,44 @@ export class Shipment extends TimeStamps {
         ref: () => VehicleType,
         type: Schema.Types.ObjectId,
     })
-    vehicleId: Ref<VehicleType, string>
+    vehicleId: Ref<VehicleType, string> // vehicle invoice
 
-    @Field(() => [AdditionalServiceCostPricing])
+    @Field(() => [ShipmentAdditionalServicePrice])
     @Property({
-        ref: () => AdditionalServiceCostPricing,
+        ref: () => ShipmentAdditionalServicePrice,
         type: Schema.Types.ObjectId,
     })
-    additionalServices: Ref<AdditionalServiceCostPricing, string>[]
+    additionalServices: Ref<ShipmentAdditionalServicePrice, string>[] // additional services invoice
+
+    @Field(() => [ShipmentDistancePricing])
+    @Property({ autopopulate: true, ref: () => ShipmentDistancePricing })
+    distances: Ref<ShipmentDistancePricing>[];
 
     @Field(() => PODAddress, { nullable: true })
     @Property()
     podDetail?: PODAddress
-
-    @Field(() => String)
-    @IsEnum(TPaymentMethod)
-    @Property({ enum: TPaymentMethod, default: TPaymentMethod.CASH, required: true })
-    paymentMethod: TPaymentMethod;
-
-    @Field(() => PaymentDetail, { nullable: true })
-    @Property()
-    paymentDetail?: PaymentDetail;
-
-    @Field(() => CashPaymentDetail, { nullable: true })
-    @Property()
-    cashPaymentDetail?: CashPaymentDetail;
 
     @Field(() => Privilege, { nullable: true })
     @Property({
         ref: () => Privilege,
         type: Schema.Types.ObjectId,
     })
-    discountCode?: Ref<Privilege, string>;
+    discountId?: Ref<Privilege, string>; // discount invoice
 
     @Field()
     @Property()
     isBookingWithDate: boolean;
 
-    @Field()
+    @Field({ nullable: true })
     @Property()
-    bookingDateTime: Date;
+    bookingDateTime?: Date;
 
     @Field(() => [File], { nullable: true })
     @Property({
         ref: () => File,
         type: Schema.Types.ObjectId,
     })
-    additionalImage?: Ref<File, string>[]
+    additionalImages?: Ref<File, string>[]
 
     @Field({ nullable: true })
     @Property()
@@ -275,13 +199,9 @@ export class Shipment extends TimeStamps {
     // @Property()
     // issueReason?: string;
 
-    // @Field(() => ShipmentPricing)
-    // @Property({ ref: () => ShipmentPricing, required: true })
-    // shiping_pricing: Ref<ShipmentPricing>
-
-    // @Field(() => Payment)
-    // @Property({ ref: () => Payment, required: true })
-    // payment: Ref<Payment>
+    @Field(() => Payment)
+    @Property({ ref: () => Payment, required: true })
+    payment: Ref<Payment>
 
     @Field()
     @Property({ default: Date.now })

@@ -4,6 +4,7 @@ import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import mongooseAutoPopulate from "mongoose-autopopulate";
 import { AdditionalServiceCostPricing } from "./additionalServiceCostPricing.model";
 
+
 @plugin(mongooseAutoPopulate)
 @ObjectType()
 export class ShipmentAdditionalServicePrice extends TimeStamps {
@@ -12,8 +13,8 @@ export class ShipmentAdditionalServicePrice extends TimeStamps {
 
     @Field(() => AdditionalServiceCostPricing)
     @Property({ required: true, autopopulate: true, ref: () => AdditionalServiceCostPricing })
-    additionalServiceCostPricing: Ref<AdditionalServiceCostPricing>
-    
+    reference: Ref<AdditionalServiceCostPricing>
+
     @Field(() => Float)
     @Property({ required: true })
     cost: number

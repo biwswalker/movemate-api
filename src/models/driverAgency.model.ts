@@ -2,6 +2,8 @@ import { Field, ID, ObjectType } from "type-graphql"
 import { prop as Property, Ref, getModelForClass } from '@typegoose/typegoose'
 import { Agency } from "./agency.model"
 
+// Rewrite ->
+
 @ObjectType()
 export class DriverAgency {
     @Field(() => ID)

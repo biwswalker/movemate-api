@@ -16,6 +16,9 @@ enum EUserStatus {
     WORKING = 'working',
 }
 
+// Rewrite ->
+
+
 @ObjectType()
 export class Driver {
     @Field(() => ID)

@@ -1,20 +1,21 @@
 import { Field, ID, ObjectType } from "type-graphql"
 import { prop as Property, getModelForClass } from '@typegoose/typegoose'
 import { IsEnum } from "class-validator";
+import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 
 enum EPrivilegeType {
-    BASIC = 'BASIC',
-    STANDARD = 'STANDARD',
-    PREMIUM = 'PREMIUM',
+    BASIC = 'basic',
+    STANDARD = 'standard',
+    PREMIUM = 'premium',
 }
 
 enum EPrivilegeDiscountUnit {
-    PERCENTAGE = 'PERCENTAGE',
-    CURRENCY = 'CURRENCY',
+    PERCENTAGE = 'percentage',
+    CURRENCY = 'currency',
 }
 
 @ObjectType()
-export class Privilege {
+export class Privilege extends TimeStamps {
     @Field(() => ID)
     readonly _id: string
 
@@ -23,18 +24,22 @@ export class Privilege {
     name: string
 
     @Field()
+    @Property({ required: true })
+    code: string
+
+    @Field()
     @IsEnum(EPrivilegeType)
     @Property({ enum: EPrivilegeType, required: true })
     type: TPrivilegeType
 
     @Field()
     @Property({ required: true })
-    discount_number: number
+    discount: number
 
     @Field()
     @IsEnum(EPrivilegeDiscountUnit)
     @Property({ enum: EPrivilegeDiscountUnit, required: true })
-    discount_unit: TPrivilegeDiscountUnit
+    unit: TPrivilegeDiscountUnit
 
     @Field()
     @Property({ required: true })
@@ -42,11 +47,11 @@ export class Privilege {
 
     @Field()
     @Property({ default: Date.now })
-    created_at: Date
+    createdAt: Date
 
     @Field()
     @Property({ default: Date.now })
-    updated_at: Date
+    updatedAt: Date
 }
 
 const PrivilegeModel = getModelForClass(Privilege)

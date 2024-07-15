@@ -9,6 +9,7 @@ import PODAddressModel from "@models/podAddress.model";
 import { fNumber } from "@utils/formatNumber";
 import AdditionalServiceCostPricingModel from "@models/additionalServiceCostPricing.model";
 import UserModel from "@models/user.model";
+import { BusinessCustomer } from "@models/customerBusiness.model";
 
 @Resolver()
 export default class BookingResolver {
@@ -22,10 +23,13 @@ export default class BookingResolver {
       // ctx.req.user_id
       // TODO
       const isAuthorized = !isEmpty(ctx.req.user_id);
-      let isBusinessUser = false
+      let isBusinessCreditUser = false
       if (isAuthorized) {
-        const user = await UserModel.findById(ctx.req.user_id).lean()
-        isBusinessUser = user.userType === 'business'
+        const user = await UserModel.findById(ctx.req.user_id)
+        const businessCustomer = user.businessDetail as BusinessCustomer | undefined
+        const isCredit = businessCustomer.paymentMethod === 'credit'
+        const isBusiness = user.userType === 'business'
+        isBusinessCreditUser = isCredit && isBusiness
       }
 
       // Get available
@@ -35,7 +39,7 @@ export default class BookingResolver {
       // Get avaialble Payment Method
       const paymentMethods = [
         { available: true, method: "cash", name: "ชำระด้วยเงินสด", subTitle: 'ชำระผ่าน QR Promptpay ขั้นตอนถัดไป', detail: '' },
-        { available: isAuthorized && isBusinessUser, method: "credit", name: "ออกใบแจ้งหนี้", subTitle: 'สำหรับสมาชิก Movemate แบบองค์กร/บริษัท', detail: '' },
+        { available: isAuthorized && isBusinessCreditUser, method: "credit", name: "ออกใบแจ้งหนี้", subTitle: 'สำหรับสมาชิก Movemate แบบองค์กร/บริษัท', detail: '' },
       ];
 
       return {
