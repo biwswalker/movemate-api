@@ -1,57 +1,84 @@
-import { Field, ID, ObjectType } from "type-graphql"
+import { Field, ID, ObjectType } from 'type-graphql'
 import { prop as Property, getModelForClass } from '@typegoose/typegoose'
-import { IsEnum } from "class-validator";
-import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
-
-enum EPrivilegeType {
-    BASIC = 'basic',
-    STANDARD = 'standard',
-    PREMIUM = 'premium',
-}
+import { IsEnum } from 'class-validator'
+import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 
 enum EPrivilegeDiscountUnit {
-    PERCENTAGE = 'percentage',
-    CURRENCY = 'currency',
+  PERCENTAGE = 'percentage',
+  CURRENCY = 'currency',
+}
+
+enum EPrivilegeStatus {
+  INACTIVE = 'inactive',
+  ACTIVE = 'active',
 }
 
 @ObjectType()
 export class Privilege extends TimeStamps {
-    @Field(() => ID)
-    readonly _id: string
+  @Field(() => ID)
+  readonly _id: string
 
-    @Field()
-    @Property({ required: true })
-    name: string
+  @Field()
+  @IsEnum(EPrivilegeStatus)
+  @Property({ enum: EPrivilegeStatus, default: EPrivilegeStatus.ACTIVE })
+  status: TPrivilegeStatus
 
-    @Field()
-    @Property({ required: true })
-    code: string
+  @Field()
+  @Property({ required: true, unique: true })
+  name: string
 
-    @Field()
-    @IsEnum(EPrivilegeType)
-    @Property({ enum: EPrivilegeType, required: true })
-    type: TPrivilegeType
+  @Field()
+  @Property({ required: true, unique: true })
+  code: string
 
-    @Field()
-    @Property({ required: true })
-    discount: number
+  @Field({ nullable: true })
+  @Property({ required: false })
+  startDate: Date
 
-    @Field()
-    @IsEnum(EPrivilegeDiscountUnit)
-    @Property({ enum: EPrivilegeDiscountUnit, required: true })
-    unit: TPrivilegeDiscountUnit
+  @Field({ nullable: true })
+  @Property({ required: false })
+  endDate: Date
 
-    @Field()
-    @Property({ required: true })
-    description: string;
+  @Field()
+  @Property({ required: true })
+  discount: number
 
-    @Field()
-    @Property({ default: Date.now })
-    createdAt: Date
+  @Field()
+  @IsEnum(EPrivilegeDiscountUnit)
+  @Property({ enum: EPrivilegeDiscountUnit, required: true })
+  unit: TPrivilegeDiscountUnit
 
-    @Field()
-    @Property({ default: Date.now })
-    updatedAt: Date
+  @Field({ nullable: true })
+  @Property()
+  minPrice: number
+
+  @Field({ nullable: true })
+  @Property()
+  maxDiscountPrice: number
+
+  @Field()
+  @Property({ default: true })
+  isInfinity: boolean
+
+  @Field()
+  @Property({ default: 0, required: false })
+  usedAmout: number
+
+  @Field({ nullable: true })
+  @Property()
+  limitAmout: number
+
+  @Field({ nullable: true })
+  @Property()
+  description: string
+
+  @Field()
+  @Property({ default: Date.now })
+  createdAt: Date
+
+  @Field()
+  @Property({ default: Date.now })
+  updatedAt: Date
 }
 
 const PrivilegeModel = getModelForClass(Privilege)

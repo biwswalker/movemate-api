@@ -49,7 +49,10 @@ import { yupValidationThrow } from "@utils/error.utils";
 import { GraphQLContext } from "@configs/graphQL.config";
 import UpdateHistoryModel, { UpdateHistory } from "@models/updateHistory.model";
 import { DocumentType } from "@typegoose/typegoose";
-import { PricingCalculationMethodPayload, VehicleCostCalculationPayload } from "@payloads/pricing.payloads";
+import {
+  PricingCalculationMethodPayload,
+  VehicleCostCalculationPayload,
+} from "@payloads/pricing.payloads";
 
 Aigle.mixin(lodash, {});
 
@@ -58,11 +61,12 @@ export default class PricingResolver {
   @Query(() => VehicleCost)
   @UseMiddleware(AuthGuard(["admin"]))
   async getVehicleCost(
-    @Arg("vehicleTypeId") vehicleTypeId: string
+    @Arg("vehicleTypeId") vehicleTypeId: string,
   ): Promise<VehicleCost> {
     try {
-      const vehicleCost = await VehicleCostModel
-        .findOne({ vehicleType: vehicleTypeId })
+      const vehicleCost = await VehicleCostModel.findOne({
+        vehicleType: vehicleTypeId,
+      })
         .populate({
           path: "additionalServices",
           match: { available: true },
@@ -134,7 +138,7 @@ export default class PricingResolver {
   async updateAdditionalServiceCost(
     @Arg("id") id: string,
     @Arg("data", () => [AdditionalServiceCostInput])
-    data: AdditionalServiceCostInput[]
+    data: AdditionalServiceCostInput[],
   ): Promise<boolean> {
     try {
       await AdditionalServiceCostSchema.validate({ additionalServices: data });
@@ -152,7 +156,7 @@ export default class PricingResolver {
           };
         });
       const serviceIds = map(bulkOps, (opt) =>
-        get(opt, "updateOne.filter._id", "")
+        get(opt, "updateOne.filter._id", ""),
       );
 
       await AdditionalServiceCostPricingModel.bulkWrite(bulkOps);
@@ -190,7 +194,7 @@ export default class PricingResolver {
     @Arg("id") id: string,
     @Arg("data", () => [DistanceCostPricingInput])
     data: DistanceCostPricingInput[],
-    @Ctx() ctx: GraphQLContext
+    @Ctx() ctx: GraphQLContext,
   ): Promise<boolean> {
     const replicaSet = await this.isReplicaSet();
     let session: ClientSession | null = null;
@@ -263,14 +267,14 @@ export default class PricingResolver {
 
       if (bulkOperations.length > 0) {
         const distanceIds = map(bulkOperations, (opt) =>
-          get(opt, "updateOne.filter._id", "")
+          get(opt, "updateOne.filter._id", ""),
         );
         await DistanceCostPricingModel.bulkWrite(bulkOperations, { session });
         await UpdateHistoryModel.insertMany(updateHistories, { session });
         await VehicleCostModel.findByIdAndUpdate(
           id,
           { distance: distanceIds },
-          { session }
+          { session },
         );
         // await DistanceCostPricingModel.deleteMany({
         //   _id: { $nin: distanceIds },
@@ -302,7 +306,7 @@ export default class PricingResolver {
   async initialVehicleCost(
     @Arg("vehicleTypeId") vehicleTypeId: string,
     @Arg("withAdditionalService", { nullable: true })
-    withAdditionalService: boolean = false
+    withAdditionalService: boolean = false,
   ): Promise<string> {
     try {
       let additionalServicesIds = [];
@@ -324,7 +328,7 @@ export default class PricingResolver {
               return vehicleType.isLarger;
             }
             return true;
-          }
+          },
         );
         const bulkOps: AnyBulkWriteOperation<AdditionalServiceCostPricing>[] =
           map(additionalServicesFilter, (service) => {
@@ -332,7 +336,7 @@ export default class PricingResolver {
             const type = isEqual(service.name, "ไป-กลับ")
               ? "percent"
               : "currency";
-            const available = service.permanent
+            const available = service.permanent;
             return {
               updateOne: {
                 filter: { _id: _oid },
@@ -352,7 +356,7 @@ export default class PricingResolver {
           });
         await AdditionalServiceCostPricingModel.bulkWrite(bulkOps);
         additionalServicesIds = map(bulkOps, (opt) =>
-          get(opt, "updateOne.filter._id", "")
+          get(opt, "updateOne.filter._id", ""),
         );
       }
 
@@ -374,7 +378,7 @@ export default class PricingResolver {
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard(["admin"]))
   async initialAdditionalService(
-    @Arg("vehicleCostId") vehicleCostId: string
+    @Arg("vehicleCostId") vehicleCostId: string,
   ): Promise<boolean> {
     try {
       const vehicleCost = await VehicleCostModel.findById(vehicleCostId);
@@ -402,7 +406,7 @@ export default class PricingResolver {
               return vehicleType.isLarger;
             }
             return true;
-          }
+          },
         );
 
         const bulkOps: AnyBulkWriteOperation<AdditionalServiceCostPricing>[] =
@@ -432,7 +436,7 @@ export default class PricingResolver {
 
         await AdditionalServiceCostPricingModel.bulkWrite(bulkOps);
         additionalServicesIds = map(bulkOps, (opt) =>
-          get(opt, "updateOne.filter._id", "")
+          get(opt, "updateOne.filter._id", ""),
         );
       }
 
@@ -452,7 +456,7 @@ export default class PricingResolver {
   @UseMiddleware(AllowGuard)
   async getVehicleCostByVehicleType(
     @Ctx() ctx: GraphQLContext,
-    @Arg("id") id: string
+    @Arg("id") id: string,
   ): Promise<VehicleCost> {
     try {
       // To using login user or not
@@ -514,15 +518,18 @@ export default class PricingResolver {
         service.additionalService.descriptions = get(
           service,
           "additionalService.descriptions",
-          []
+          [],
         )
           .filter((description) =>
-            some(description.vehicleTypes, (type) => type._id.toString() === id)
+            some(
+              description.vehicleTypes,
+              (type) => type._id.toString() === id,
+            ),
           )
           .map((description) => {
             description.vehicleTypes = filter(
               get(description, "vehicleTypes", []),
-              (type) => type._id.toString() === id
+              (type) => type._id.toString() === id,
             );
             return description;
           });
@@ -559,11 +566,14 @@ export default class PricingResolver {
   @UseMiddleware(AuthGuard(["admin"]))
   async getPricingCalculationMethod(
     @Arg("vehicleCostId") vehicleCostId: string,
-    @Args() data: PricingCalculationMethodArgs
+    @Args() data: PricingCalculationMethodArgs,
   ): Promise<PricingCalculationMethodPayload> {
     try {
-      await PricingCalculationMethodSchema.validate(data)
-      const vehicleCost = await VehicleCostModel.calculatePricing(vehicleCostId, data)
+      await PricingCalculationMethodSchema.validate(data);
+      const vehicleCost = await VehicleCostModel.calculatePricing(
+        vehicleCostId,
+        data,
+      );
 
       if (!vehicleCost) {
         const message = `ไม่สามารถเรียกข้อมูลต้นทุนขนส่งได้`;
@@ -572,7 +582,7 @@ export default class PricingResolver {
         });
       }
 
-      return vehicleCost
+      return vehicleCost;
     } catch (errors) {
       console.log("error: ", errors);
       if (errors instanceof ValidationError) {
@@ -584,11 +594,18 @@ export default class PricingResolver {
 
   @Query(() => [VehicleCostCalculationPayload])
   @UseMiddleware(AuthGuard(["admin"]))
-  async getPricingCalculationMethodAvailableVehicle(@Args() data: PricingCalculationMethodArgs): Promise<VehicleCostCalculationPayload[]> {
+  async getPricingCalculationMethodAvailableVehicle(
+    @Args() data: PricingCalculationMethodArgs,
+  ): Promise<VehicleCostCalculationPayload[]> {
     try {
       const vehicleCosts = await VehicleCostModel.findByAvailableConfig();
-      if (data.distance <= 0 || data.distance === undefined || data.dropPoint <= 0 || data.dropPoint === undefined) {
-        return vehicleCosts
+      if (
+        data.distance <= 0 ||
+        data.distance === undefined ||
+        data.dropPoint <= 0 ||
+        data.dropPoint === undefined
+      ) {
+        return vehicleCosts;
       }
 
       if (!vehicleCosts) {
@@ -599,11 +616,14 @@ export default class PricingResolver {
       }
 
       const results = await Aigle.map(vehicleCosts, async (vehicleCost) => {
-        const calculated = await VehicleCostModel.calculatePricing(vehicleCost._id, data)
-        return Object.assign(vehicleCost, calculated)
-      })
+        const calculated = await VehicleCostModel.calculatePricing(
+          vehicleCost._id,
+          data,
+        );
+        return Object.assign(vehicleCost, calculated);
+      });
 
-      return results
+      return results;
     } catch (errors) {
       console.log("error: ", errors);
       if (errors instanceof ValidationError) {

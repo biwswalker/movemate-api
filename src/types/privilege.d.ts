@@ -1,2 +1,2 @@
-type TPrivilegeType = 'BASIC' | 'STANDARD' | 'PREMIUM'
-type TPrivilegeDiscountUnit = 'PERCENTAGE' | 'CURRENCY'
+type TPrivilegeStatus = 'inactive' | 'active'
+type TPrivilegeDiscountUnit = 'percentage' | 'currency'
