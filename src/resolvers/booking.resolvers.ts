@@ -18,17 +18,15 @@ export default class BookingResolver {
   @UseMiddleware(AllowGuard)
   async getBookingConfig(@Ctx() ctx: GraphQLContext): Promise<BookingConfigPayload> {
     try {
-      // To using login user or not
-      // ctx.req.user_id
-      // TODO
       const isAuthorized = !isEmpty(ctx.req.user_id)
       let isBusinessCreditUser = false
       if (isAuthorized) {
         const user = await UserModel.findById(ctx.req.user_id)
-        const businessCustomer = user.businessDetail as BusinessCustomer | undefined
-        const isCredit = businessCustomer.paymentMethod === 'credit'
-        const isBusiness = user.userType === 'business'
-        isBusinessCreditUser = isCredit && isBusiness
+        if (user.userType === 'business') {
+          const businessCustomer = user.businessDetail as BusinessCustomer | undefined
+          const isCredit = businessCustomer.paymentMethod === 'credit'
+          isBusinessCreditUser = isCredit
+        }
       }
 
       // Get available
@@ -113,11 +111,11 @@ export default class BookingResolver {
           } else {
             totalDiscount = 0
           }
-          discountName = privilege.name
+          discountName = `${privilege.name} (${privilege.discount}${privilege.unit === 'currency' ? ' บาท' : privilege.unit === 'percentage' ? '%' : ''})`
         }
       }
 
-      const total = sum([calculated.totalPrice, additionalservices.price])
+      const total = sum([calculated.totalPrice, additionalservices.price, -totalDiscount])
       return {
         shippingPrices: [
           { label: `${vehicleName} (${distanceKM} กม.)`, price: calculated.subTotalPrice },

@@ -21,6 +21,7 @@ import FileModel from '@models/file.model'
 import VehicleTypeModel from '@models/vehicleType.model'
 import { DistanceCostPricing } from '@models/distanceCostPricing.model'
 import { email_sender } from '@utils/email.utils'
+import NotificationModel from '@models/notification.model'
 
 Aigle.mixin(lodash, {})
 
@@ -69,7 +70,7 @@ export default class ShipmentResolver {
       additionalServices,
       additionalImage,
       directionRoutes,
-      discountCode,
+      discountId,
       locations,
       favoriteDriverId,
       paymentMethod,
@@ -81,7 +82,7 @@ export default class ShipmentResolver {
   ): Promise<Shipment> {
     try {
       const user_id = ctx.req.user_id
-      const customer = await UserModel.findById(user_id).lean()
+      const customer = await UserModel.findById(user_id)
       if (!customer) {
         const message = 'ไม่สามารถหาข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
         throw new GraphQLError(message, {
@@ -142,10 +143,8 @@ export default class ShipmentResolver {
       const _distances = values(diatanceBulkResult.insertedIds)
 
       let _discountId = null
-      if (discountCode) {
-        const privilege = await PrivilegeModel.findOne({
-          code: discountCode,
-        }).lean()
+      if (discountId) {
+        const privilege = await PrivilegeModel.findById(discountId).lean()
         _discountId = privilege._id
         if (!privilege) {
           const message = 'ไม่สามารถหาข้อมูลส่วนลดได้ เนื่องจากไม่พบส่วนลดดังกล่าว'
@@ -218,6 +217,16 @@ export default class ShipmentResolver {
 
       const response = await ShipmentModel.findById(shipment._id)
 
+      // Notification
+      await NotificationModel.sendNotification({
+        userId: customer._id,
+        varient: 'info',
+        title: 'การจองของท่านอยู่ระหว่างการยืนยัน',
+        message: [`หมายเลขการจองขนส่ง ${_trackingNumber} เราได้รับการจองรถของท่านเรียบร้อยแล้ว ขณะนี้การจองของท่านอยู่ระหว่างดำเนินการยืนยันยอดชำระ`],
+        infoText: 'ติดตามการขนส่ง',
+        infoLink: `/main/tracking/${_trackingNumber}`,
+      })
+
       // Sent email
       // Prepare email sender
       const emailTranspoter = email_sender()
@@ -252,9 +261,9 @@ export default class ShipmentResolver {
         to: email,
         subject: 'Movemate Thailand ได้รับการจองรถของคุณแล้ว',
         template:
-          response.payment === 'cash'
+          paymentMethod === 'cash'
             ? 'booking_cash_success'
-            : response.payment === 'cash'
+            : paymentMethod === 'credit'
               ? 'booking_credit_success'
               : '',
         context: {
@@ -263,9 +272,9 @@ export default class ShipmentResolver {
           original: originalText,
           destination: destinationsText,
           payment:
-            response.payment === 'cash'
+            paymentMethod === 'cash'
               ? 'ชำระเงินสด (ผ่านการโอน)'
-              : response.payment === 'credit'
+              : paymentMethod === 'credit'
                 ? 'ออกใบแจ้งหนี้'
                 : '',
           tracking_link,

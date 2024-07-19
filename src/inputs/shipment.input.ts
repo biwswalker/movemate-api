@@ -109,7 +109,7 @@ export class ShipmentInput {
     cashPaymentDetail?: TransferPaymentDetailInput;
 
     @Field({ nullable: true })
-    discountCode?: string;
+    discountId?: string;
 
     @Field()
     isBookingWithDate: boolean;

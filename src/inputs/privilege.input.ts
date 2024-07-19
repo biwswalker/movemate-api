@@ -1,4 +1,4 @@
-import { Field, Float, InputType } from 'type-graphql'
+import { ArgsType, Field, Float, InputType } from 'type-graphql'
 
 @InputType()
 export class PrivilegeInput {
@@ -37,4 +37,25 @@ export class PrivilegeInput {
 
   @Field()
   description: string
+}
+
+@ArgsType()
+export class GetPrivilegesArgs {
+  @Field({ nullable: true })
+  _id?: string;
+
+  @Field({ nullable: true })
+  status?: TPrivilegeStatus;
+
+  @Field({ nullable: true })
+  name?: string;
+
+  @Field({ nullable: true })
+  code?: string;
+
+  @Field({ nullable: true })
+  startDate?: Date;
+
+  @Field({ nullable: true })
+  endDate?: Date;
 }

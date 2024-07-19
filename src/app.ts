@@ -47,7 +47,7 @@ async function server() {
     ],
   })
   app.use(alllowedCors);
-  app.use(express.json());
+  app.use(express.json({ limit: '3mb' }));
   app.use(morgan(':graphql-query'))
   app.use(bodyParser.urlencoded({ extended: false }));
   app.use(graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }));

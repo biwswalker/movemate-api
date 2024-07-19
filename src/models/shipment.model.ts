@@ -158,7 +158,7 @@ export class Shipment extends TimeStamps {
         ref: () => Privilege,
         type: Schema.Types.ObjectId,
     })
-    discountId?: Ref<Privilege, string>; // discount invoice
+    discountId?: Ref<Privilege, string>
 
     @Field()
     @Property()

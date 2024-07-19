@@ -1,7 +1,9 @@
 import { Field, ID, ObjectType } from 'type-graphql'
-import { prop as Property, getModelForClass } from '@typegoose/typegoose'
+import { prop as Property, getModelForClass, plugin } from '@typegoose/typegoose'
 import { IsEnum } from 'class-validator'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
+import mongoose from 'mongoose'
+import mongoosePagination from 'mongoose-paginate-v2'
 
 enum EPrivilegeDiscountUnit {
   PERCENTAGE = 'percentage',
@@ -13,6 +15,7 @@ enum EPrivilegeStatus {
   ACTIVE = 'active',
 }
 
+@plugin(mongoosePagination)
 @ObjectType()
 export class Privilege extends TimeStamps {
   @Field(() => ID)
@@ -79,6 +82,8 @@ export class Privilege extends TimeStamps {
   @Field()
   @Property({ default: Date.now })
   updatedAt: Date
+
+  static paginate: mongoose.PaginateModel<typeof Privilege>['paginate']
 }
 
 const PrivilegeModel = getModelForClass(Privilege)
