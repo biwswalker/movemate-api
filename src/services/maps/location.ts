@@ -144,7 +144,7 @@ export async function getGeocode(latitude: number, longitude: number, session?: 
 
     await saveCache(cacheType, key, marker);
 
-    return places
+    return marker
 }
 
 // TODO: Can not using with Client

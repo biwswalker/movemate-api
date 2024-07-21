@@ -29,6 +29,17 @@ export default class NotificationResolver {
         return 0
     }
 
+    @Query(() => Int)
+    @UseMiddleware(AuthGuard(["customer", "admin", "driver"]))
+    async totalNotification(@Ctx() ctx: GraphQLContext): Promise<number> {
+        const userId = ctx.req.user_id
+        if (userId) {
+            const notifications = await NotificationModel.find({ userId })
+            return notifications.length
+        }
+        return 0
+    }
+
     @Mutation(() => Boolean)
     @UseMiddleware(AuthGuard(["customer", "admin", "driver"]))
     async markNotificationAsRead(@Arg("notificationId") notificationId: string): Promise<boolean> {

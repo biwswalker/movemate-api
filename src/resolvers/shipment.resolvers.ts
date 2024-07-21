@@ -10,7 +10,7 @@ import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
 import { AnyBulkWriteOperation } from 'mongoose'
 import { Arg, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
-import lodash, { curry, get, head, map, reduce, tail, values } from 'lodash'
+import lodash, { get, head, map, reduce, tail, values } from 'lodash'
 import AdditionalServiceCostPricingModel from '@models/additionalServiceCostPricing.model'
 import ShipmentDistancePricingModel from '@models/shipmentDistancePricing.model'
 import VehicleCostModel from '@models/vehicleCost.model'
@@ -245,17 +245,17 @@ export default class ShipmentResolver {
           : customer.userType === 'business'
             ? get(customer, 'businessDetail.businessName', '')
             : ''
+
       const originalText = head(response.destinations)?.name || ''
       const destinationsText = reduce(
         tail(response.destinations),
         (prev, curr) => {
-          if (curr.name) {
-            return `${prev}, ${curry.name}`
-          }
+          if (curr.name) { return prev ? `${prev}, ${curr.name}` : curr.name }
           return prev
         },
         '',
       )
+      
       await emailTranspoter.sendMail({
         from: process.env.NOREPLY_EMAIL,
         to: email,
