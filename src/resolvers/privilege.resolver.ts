@@ -4,6 +4,7 @@ import { PaginationArgs } from '@inputs/query.input'
 import PrivilegeModel, { Privilege } from '@models/privilege.model'
 import { PrivilegePaginationPayload } from '@payloads/privilege.payloads'
 import { yupValidationThrow } from '@utils/error.utils'
+import { reformPaginate } from '@utils/pagination.utils'
 import { PrivilegeSchema } from '@validations/privilege.validations'
 import { GraphQLError } from 'graphql'
 import { isArray, isEmpty, omitBy, reduce } from 'lodash'
@@ -48,33 +49,20 @@ export default class PrivilegeResolver {
   @UseMiddleware(AuthGuard(['admin']))
   async getPrivileges(
     @Args() query: GetPrivilegesArgs,
-    @Args() { sortField, sortAscending, ...paginationArgs }: PaginationArgs
+    @Args() paginate: PaginationArgs,
   ): Promise<PrivilegePaginationPayload> {
     try {
       // Pagination
-      const pagination: PaginateOptions = {
-        ...paginationArgs,
-        ...(isArray(sortField)
-          ? {
-            sort: reduce(
-              sortField,
-              function (result, value) {
-                return { ...result, [value]: sortAscending ? 1 : -1 };
-              },
-              {}
-            ),
-          }
-          : {}),
-      };
+      const pagination: PaginateOptions = reformPaginate(paginate)
       // Filter
       const filterEmptyQuery = omitBy(query, isEmpty)
       const filterQuery: FilterQuery<typeof Privilege> = {
         ...filterEmptyQuery,
-        ...(query.name ? { name: { $regex: query.name, $options: "i" }} : {}),
-        ...(query.code ? { code: { $regex: query.code, $options: "i" }} : {}),
+        ...(query.name ? { name: { $regex: query.name, $options: 'i' } } : {}),
+        ...(query.code ? { code: { $regex: query.code, $options: 'i' } } : {}),
       }
 
-      const privilege = await PrivilegeModel.paginate(filterQuery, pagination) as PrivilegePaginationPayload
+      const privilege = (await PrivilegeModel.paginate(filterQuery, pagination)) as PrivilegePaginationPayload
       if (!privilege) {
         const message = `ไม่สามารถเรียกข้อมูลส่วนลดได้`
         throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })

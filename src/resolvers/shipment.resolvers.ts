@@ -1,6 +1,6 @@
 import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
-import { ShipmentInput } from '@inputs/shipment.input'
+import { GetShipmentArgs, ShipmentInput } from '@inputs/shipment.input'
 import PaymentModel, { CashDetail } from '@models/payment.model'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import ShipmentAdditionalServicePriceModel from '@models/shipmentAdditionalServicePrice.model'
@@ -8,9 +8,9 @@ import UserModel from '@models/user.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
-import { AnyBulkWriteOperation } from 'mongoose'
-import { Arg, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
-import lodash, { get, head, map, reduce, tail, values } from 'lodash'
+import { AnyBulkWriteOperation, FilterQuery, PaginateOptions } from 'mongoose'
+import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
+import lodash, { get, head, isEmpty, map, omitBy, reduce, tail, values } from 'lodash'
 import AdditionalServiceCostPricingModel from '@models/additionalServiceCostPricing.model'
 import ShipmentDistancePricingModel from '@models/shipmentDistancePricing.model'
 import VehicleCostModel from '@models/vehicleCost.model'
@@ -22,6 +22,9 @@ import VehicleTypeModel from '@models/vehicleType.model'
 import { DistanceCostPricing } from '@models/distanceCostPricing.model'
 import { email_sender } from '@utils/email.utils'
 import NotificationModel from '@models/notification.model'
+import { ShipmentPaginationPayload } from '@payloads/shipment.payments'
+import { PaginationArgs } from '@inputs/query.input'
+import { reformPaginate } from '@utils/pagination.utils'
 
 Aigle.mixin(lodash, {})
 
@@ -39,15 +42,38 @@ export default class ShipmentResolver {
     }
   }
 
-  @Query(() => [Shipment])
+  @Query(() => ShipmentPaginationPayload)
   @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
-  async shipments(): Promise<Shipment[]> {
+  async shipments(
+    @Args() query: GetShipmentArgs,
+    @Args() paginate: PaginationArgs,
+  ): Promise<ShipmentPaginationPayload> {
     try {
-      const shipment = await ShipmentModel.find()
-      return shipment
+      const pagination = reformPaginate(paginate)
+      // Filter
+      const filterEmptyQuery = omitBy(query, isEmpty)
+      const filterQuery: FilterQuery<typeof Shipment> = {
+        ...filterEmptyQuery,
+        ...(query.trackingNumber
+          ? {
+              $or: [
+                { trackingNumber: { $regex: query.trackingNumber, $options: 'i' } },
+                { refId: { $regex: query.trackingNumber, $options: 'i' } },
+              ],
+            }
+          : {}),
+        ...(query.vehicleTypeId ? { vehicleId: query.vehicleTypeId } : {}),
+      }
+
+      const shipments = (await ShipmentModel.paginate(filterQuery, pagination)) as ShipmentPaginationPayload
+      if (!shipments) {
+        const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
+        throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
+      }
+      return shipments
     } catch (error) {
       console.log(error)
-      throw new Error('Failed to get shipments')
+      throw error
     }
   }
 
@@ -222,7 +248,9 @@ export default class ShipmentResolver {
         userId: customer._id,
         varient: 'info',
         title: 'การจองของท่านอยู่ระหว่างการยืนยัน',
-        message: [`หมายเลขการจองขนส่ง ${_trackingNumber} เราได้รับการจองรถของท่านเรียบร้อยแล้ว ขณะนี้การจองของท่านอยู่ระหว่างดำเนินการยืนยันยอดชำระ`],
+        message: [
+          `หมายเลขการจองขนส่ง ${_trackingNumber} เราได้รับการจองรถของท่านเรียบร้อยแล้ว ขณะนี้การจองของท่านอยู่ระหว่างดำเนินการยืนยันยอดชำระ`,
+        ],
         infoText: 'ติดตามการขนส่ง',
         infoLink: `/main/tracking/${_trackingNumber}`,
       })
@@ -250,12 +278,14 @@ export default class ShipmentResolver {
       const destinationsText = reduce(
         tail(response.destinations),
         (prev, curr) => {
-          if (curr.name) { return prev ? `${prev}, ${curr.name}` : curr.name }
+          if (curr.name) {
+            return prev ? `${prev}, ${curr.name}` : curr.name
+          }
           return prev
         },
         '',
       )
-      
+
       await emailTranspoter.sendMail({
         from: process.env.NOREPLY_EMAIL,
         to: email,
@@ -272,11 +302,7 @@ export default class ShipmentResolver {
           original: originalText,
           destination: destinationsText,
           payment:
-            paymentMethod === 'cash'
-              ? 'ชำระเงินสด (ผ่านการโอน)'
-              : paymentMethod === 'credit'
-                ? 'ออกใบแจ้งหนี้'
-                : '',
+            paymentMethod === 'cash' ? 'ชำระเงินสด (ผ่านการโอน)' : paymentMethod === 'credit' ? 'ออกใบแจ้งหนี้' : '',
           tracking_link,
           movemate_link,
         },
