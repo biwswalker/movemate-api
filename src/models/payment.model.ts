@@ -1,9 +1,11 @@
 import { Field, ID, ObjectType } from "type-graphql"
-import { prop as Property, Ref, getModelForClass } from '@typegoose/typegoose'
+import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { IsEnum } from "class-validator"
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses"
-import { SubtotalCalculatedPayload } from "@payloads/booking.payloads"
 import { File } from "./file.model"
+import { PricingCalculationMethodPayload } from "@payloads/pricing.payloads"
+import { SubtotalCalculatedPayload } from "@payloads/booking.payloads"
+import mongooseAutoPopulate from "mongoose-autopopulate"
 
 enum EPaymentMethod {
     CASH = 'cash',
@@ -11,10 +13,11 @@ enum EPaymentMethod {
 }
 
 enum EPaymentStatus {
-    WAITING_CONFIRM_PAYMENT = 'WAITING_CONFIRM_PAYMENT',
-    INVOICE = 'INVOICE',
-    PAID = 'PAID',
-    CANCELLED = 'CANCELLED',
+    WAITING_CONFIRM_PAYMENT = 'waiting_confirm_payment',
+    INVOICE = 'invoice',
+    BILLED = 'billed',
+    PAID = 'paid',
+    REFUNDED = 'refunded',
 }
 
 @ObjectType()
@@ -48,10 +51,11 @@ export class InvoiceDetail {
     contactNumber: string
 }
 
+@plugin(mongooseAutoPopulate)
 @ObjectType()
 export class CashDetail {
     @Field(() => File)
-    @Property({ ref: () => File })
+    @Property({ ref: () => File, autopopulate: true })
     imageEvidence: Ref<File, string>
 
     @Field()
@@ -75,6 +79,7 @@ export class CashDetail {
     paymentTime: Date
 }
 
+@plugin(mongooseAutoPopulate)
 @ObjectType()
 export class Payment extends TimeStamps {
     @Field(() => ID)
@@ -98,9 +103,13 @@ export class Payment extends TimeStamps {
     @Property({ required: false })
     cashDetail?: CashDetail
 
-    @Field(() => CashDetail, { nullable: true })
+    @Field(() => PricingCalculationMethodPayload, { nullable: true })
     @Property({ required: false })
-    detail: SubtotalCalculatedPayload
+    detail: PricingCalculationMethodPayload
+
+    @Field(() => SubtotalCalculatedPayload, { nullable: true })
+    @Property({ required: false })
+    calculatedDetail: SubtotalCalculatedPayload
 
     @Field()
     @Property({ default: Date.now })

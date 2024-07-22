@@ -142,11 +142,13 @@ export class GetShipmentArgs {
   trackingNumber?: string
 
   @Field({ nullable: true })
-  status?: TShipingStatus
+  status?: TCriteriaStatus
 
-  // Not match with key
-  @Field(() => [Date], { nullable: true })
-  dateRange?: Date[]
+  @Field(() => Date, { nullable: true })
+  dateRangeStart?: Date
+
+  @Field(() => Date, { nullable: true })
+  dateRangeEnd?: Date
 
   @Field({ nullable: true })
   vehicleTypeId?: string

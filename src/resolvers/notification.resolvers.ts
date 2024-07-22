@@ -23,8 +23,8 @@ export default class NotificationResolver {
     async unreadCount(@Ctx() ctx: GraphQLContext): Promise<number> {
         const userId = ctx.req.user_id
         if (userId) {
-            const notifications = await NotificationModel.find({ userId, read: false })
-            return notifications.length
+            const notifications = await NotificationModel.countDocuments({ userId, read: false })
+            return notifications
         }
         return 0
     }
@@ -34,8 +34,8 @@ export default class NotificationResolver {
     async totalNotification(@Ctx() ctx: GraphQLContext): Promise<number> {
         const userId = ctx.req.user_id
         if (userId) {
-            const notifications = await NotificationModel.find({ userId })
-            return notifications.length
+            const notifications = await NotificationModel.countDocuments({ userId })
+            return notifications
         }
         return 0
     }

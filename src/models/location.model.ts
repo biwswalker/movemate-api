@@ -5,11 +5,11 @@ import { prop as Property, getModelForClass } from '@typegoose/typegoose'
 export class Location {
     @Field()
     @Property()
-    lat: number
+    latitude: number
 
     @Field()
     @Property()
-    lng: number
+    longitude: number
 }
 
 const LocationModel = getModelForClass(Location)

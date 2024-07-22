@@ -9,7 +9,7 @@ import { AxiosError } from 'axios'
 import { get } from 'lodash'
 import { Marker } from '@models/marker.model'
 import { GraphQLContext } from '@configs/graphQL.config'
-import { DirectionsResult } from '@payloads/direction.payloads'
+import { DirectionsResultPayload } from '@payloads/direction.payloads'
 
 const handlePlaceError = (error: any, apiName: string) => {
     if (error instanceof AxiosError) {
@@ -83,11 +83,11 @@ export default class LocationResolver {
     }
 
     // Handle check request data for anonmaus user (limit 20?)
-    @Query(() => DirectionsResult)
+    @Query(() => DirectionsResultPayload)
     async calculateRoute(
         @Arg('origin', () => LocationInput) origin: LocationInput,
         @Arg('destinations', () => [LocationInput]) destinations: LocationInput[],
-    ): Promise<DirectionsResult> {
+    ): Promise<DirectionsResultPayload> {
         try {
             const routes = await getRoute(origin, destinations)
             return routes

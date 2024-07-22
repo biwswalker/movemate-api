@@ -2,14 +2,14 @@ import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { GetShipmentArgs, ShipmentInput } from '@inputs/shipment.input'
 import PaymentModel, { CashDetail } from '@models/payment.model'
-import ShipmentModel, { Shipment } from '@models/shipment.model'
+import ShipmentModel, { Shipment, StatusLog } from '@models/shipment.model'
 import ShipmentAdditionalServicePriceModel from '@models/shipmentAdditionalServicePrice.model'
 import UserModel from '@models/user.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
-import { AnyBulkWriteOperation, FilterQuery, PaginateOptions } from 'mongoose'
-import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
+import { AnyBulkWriteOperation, FilterQuery } from 'mongoose'
+import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import lodash, { get, head, isEmpty, map, omitBy, reduce, tail, values } from 'lodash'
 import AdditionalServiceCostPricingModel from '@models/additionalServiceCostPricing.model'
 import ShipmentDistancePricingModel from '@models/shipmentDistancePricing.model'
@@ -22,8 +22,8 @@ import VehicleTypeModel from '@models/vehicleType.model'
 import { DistanceCostPricing } from '@models/distanceCostPricing.model'
 import { email_sender } from '@utils/email.utils'
 import NotificationModel from '@models/notification.model'
-import { ShipmentPaginationPayload } from '@payloads/shipment.payments'
-import { PaginationArgs } from '@inputs/query.input'
+import { ShipmentPaginationPayload, TotalRecordPayload } from '@payloads/shipment.payloads'
+import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
 import { reformPaginate } from '@utils/pagination.utils'
 
 Aigle.mixin(lodash, {})
@@ -35,34 +35,61 @@ export default class ShipmentResolver {
   async shipment(@Arg('id') id: string): Promise<Shipment> {
     try {
       const shipment = await ShipmentModel.findById(id)
+      if (!shipment) {
+        const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
+        throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
+      }
       return shipment
     } catch (error) {
       console.log(error)
-      throw new Error('Failed to get shipment')
+      throw error
+    }
+  }
+
+  @Query(() => Shipment)
+  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  async getShipmentByTracking(@Ctx() ctx: GraphQLContext, @Arg('trackingNumber') trackingNumber: string): Promise<Shipment> {
+    const user_id = ctx.req.user_id
+    const user_role = ctx.req.user_role
+    try {
+      const shipment = await ShipmentModel.findOne({ trackingNumber, ...(user_role === 'customer' ? { customer: user_id } : {}) })
+      if (!shipment) {
+        const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
+        throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
+      }
+      return shipment
+    } catch (error) {
+      console.log(error)
+      throw error
     }
   }
 
   @Query(() => ShipmentPaginationPayload)
   @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
-  async shipments(
+  async shipmentList(
+    @Ctx() ctx: GraphQLContext,
     @Args() query: GetShipmentArgs,
     @Args() paginate: PaginationArgs,
   ): Promise<ShipmentPaginationPayload> {
+    const user_id = ctx.req.user_id
+    const user_role = ctx.req.user_role
     try {
+      // Pagination
       const pagination = reformPaginate(paginate)
-      // Filter
+      // Query
       const filterEmptyQuery = omitBy(query, isEmpty)
       const filterQuery: FilterQuery<typeof Shipment> = {
         ...filterEmptyQuery,
         ...(query.trackingNumber
           ? {
-              $or: [
-                { trackingNumber: { $regex: query.trackingNumber, $options: 'i' } },
-                { refId: { $regex: query.trackingNumber, $options: 'i' } },
-              ],
-            }
+            $or: [
+              { trackingNumber: { $regex: query.trackingNumber, $options: 'i' } },
+              { refId: { $regex: query.trackingNumber, $options: 'i' } },
+            ],
+          }
           : {}),
         ...(query.vehicleTypeId ? { vehicleId: query.vehicleTypeId } : {}),
+        ...(user_role === 'customer' && user_id ? { customer: user_id } : {})
       }
 
       const shipments = (await ShipmentModel.paginate(filterQuery, pagination)) as ShipmentPaginationPayload
@@ -77,15 +104,107 @@ export default class ShipmentResolver {
     }
   }
 
+  shipmentQuery({ dateRangeStart, dateRangeEnd, trackingNumber, vehicleTypeId, status, ...query }: GetShipmentArgs, user_role: string | undefined, user_id: string | undefined): FilterQuery<typeof Shipment> {
+    // Status
+    const statusFilterOr = status === 'all'
+      ? ['idle', 'progressing', 'dilivered', 'cancelled', 'refund']
+      : status === 'progress'
+        ? ['idle', 'progressing']
+        : status === 'finish' ? ['dilivered']
+          : status === 'refund'
+            ? ['refund']
+            : []
+    // Query
+    const filterEmptyQuery = omitBy(query, isEmpty)
+    const regex = new RegExp(trackingNumber, 'i')
+    const filterQuery: FilterQuery<typeof Shipment> = {
+      ...filterEmptyQuery,
+      ...(vehicleTypeId ? { vehicleId: vehicleTypeId } : {}),
+      ...(dateRangeStart || dateRangeEnd ? {
+        createdAt: {
+          ...(dateRangeStart ? { $gte: dateRangeStart } : {}),
+          ...(dateRangeEnd ? { $lte: dateRangeEnd } : {}),
+        }
+      } : {}),
+      $or: [
+        ...(trackingNumber
+          ? [
+            { trackingNumber: { $regex: regex }, $or: !isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [] },
+            { refId: { $regex: regex }, $or: !isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [] }
+          ]
+          : (!isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [])
+        )
+      ],
+      ...(user_role === 'customer' && user_id ? { customer: user_id } : {})
+    }
+    return filterQuery
+  }
+
   @Query(() => [Shipment])
-  async customerShipments(@Arg('customerId') customerId: string): Promise<Shipment[]> {
+  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  async shipments(
+    @Ctx() ctx: GraphQLContext,
+    @Args() args: GetShipmentArgs,
+    @Args() { skip, ...paginateOpt }: LoadmoreArgs,
+  ): Promise<Shipment[]> {
+    const user_id = ctx.req.user_id
+    const user_role = ctx.req.user_role
     try {
-      const shipments = await ShipmentModel.find({ customer: customerId })
+      // Pagination
+      const reformSorts = reformPaginate(paginateOpt)
+      const paginate = { skip, ...reformSorts }
+
+      const filterQuery = this.shipmentQuery(args, user_role, user_id)
+
+      const shipments = ShipmentModel.find(filterQuery, undefined, paginate)
+      if (!shipments) {
+        const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
+        throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
+      }
       return shipments
     } catch (error) {
-      console.error('Error fetching shipments:', error)
-      return []
+      console.log(error)
+      throw error
     }
+  }
+
+  @Query(() => Int)
+  @UseMiddleware(AuthGuard(["customer", "admin", "driver"]))
+  async totalShipment(@Ctx() ctx: GraphQLContext, @Args() args: GetShipmentArgs): Promise<number> {
+    const user_role = ctx.req.user_role
+    const user_id = ctx.req.user_id
+    if (user_id) {
+      // Query
+      const filterQuery = this.shipmentQuery(args, user_role, user_id)
+      const numberOfShipments = await ShipmentModel.countDocuments(filterQuery)
+      return numberOfShipments
+    }
+    return 0
+  }
+
+
+  @Query(() => [TotalRecordPayload])
+  @UseMiddleware(AuthGuard(["customer", "admin", "driver"]))
+  async statusCount(@Ctx() ctx: GraphQLContext, @Args() args: GetShipmentArgs): Promise<TotalRecordPayload[]> {
+    const user_role = ctx.req.user_role
+    const user_id = ctx.req.user_id
+    if (user_id) {
+      // Query
+      const filterQuery = (status: TCriteriaStatus) => this.shipmentQuery({ ...args, status }, user_role, user_id)
+
+      const allCount = await ShipmentModel.countDocuments(filterQuery('all'))
+      const progressingCount = await ShipmentModel.countDocuments(filterQuery('progress'))
+      const refundCount = await ShipmentModel.countDocuments(filterQuery('refund'))
+      const finishCount = await ShipmentModel.countDocuments(filterQuery('finish'))
+
+      return [
+        { label: 'ทั้งหมด', key: 'all', count: allCount },
+        { label: 'ดำเนินการ', key: 'progress', count: progressingCount },
+        { label: 'คืนเงินแล้ว', key: 'refund', count: refundCount },
+        { label: 'เสร็จสิ้น', key: 'finish', count: finishCount },
+      ]
+    }
+    return []
   }
 
   @Mutation(() => Shipment)
@@ -188,7 +307,7 @@ export default class ShipmentResolver {
           },
         }
       })
-      const additionalImagesBulkResult = await ShipmentDistancePricingModel.bulkWrite(additionalImagesBulkOperations)
+      const additionalImagesBulkResult = await FileModel.bulkWrite(additionalImagesBulkOperations)
       const _additionalImages = values(additionalImagesBulkResult.insertedIds)
 
       const _directionResult = new DirectionsResultModel({
@@ -196,9 +315,11 @@ export default class ShipmentResolver {
       })
       await _directionResult.save()
 
+      const isCashPaymentMethod = paymentMethod === 'cash'
+      const isCreditPaymentMethod = paymentMethod === 'credit'
       // Remark: Cash payment detail
       let cashDetail: CashDetail | null = null
-      if (paymentMethod === 'cash' && cashPaymentDetail) {
+      if (isCashPaymentMethod && cashPaymentDetail) {
         const { imageEvidence, ...cashDetailInput } = cashPaymentDetail
         const _imageEvidence = new FileModel(imageEvidence)
         await _imageEvidence.save()
@@ -215,15 +336,30 @@ export default class ShipmentResolver {
         dropPoint: droppoint,
         isRounded: data.isRoundedReturn,
       })
+      const calculatedDetail = await ShipmentModel.calculate({
+        vehicleTypeId: data.vehicleId,
+        distanceMeter: data.estimatedDistance,
+        dropPoint: droppoint,
+        isRounded: data.isRoundedReturn,
+        serviceIds: additionalServices,
+        discountId: discountId,
+      })
       const _payment = new PaymentModel({
         cashDetail,
         invoiceDetail: paymentDetail,
+        calculatedDetail,
         detail: pricingDetail,
         paymentMethod,
-        status:
-          paymentMethod === 'cash' ? 'WAITING_CONFIRM_PAYMENT' : paymentMethod === 'credit' ? 'INVOICE' : 'CANCELLED',
+        status: isCreditPaymentMethod ? 'invoice' : 'waiting_confirm_payment',
       })
       await _payment.save()
+
+      const status: TShipingStatus = 'idle'
+      const adminAcceptanceStatus: TAdminAcceptanceStatus = isCreditPaymentMethod ? 'reach' : 'pending'
+      const driverAcceptanceStatus: TDriverAcceptanceStatus = isCreditPaymentMethod ? 'pending' : 'idle'
+      // Initial status log
+      const text = isCreditPaymentMethod ? favoriteDriverId ? 'รอคนขับคนโปรดรับงาน' : 'รอคนขับรับงาน' : 'รอเจ้าหน้าที่ยืนยันยอดการชำระ'
+      const startStatus: StatusLog = { status: 'pending', text, createdAt: new Date() }
 
       const _trackingNumber = await generateTrackingNumber('MMTH', 'tracking')
       const shipment = new ShipmentModel({
@@ -238,6 +374,10 @@ export default class ShipmentResolver {
         additionalImages: _additionalImages,
         directionId: _directionResult,
         payment: _payment,
+        status,
+        adminAcceptanceStatus,
+        driverAcceptanceStatus,
+        statusLog: [startStatus]
       })
       await shipment.save()
 

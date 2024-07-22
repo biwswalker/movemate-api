@@ -167,7 +167,7 @@ class DirectionsRoute {
 }
 
 @ObjectType()
-export class DirectionsResult {
+export class DirectionsResultPayload {
     @Field(() => [String], { nullable: true })
     available_travel_modes?: string[] // google.maps.TravelMode[]
 

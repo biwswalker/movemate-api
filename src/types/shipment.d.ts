@@ -1,5 +1,10 @@
 type TIssueType = 'DELAY' | 'DAMAGE' | 'MISSING' | 'OTHER'
 
 type TPaymentMethod = 'cash' | 'credit'
-type TShipingStatus = 'PENDING' | 'ACCEPTED' | 'DELIVERED' | 'CANCELLED'
-type TPaymentStatus = 'WAITING_CONFIRM_PAYMENT' | 'INVOICE' | 'PAID' | 'CANCELLED'
+type TShipingStatus = 'idle' | 'progressing' | 'dilivered' | 'cancelled' | 'refund'
+type TAdminAcceptanceStatus = 'pending' | 'reach' | 'accepted' | 'rejected' | 'cancelled'
+type TDriverAcceptanceStatus = 'idle' | 'pending' | 'accepted' | 'uninterested'
+type TPaymentStatus = 'waiting_confirm_payment' | 'invoice' | 'billed' | 'confirm_payment' | 'paid' | 'refunded'
+type TShipingLogStatus = 'pending' | 'inprogress' | 'complete' | 'cancelled' | 'rejected' | 'refund'
+
+type TCriteriaStatus = 'all' | 'progress' | 'refund' | 'finish'

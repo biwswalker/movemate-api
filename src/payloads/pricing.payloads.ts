@@ -4,6 +4,7 @@
 import { ObjectType, Field, Float } from 'type-graphql'
 import { DistanceCostPricing } from '@models/distanceCostPricing.model'
 import { VehicleCost } from '@models/vehicleCost.model'
+import { prop as Property, Severity } from '@typegoose/typegoose'
 
 @ObjectType()
 export class CalculationResultPayload extends DistanceCostPricing {
@@ -17,30 +18,39 @@ export class CalculationResultPayload extends DistanceCostPricing {
 @ObjectType()
 export class PricingCalculationMethodPayload {
     @Field(() => [CalculationResultPayload])
+    @Property({ allowMixed: Severity.ALLOW })
     calculations: CalculationResultPayload[]
 
     @Field(() => Float)
+    @Property()
     subTotalDropPointCost: number
 
     @Field(() => Float)
+    @Property()
     subTotalDropPointPrice: number
 
     @Field(() => Float)
+    @Property()
     subTotalCost: number
 
     @Field(() => Float)
+    @Property()
     subTotalPrice: number
 
     @Field(() => Float)
+    @Property()
     subTotalRoundedCost: number
 
     @Field(() => Float)
+    @Property()
     subTotalRoundedPrice: number
 
     @Field(() => Float)
+    @Property()
     totalCost: number
 
     @Field(() => Float)
+    @Property()
     totalPrice: number
 }
 

@@ -21,6 +21,12 @@ export class LoadmoreArgs {
   @Field(() => Int, { defaultValue: 5, nullable: true })
   limit: number;
 
+  @Field(() => [String], { nullable: true })
+  sortField?: string[];
+
+  @Field({ nullable: true })
+  sortAscending?: boolean = true;
+
   @Field(() => Int, { defaultValue: 0, nullable: true })
   skip: number;
 }
