@@ -1,7 +1,9 @@
-import { GetCustomersArgs } from "@inputs/user.input"
+import { GetUserArgs } from "@inputs/user.input"
 import { PipelineStage, Types } from "mongoose"
 
-export const GET_USERS = ({ email, name, phoneNumber, taxId, userNumber, username, ...query }: Partial<GetCustomersArgs>): PipelineStage[] => {
+export const GET_USERS = ({ email, name, phoneNumber, taxId, userNumber, username, lineId, serviceVehicleType, ...query }: Partial<GetUserArgs>): PipelineStage[] => {
+
+    // lineId, serviceVehicleType
 
     const detailMatch = (query.userRole === 'customer' && query.userType === 'individual')
         ? {
@@ -34,7 +36,33 @@ export const GET_USERS = ({ email, name, phoneNumber, taxId, userNumber, usernam
                 ...(taxId
                     ? { "businessDetail.taxNumber": { $regex: taxId, $options: "i" } }
                     : {}),
-            } : {}
+            }
+            : (query.userRole === 'driver' && query.userType === 'individual')
+                ? {
+                    ...(lineId
+                        ? { "individualDriver.lineId": { $regex: lineId, $options: "i" } }
+                        : {}),
+                    ...(name
+                        ? { $or: [{ "individualDriver.firstname": { $regex: name, $options: "i" } }, { "individualDriver.lastname": { $regex: name, $options: "i" } }], }
+                        : {}),
+                    ...(phoneNumber
+                        ? { "individualDriver.phoneNumber": { $regex: phoneNumber, $options: "i" } }
+                        : {}),
+                    ...(taxId
+                        ? { "individualDriver.taxId": { $regex: taxId, $options: "i" } }
+                        : {}),
+                    ...(serviceVehicleType
+                        ? { "individualDriver.serviceVehicleType._id": new Types.ObjectId(serviceVehicleType) }
+                        : {}),
+                } : {}
+
+    const statusFilter = query.userRole === 'customer'
+        ? [...((query.userType === 'business' && query.status === 'pending') || (query.userType === 'business' && query.status === undefined) ? [{
+            userType: 'individual',
+            validationStatus: 'pending',
+            upgradeRequest: { $ne: null }
+        }] : [])]
+        : []
 
     return [
         {
@@ -49,11 +77,7 @@ export const GET_USERS = ({ email, name, phoneNumber, taxId, userNumber, usernam
                             ? { username: { $regex: username, $options: "i" } }
                             : {}),
                     },
-                    ...((query.userType === 'business' && query.status === 'pending') || (query.userType === 'business' && query.status === undefined) ? [{
-                        userType: 'individual',
-                        validationStatus: 'pending',
-                        upgradeRequest: { $ne: null }
-                    }] : [])
+                    ...statusFilter,
                 ]
             }
         },
@@ -172,6 +196,52 @@ export const GET_USERS = ({ email, name, phoneNumber, taxId, userNumber, usernam
         {
             $unwind: {
                 path: "$adminDetail",
+                preserveNullAndEmptyArrays: true
+            }
+        },
+        {
+            $lookup: {
+                from: "individualdrivers",
+                localField: "individualDriver",
+                foreignField: "_id",
+                as: "individualDriver",
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "vehicletypes",
+                            localField: "serviceVehicleType",
+                            foreignField: "_id",
+                            as: "serviceVehicleType",
+                            pipeline: [
+                                {
+                                    $lookup: {
+                                        from: "files",
+                                        localField: "image",
+                                        foreignField: "_id",
+                                        as: "image",
+                                    }
+                                },
+                                {
+                                    $unwind: {
+                                        path: "$image",
+                                        preserveNullAndEmptyArrays: true
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        $unwind: {
+                            path: "$serviceVehicleType",
+                            preserveNullAndEmptyArrays: true
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $unwind: {
+                path: "$individualDriver",
                 preserveNullAndEmptyArrays: true
             }
         },

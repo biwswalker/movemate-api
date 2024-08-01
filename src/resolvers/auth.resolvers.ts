@@ -32,7 +32,7 @@ export default class AuthResolver {
                 throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
             }
 
-            if (user.status === 'pending' || !user.isVerifiedEmail) {
+            if ((user.status === 'pending' || !user.isVerifiedEmail) && user.userRole === 'customer') {
                 const email = user.userType === 'individual'
                     ? get(user, "individualDetail.email", '')
                     : user.userType === 'business'

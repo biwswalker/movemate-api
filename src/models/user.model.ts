@@ -15,6 +15,7 @@ import { decryption } from "@utils/encryption";
 import { isEmpty } from "lodash";
 import { EXISTING_USERS, GET_CUSTOMER_BY_EMAIL } from "@pipelines/user.pipeline";
 import { Notification } from "./notification.model";
+import { IndividualDriver } from "./driverIndividual.model";
 
 enum EUserRole {
   CUSTOMER = 'customer',
@@ -152,6 +153,12 @@ export class User extends TimeStamps {
   @Field(() => BusinessCustomer, { nullable: true })
   @Property({ autopopulate: true, ref: 'BusinessCustomer' })
   businessDetail?: Ref<BusinessCustomer>
+
+  @Field(() => IndividualDriver, { nullable: true })
+  @Property({ autopopulate: true, ref: 'IndividualDriver' })
+  individualDriver?: Ref<IndividualDriver>
+
+  // Business Driver
 
   @Field(() => File, { nullable: true })
   @Property({ autopopulate: true, ref: 'File' })

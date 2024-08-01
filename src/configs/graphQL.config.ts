@@ -19,6 +19,9 @@ import VerifyAccountResolver from '@resolvers/verify.resolvers'
 import NotificationResolver from '@resolvers/notification.resolvers'
 import LocationResolver from '@resolvers/location.resolvers'
 import PrivilegeResolver from '@resolvers/privilege.resolver'
+import AddressResolver from '@resolvers/address.resolvers'
+import OTPRequestResolver from '@resolvers/otp.resolver'
+import DriverResolver from '@resolvers/driver.resolvers'
 
 export interface GraphQLContext {
   req: Request
@@ -43,6 +46,9 @@ export async function createGraphQLServer(httpServer: http.Server) {
       NotificationResolver,
       LocationResolver,
       PrivilegeResolver,
+      AddressResolver,
+      OTPRequestResolver,
+      DriverResolver
     ],
     authChecker: ({ context }: { context: GraphQLContext }) => {
       const userId = get(context, 'req.userId', '')

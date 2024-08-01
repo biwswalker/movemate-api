@@ -5,12 +5,13 @@ import UserModel from '@models/user.model'
 import { GraphQLError } from 'graphql'
 import { IndividualCustomer } from '@models/customerIndividual.model'
 import { email_sender } from '@utils/email.utils'
-import { generateOTP, generateRef, getCurrentHost } from '@utils/string.utils'
+import { getCurrentHost } from '@utils/string.utils'
 import { addMinutes } from 'date-fns'
 import { VerifyOTPPayload, VerifyPayload } from '@payloads/verify.payloads'
 import { BusinessCustomer } from '@models/customerBusiness.model'
 import { VerifyOTPArgs } from '@inputs/verify.payloads'
-import { isEqual } from 'lodash'
+import { get, isEqual } from 'lodash'
+import { requestOTP } from './otp.resolver'
 
 @Resolver()
 export default class VerifyAccountResolver {
@@ -118,17 +119,16 @@ export default class VerifyAccountResolver {
                 });
             }
 
-            const ref = generateRef()
-            const otp = generateOTP()
-
-            const verifyLast = `${otp} คือ รหัสยืนยันเบอร์ติดต่อ MovemateTH ของคุณ (Ref:${ref})`
-
-            const currentDate = new Date()
-            const countdown = addMinutes(currentDate, 2)
+            const phoneNumber = (user.userRole === 'customer' && user.userType === 'individual')
+                ? get(user, 'individualDetail.phoneNumber', '')
+                : (user.userRole === 'customer' && user.userType === 'business')
+                    ? get(user, 'businessDetail.contactNumber', '')
+                    : (user.userRole === 'driver' && user.userType === 'individual')
+                        ? get(user, 'individualDriver.phoneNumber', '')
+                        : ''
+            const { otp, ref, countdown } = await requestOTP(phoneNumber, ctx.req.user_role === 'admin' ? "ผู้ดูแลระบบ ส่ง OTP เพื่อยืนยันหมายเลขติดต่อ" : "ยืนยันหมายเลขติดต่อ")
             const duration = `2m`
-
             await user.updateOne({ lastestOTP: otp, lastestOTPRef: ref, lastestOTPTime: countdown })
-
             return {
                 countdown,
                 duration,

@@ -87,7 +87,7 @@ export class UpdateBusinessDetailInput {
 }
 
 @ArgsType()
-export class GetCustomersArgs {
+export class GetUserArgs {
   @Field({ nullable: true })
   _id?: string;
 
@@ -136,4 +136,11 @@ export class GetCustomersArgs {
 
   @Field({ nullable: true })
   taxId: string
+
+  // Driver
+  @Field({ nullable: true })
+  lineId: string
+
+  @Field({ nullable: true })
+  serviceVehicleType: string
 }

@@ -129,7 +129,6 @@ export default class VehicleTypeResolver {
         }
     }
     @Query(() => [VehicleType])
-    @UseMiddleware(AuthGuard(["customer", "driver"]))
     async getVehicleTypeAvailable(): Promise<VehicleType[]> {
         try {
             const vehicleTypes = await VehicleTypeModel.aggregate([

@@ -10,7 +10,7 @@ import {
   InvalidDirectiveError,
 } from "type-graphql";
 import UserModel, { User } from "@models/user.model";
-import { GetCustomersArgs } from "@inputs/user.input";
+import { GetUserArgs } from "@inputs/user.input";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
 import { find, get, includes, isArray, isEmpty, isEqual, map, omit, omitBy, reduce } from "lodash";
@@ -43,13 +43,14 @@ import { addMinutes, addSeconds } from "date-fns";
 import { decryption } from "@utils/encryption";
 import NotificationModel from "@models/notification.model";
 import { fDateTime } from "@utils/formatTime";
+import { IndividualDriver } from "@models/driverIndividual.model";
 
 @Resolver(User)
 export default class UserResolver {
   @Query(() => UserPaginationAggregatePayload)
   @UseMiddleware(AuthGuard(["customer", "admin", "driver"]))
   async users(
-    @Args() query: GetCustomersArgs,
+    @Args() query: GetUserArgs,
     @Args() { sortField, sortAscending, ...paginationArgs }: PaginationArgs
   ): Promise<UserPaginationAggregatePayload> {
     try {
@@ -81,7 +82,7 @@ export default class UserResolver {
 
   @Query(() => [String])
   @UseMiddleware(AuthGuard(["admin"]))
-  async alluserIds(@Args() query: GetCustomersArgs): Promise<string[]> {
+  async alluserIds(@Args() query: GetUserArgs): Promise<string[]> {
     try {
       const filterQuery = omitBy(query, isEmpty)
       const users = (await UserModel.aggregate(GET_USERS(filterQuery)))
@@ -109,6 +110,23 @@ export default class UserResolver {
       return user;
     } catch (error) {
       throw new GraphQLError("ไม่สามารถเรียกข้อมูลลูกค้าได้ โปรดลองอีกครั้ง");
+    }
+  }
+
+  @Query(() => User)
+  @UseMiddleware(AuthGuard(["customer", "admin", "driver"]))
+  async getUser(@Args() data: GetUserArgs): Promise<User> {
+    try {
+      const user = await UserModel.findOne(data);
+      if (!user) {
+        const message = `ไม่พบผู้ใช้`;
+        throw new GraphQLError(message, {
+          extensions: { code: "NOT_FOUND", errors: [{ message }] },
+        });
+      }
+      return user;
+    } catch (error) {
+      throw new GraphQLError("ไม่สามารถเรียกข้อมูลผู้ใช้ โปรดลองอีกครั้ง");
     }
   }
 
@@ -388,132 +406,156 @@ export default class UserResolver {
       if (!id) {
         throw new AuthenticationError("ไม่พบผู้ใช้");
       }
-      const customer = await UserModel.findById(id).exec();
-      const individualDetail: IndividualCustomer | null = get(customer, 'individualDetail', null)
-      const businessDetail: BusinessCustomer | null = get(customer, 'businessDetail', null)
-      const upgradeRequest: BusinessCustomer | null = get(customer, 'upgradeRequest', null)
-      const businesData: BusinessCustomer | null = customer.userType === 'individual' ? upgradeRequest : businessDetail
+      const user = await UserModel.findById(id).exec();
 
-      if (!customer) {
+      if (!user) {
         throw new AuthenticationError("ไม่พบผู้ใช้");
       }
 
       // Check pending status
-      if (customer.validationStatus !== 'pending') {
+      if (user.validationStatus !== 'pending') {
         throw new GraphQLError("ผู้ใช้ท่านนี้มีการอนุมัติเรียบร้อยแล้ว")
       }
       // Check approval status
       if (!includes(['approve', 'denied'], result)) {
         throw new InvalidDirectiveError('สถานะไม่ถูกต้อง')
       }
-      // Check Business Detail
-      if (typeof businesData !== 'object') {
-        throw new InvalidDirectiveError('ไม่พบข้อมูลธุระกิจ')
-      }
 
-      // Prepare email sender
-      const emailTranspoter = email_sender();
-      const status = result === 'approve' ? 'active' : 'denied'
-      // Title name
-      const BUSINESS_TITLE_NAME_OPTIONS = [
-        { value: 'Co', label: 'บจก.' },
-        { value: 'Part', label: 'หจก.' },
-        { value: 'Pub', label: 'บมจ.' },
-      ]
+      // ===== CUSTOMER ROLE
+      if (user.userRole === 'customer') {
+        const individualDetail: IndividualCustomer | null = get(user, 'individualDetail', null)
+        const businessDetail: BusinessCustomer | null = get(user, 'businessDetail', null)
+        const upgradeRequest: BusinessCustomer | null = get(user, 'upgradeRequest', null)
+        const businesData: BusinessCustomer | null = user.userType === 'individual' ? upgradeRequest : businessDetail
 
-      const businessTitleName = find(BUSINESS_TITLE_NAME_OPTIONS, ['value', businesData.businessTitle])
+        // Check Business Detail
+        if (typeof businesData !== 'object') {
+          throw new InvalidDirectiveError('ไม่พบข้อมูลธุระกิจ')
+        }
 
-      if (result === 'approve') {
-        const rawPassword = generateRandomNumberPattern("MMPWD########").toLowerCase();
-        const hashedPassword = await bcrypt.hash(rawPassword, 10);
+        // Prepare email sender
+        const emailTranspoter = email_sender();
+        const status = result === 'approve' ? 'active' : 'denied'
+        // Title name
+        const BUSINESS_TITLE_NAME_OPTIONS = [
+          { value: 'Co', label: 'บจก.' },
+          { value: 'Part', label: 'หจก.' },
+          { value: 'Pub', label: 'บมจ.' },
+        ]
 
-        if (customer.userType === 'individual') {
-          const userNumber = await generateId("MMBU", 'business');
-          const newBusinessDetail = {
-            userNumber,
-            username: userNumber,
-            userType: 'business',
-            businessDetail: businesData,
-            upgradeRequest: null,
-            isChangePasswordRequire: true,
-          }
-          await customer.updateOne({ status, validationStatus: result, password: hashedPassword, ...newBusinessDetail })
-          const movemate_link = `https://www.movematethailand.com`
-          await emailTranspoter.sendMail({
-            from: process.env.NOREPLY_EMAIL,
-            to: businesData.businessEmail,
-            subject: "บัญชี Movemate ของท่านได้รับการอนุมัติ",
-            template: "register_business_upgrade",
-            context: {
-              business_title: get(businessTitleName, 'label', ''),
-              business_name: businesData.businessName,
+        const businessTitleName = find(BUSINESS_TITLE_NAME_OPTIONS, ['value', businesData.businessTitle])
+
+        if (result === 'approve') {
+          const rawPassword = generateRandomNumberPattern("MMPWD########").toLowerCase();
+          const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
+          if (user.userType === 'individual') {
+            const userNumber = await generateId("MMBU", 'business');
+            const newBusinessDetail = {
+              userNumber,
               username: userNumber,
-              password: rawPassword,
-              movemate_link,
-            },
-          });
-          await NotificationModel.sendNotification({
-            userId: customer._id,
-            varient: 'success',
-            title: 'บัญชีของท่านได้รับการอัพเกรดแล้ว',
-            message: [`บัญชี ${userNumber} ได้อัพเกรดเป็นรูปแบบ corporate แล้ว ท่านสามารถใช้งานได้ในขณะนี้`],
-            infoText: 'ดูโปรไฟล์',
-            infoLink: '/main/profile',
-          })
+              userType: 'business',
+              businessDetail: businesData,
+              upgradeRequest: null,
+              isChangePasswordRequire: true,
+            }
+            await user.updateOne({ status, validationStatus: result, password: hashedPassword, ...newBusinessDetail })
+            const movemate_link = `https://www.movematethailand.com`
+            await emailTranspoter.sendMail({
+              from: process.env.NOREPLY_EMAIL,
+              to: businesData.businessEmail,
+              subject: "บัญชี Movemate ของท่านได้รับการอนุมัติ",
+              template: "register_business_upgrade",
+              context: {
+                business_title: get(businessTitleName, 'label', ''),
+                business_name: businesData.businessName,
+                username: userNumber,
+                password: rawPassword,
+                movemate_link,
+              },
+            });
+            await NotificationModel.sendNotification({
+              userId: user._id,
+              varient: 'success',
+              title: 'บัญชีของท่านได้รับการอัพเกรดแล้ว',
+              message: [`บัญชี ${userNumber} ได้อัพเกรดเป็นรูปแบบ corporate แล้ว ท่านสามารถใช้งานได้ในขณะนี้`],
+              infoText: 'ดูโปรไฟล์',
+              infoLink: '/main/profile',
+            })
 
+          } else {
+            await user.updateOne({ status, validationStatus: result, password: hashedPassword })
+            const host = getCurrentHost(ctx)
+            const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
+            const movemate_link = `https://www.movematethailand.com`
+            await emailTranspoter.sendMail({
+              from: process.env.NOREPLY_EMAIL,
+              to: businesData.businessEmail,
+              subject: "บัญชี Movemate ของท่านได้รับการอนุมัติ",
+              template: "register_business",
+              context: {
+                business_title: get(businessTitleName, 'label', ''),
+                business_name: businesData.businessName,
+                username: user.username,
+                password: rawPassword,
+                activate_link,
+                movemate_link,
+              },
+            });
+          }
         } else {
-          await customer.updateOne({ status, validationStatus: result, password: hashedPassword })
-          const host = getCurrentHost(ctx)
-          const activate_link = `${host}/api/v1/activate/customer/${customer.userNumber}`
-          const movemate_link = `https://www.movematethailand.com`
+          // Update user
+          const newBusinessDetail = user.userType === 'individual' ? {
+            upgradeRequest: null,
+            validationStatus: 'pending',
+            status: 'active'
+          } : {}
+
+          const sentemail = user.userType === 'individual' ? individualDetail.email : businesData.businessEmail
+
+          await user.updateOne({ status, validationStatus: result, ...newBusinessDetail })
           await emailTranspoter.sendMail({
             from: process.env.NOREPLY_EMAIL,
-            to: businesData.businessEmail,
-            subject: "บัญชี Movemate ของท่านได้รับการอนุมัติ",
-            template: "register_business",
+            to: sentemail,
+            subject: "บัญชี Movemate ของท่านไม่ได้รับการอนุมัติ",
+            template: "register_rejected_account",
             context: {
               business_title: get(businessTitleName, 'label', ''),
               business_name: businesData.businessName,
-              username: customer.username,
-              password: rawPassword,
-              activate_link,
-              movemate_link,
+              movemate_link: `https://www.movematethailand.com`,
             },
           });
+
+          if (user.userType === 'individual') {
+            await NotificationModel.sendNotification({
+              userId: user._id,
+              varient: 'error',
+              title: 'การอัพเกรดบัญชีไม่ได้รับการอนุมัติ',
+              message: [`บัญชี ${businesData.businessName} ไม่ผ่านพิจารณาการอัพเกรดเป็นรูปแบบ corporate หากมีข้อสงสัยโปรดติดต่อเรา`],
+            })
+          }
         }
-      } else {
-        // Update user
-        const newBusinessDetail = customer.userType === 'individual' ? {
-          upgradeRequest: null,
-          validationStatus: 'pending',
-          status: 'active'
-        } : {}
-
-        const sentemail = customer.userType === 'individual' ? individualDetail.email : businesData.businessEmail
-
-        await customer.updateOne({ status, validationStatus: result, ...newBusinessDetail })
-        await emailTranspoter.sendMail({
-          from: process.env.NOREPLY_EMAIL,
-          to: sentemail,
-          subject: "บัญชี Movemate ของท่านไม่ได้รับการอนุมัติ",
-          template: "register_rejected_account",
-          context: {
-            business_title: get(businessTitleName, 'label', ''),
-            business_name: businesData.businessName,
-            movemate_link: `https://www.movematethailand.com`,
-          },
-        });
-
-        if (customer.userType === 'individual') {
+      } else if (user.userRole === 'driver') {
+        // ===== DRIVER ROLE
+        const status = result === 'approve' ? 'active' : 'denied'
+        const individualDriver: IndividualDriver | null = get(user, 'individualDriver', null)
+        if (user.userType === 'individual') {
+          await user.updateOne({ status, validationStatus: result })
+          const title = result === 'approve' ? 'บัญชีของท่านได้รับการอนุมัติ' : 'บัญชีของท่านไม่ผ่านการอนุมัติ'
+          const messages = result === 'approve' ? ['ขอแสดงความยินดีด้วย', 'บัญชีของท่านได้รับการอนุมัติเป็นคนขับของ Movemate หากมีข้อสงสัยโปรดติดต่อเรา'] : [`บัญชี ${individualDriver.fullname} ไม่ผ่านพิจารณาคนขับ Movemvate หากมีข้อสงสัยโปรดติดต่อเรา`]
           await NotificationModel.sendNotification({
-            userId: customer._id,
-            varient: 'error',
-            title: 'การอัพเกรดบัญชีไม่ได้รับการอนุมัติ',
-            message: [`บัญชี ${businesData.businessName} ไม่ผ่านพิจารณาการอัพเกรดเป็นรูปแบบ corporate หากมีข้อสงสัยโปรดติดต่อเรา`],
+            userId: user._id,
+            varient: result === 'approve' ? 'success' : 'error',
+            title: title,
+            message: messages,
           })
+        } else if (user.userType === 'business') {
+          // TODO: BUSINESS
+        } else {
+          throw new InvalidDirectiveError('ไม่พบประเภทคนขับรถ')
         }
       }
-      return customer;
+      return user;
     } catch (error) {
       throw error;
     }
