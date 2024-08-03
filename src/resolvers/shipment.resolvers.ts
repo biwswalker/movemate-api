@@ -455,3 +455,14 @@ export default class ShipmentResolver {
     }
   }
 }
+
+
+
+// DO-NEXT
+// 1. Handle get shipment for driver and favorit
+// 2. Handle get shipment count of pending status for show counting
+// 1. npm install node-cron
+// 2. Setup Cron
+// 3. Handle Notification logic - every 10min / 50min / 120min / 120min
+// 
+// Workprogress

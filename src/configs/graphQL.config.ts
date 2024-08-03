@@ -22,6 +22,7 @@ import PrivilegeResolver from '@resolvers/privilege.resolver'
 import AddressResolver from '@resolvers/address.resolvers'
 import OTPRequestResolver from '@resolvers/otp.resolver'
 import DriverResolver from '@resolvers/driver.resolvers'
+import MatchingResolver from '@resolvers/matching.resolvers'
 
 export interface GraphQLContext {
   req: Request
@@ -48,7 +49,8 @@ export async function createGraphQLServer(httpServer: http.Server) {
       PrivilegeResolver,
       AddressResolver,
       OTPRequestResolver,
-      DriverResolver
+      DriverResolver,
+      MatchingResolver
     ],
     authChecker: ({ context }: { context: GraphQLContext }) => {
       const userId = get(context, 'req.userId', '')

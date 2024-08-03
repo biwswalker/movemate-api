@@ -175,6 +175,14 @@ export class Shipment extends TimeStamps {
   @Property({ ref: () => User, required: false, autopopulate: true })
   requestedDriver: Ref<User>
 
+  @Field({ nullable: true })
+  @Property({ default: false })
+  requestedDriverAccepted: boolean
+
+  @Field(() => User, { nullable: true })
+  @Property({ ref: () => User, required: false, autopopulate: true })
+  driver: Ref<User>
+
   @Field(() => [Destination])
   @Property({ allowMixed: Severity.ALLOW })
   destinations: Destination[]
