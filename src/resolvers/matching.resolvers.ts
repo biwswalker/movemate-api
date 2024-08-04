@@ -80,7 +80,7 @@ export default class MatchingResolver {
 
   @Query(() => Int)
   @UseMiddleware(AuthGuard(["driver"]))
-  async totalShipment(@Ctx() ctx: GraphQLContext, @Arg("status") status: TShipmentStatus): Promise<number> {
+  async totalAvailableShipment(@Ctx() ctx: GraphQLContext, @Arg("status") status: TShipmentStatus): Promise<number> {
     const userId = ctx.req.user_id
     if (!userId) {
       const message = "ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน";
