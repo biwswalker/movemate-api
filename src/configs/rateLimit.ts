@@ -5,7 +5,6 @@ import redis from "./redis";
 async function rateLimiter(ip: string, _type: TSearchType, RATE_LIMIT = 10) {
     const redisKey = `rate-limit:${ip}`
 
-    console.log(redis)
     const currentCount = await redis.get(redisKey)
     const count = currentCount ? parseInt(currentCount, 10) : 0
 

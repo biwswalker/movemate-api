@@ -12,7 +12,6 @@ import bodyParser from "body-parser";
 import morgan from 'morgan'
 import cors from "cors";
 import http from 'http'
-import { configuredRedis } from '@configs/redis'
 import "reflect-metadata";
 
 morgan.token('graphql-query', (req: Request) => {
@@ -27,7 +26,6 @@ morgan.token('graphql-query', (req: Request) => {
 });
 
 dotenv.config();
-configuredRedis()
 const MaxUploadFileSize = 2 * 1024 * 1024;
 
 async function server() {
