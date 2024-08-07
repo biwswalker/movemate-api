@@ -1,0 +1,1 @@
+type TSearchType = 'places' | 'place-detail' | 'geocode' | 'routes' | 'pricing'

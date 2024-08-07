@@ -1,67 +1,54 @@
 import { AuthenticationError, MiddlewareFn } from "type-graphql";
 import { verifyAccessToken } from "@utils/auth.utils";
 import { GraphQLContext } from "@configs/graphQL.config";
-import UserModel from "@models/user.model";
+import UserModel, { User } from "@models/user.model";
 import { NextFunction, Request, Response } from "express";
 import { TokenExpiredError } from "jsonwebtoken";
 import { includes } from "lodash";
 
-interface IAccountModel {
-  findById(user_id: string): Promise<any>;
-}
-
-const findUserById = async (
-  Model: IAccountModel,
-  user_id: string
-): Promise<any> => {
-  const user = await Model.findById(user_id);
-  if (!user) {
-    throw new Error("Unauthorized");
-  }
-  return user;
-};
-
 export const AuthGuard: (roles?: TUserRole[]) => MiddlewareFn<GraphQLContext> =
   (roles = ["customer"]) =>
-  async ({ context }, next) => {
-    const { req } = context;
+    async ({ context }, next) => {
+      const { req } = context;
 
-    const authorization = req.headers["authorization"];
-    if (!authorization || !authorization.startsWith("Bearer ")) {
-      throw new AuthenticationError("รหัสระบุตัวตนไม่สมบูรณ์");
-    }
-
-    try {
-      const token = authorization.split(" ")[1];
-      const decodedToken = verifyAccessToken(token);
-      if (!decodedToken) {
-        throw new AuthenticationError("รหัสระบุตัวตนไม่สมบูรณ์หรือหมดอายุ");
-      }
-      const user_id = decodedToken.user_id;
-      const user_role = decodedToken.user_role;
-      const user = await findUserById(UserModel, user_id);
-
-      if (!user) {
-        throw new AuthenticationError("ไม่พบผู้ใช้");
+      const authorization = req.headers["authorization"];
+      if (!authorization || !authorization.startsWith("Bearer ")) {
+        throw new AuthenticationError("รหัสระบุตัวตนไม่สมบูรณ์");
       }
 
-      if (!includes(roles, user_role)) {
-        throw new AuthenticationError(
-          "ไม่สามารถใช้งานฟังก์ชั้นนี้ได้ เนื่องจากจำกัดสิทธิ์การเข้าถึง"
-        );
+      try {
+        const token = authorization.split(" ")[1];
+        const decodedToken = verifyAccessToken(token);
+        if (!decodedToken) {
+          throw new AuthenticationError("รหัสระบุตัวตนไม่สมบูรณ์หรือหมดอายุ");
+        }
+        const user_id = decodedToken.user_id;
+        const user_role = decodedToken.user_role;
+        const user = await UserModel.findById(user_id).lean()
+
+        if (!user) {
+          throw new AuthenticationError("ไม่พบผู้ใช้");
+        }
+
+        if (!includes(roles, user_role)) {
+          throw new AuthenticationError(
+            "ไม่สามารถใช้งานฟังก์ชั้นนี้ได้ เนื่องจากจำกัดสิทธิ์การเข้าถึง"
+          );
+        }
+
+        const limit = user.userType === 'business' ? Infinity : user.userType === 'individual' ? 20 : 10
+        req.user_id = user_id;
+        req.user_role = user_role;
+        req.limit = limit
+      } catch (error) {
+        if (error instanceof TokenExpiredError) {
+          throw new AuthenticationError("เซสชั่นหมดอายุ");
+        }
+        throw error;
       }
 
-      req.user_id = user_id;
-      req.user_role = user_role;
-    } catch (error) {
-      if (error instanceof TokenExpiredError) {
-        throw new AuthenticationError("เซสชั่นหมดอายุ");
-      }
-      throw error;
-    }
-
-    return next();
-  };
+      return next();
+    };
 
 export const AllowGuard: MiddlewareFn<GraphQLContext> = async (
   { context },
@@ -81,20 +68,24 @@ export const AllowGuard: MiddlewareFn<GraphQLContext> = async (
       if (decodedToken) {
         const user_id = decodedToken.user_id;
         const user_role = decodedToken.user_role;
+        const user = await UserModel.findById(user_id).lean()
 
+        const limit = user.userType === 'business' ? Infinity : user.userType === 'individual' ? 20 : 10
         req.user_id = user_id;
         req.user_role = user_role;
+        req.limit = limit
       }
     }
+    return next();
   } catch (error) {
     console.log("error: ", error);
-    if (error instanceof TokenExpiredError) {
-      return next();
-    }
-    throw error;
+    // if (error instanceof TokenExpiredError) {
+    //   return next();
+    // }
+    // throw error;
+    req.limit = 10;
+    return next()
   }
-
-  return next();
 };
 
 export const authenticateTokenAccessImage = async (

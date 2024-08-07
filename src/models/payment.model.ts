@@ -97,7 +97,7 @@ export class Payment extends TimeStamps {
 
     @Field(() => InvoiceDetail, { nullable: true })
     @Property({ required: false })
-    invoiceDetail?: InvoiceDetail
+    creditDetail?: InvoiceDetail
 
     @Field(() => CashDetail, { nullable: true })
     @Property({ required: false })
@@ -105,11 +105,11 @@ export class Payment extends TimeStamps {
 
     @Field(() => PricingCalculationMethodPayload, { nullable: true })
     @Property({ required: false })
-    detail: PricingCalculationMethodPayload
+    calculation: PricingCalculationMethodPayload
 
     @Field(() => SubtotalCalculatedPayload, { nullable: true })
     @Property({ required: false })
-    calculatedDetail: SubtotalCalculatedPayload
+    invoice: SubtotalCalculatedPayload
 
     @Field()
     @Property({ default: Date.now })

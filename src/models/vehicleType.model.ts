@@ -1,4 +1,4 @@
-import { Field, Float, ID, ObjectType } from "type-graphql";
+import { Field, Float, ID, Int, ObjectType } from "type-graphql";
 import {
   prop as Property,
   Ref,
@@ -57,6 +57,10 @@ export class VehicleType extends TimeStamps {
   @Field(() => Float)
   @Property({ required: true })
   maxCapacity: number;
+
+  @Field(() => Int)
+  @Property({ required: true, default: 3 })
+  maxDroppoint: number;
 
   @Field(() => File)
   @Property({ autopopulate: true, ref: 'File' })

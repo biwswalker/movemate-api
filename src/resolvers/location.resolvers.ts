@@ -39,7 +39,7 @@ const handleGeocodeError = (error: any, apiName: string) => {
 
 @Resolver()
 export default class LocationResolver {
-    // Handle check request data for anonmaus user (limit 20?)
+
     @Query(() => [LocationAutocomplete])
     @UseMiddleware(AllowGuard)
     async searchLocations(@Args() { query, latitude = 13.6693446, longitude = 100.6058064 }: SearchLocationsArgs, @Ctx() ctx: GraphQLContext): Promise<LocationAutocomplete[]> {
@@ -47,7 +47,7 @@ export default class LocationResolver {
         const sessionId = ctx.req.headers['x-location-session']
         if (!sessionId || typeof sessionId !== 'string') { throw new GraphQLError('session token are required') }
         try {
-            const places = await getAutocomplete(query, latitude, longitude, sessionId)
+            const places = await getAutocomplete(ctx, query, latitude, longitude, sessionId)
             return places
         } catch (error) {
             handlePlaceError(error, 'searchLocations')
@@ -68,14 +68,13 @@ export default class LocationResolver {
         }
     }
 
-    // Handle check request data for anonmaus user (limit 20?)
     @Query(() => Marker)
     async locationMarkerByCoords(@Arg('latitude') latitude: number, @Arg('longitude') longitude: number, @Ctx() ctx: GraphQLContext): Promise<Marker> {
         // UUIDv4 generate form client
         const sessionId = ctx.req.headers['x-location-session']
         if (!sessionId || typeof sessionId !== 'string') { throw new GraphQLError('session token are required') }
         try {
-            const location = await getGeocode(latitude, longitude, sessionId)
+            const location = await getGeocode(ctx, latitude, longitude, sessionId)
             return location
         } catch (error) {
             handleGeocodeError(error, 'getLocationByCoords')

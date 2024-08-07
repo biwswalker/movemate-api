@@ -331,12 +331,12 @@ export default class ShipmentResolver {
 
       // Remark: Payment
       const droppoint = locations.length - 1
-      const pricingDetail = await VehicleCostModel.calculatePricing(vehicleCost._id, {
-        distance: data.estimatedDistance,
+      const _calculation = await VehicleCostModel.calculatePricing(vehicleCost._id, {
+        distance: data.estimatedDistance / 1000,
         dropPoint: droppoint,
         isRounded: data.isRoundedReturn,
       })
-      const calculatedDetail = await ShipmentModel.calculate({
+      const _invoice = await ShipmentModel.calculate({
         vehicleTypeId: data.vehicleId,
         distanceMeter: data.estimatedDistance,
         dropPoint: droppoint,
@@ -346,12 +346,13 @@ export default class ShipmentResolver {
       })
       const _payment = new PaymentModel({
         cashDetail,
-        invoiceDetail: paymentDetail,
-        calculatedDetail,
-        detail: pricingDetail,
+        creditDetail: paymentDetail,
+        invoice: _invoice,
+        calculation: _calculation,
         paymentMethod,
         status: isCreditPaymentMethod ? 'invoice' : 'waiting_confirm_payment',
       })
+
       await _payment.save()
 
       const status: TShipingStatus = 'idle'
@@ -384,21 +385,23 @@ export default class ShipmentResolver {
       const response = await ShipmentModel.findById(shipment._id)
 
       // Notification
+      const notiTitle = isCashPaymentMethod ? 'การจองของท่านอยู่ระหว่างการยืนยัน' : 'การจองของท่านรอคนขับตอบรับ'
+      const notiMsg = isCashPaymentMethod
+        ? `หมายเลขการจองขนส่ง ${_trackingNumber} เราได้รับการจองรถของท่านเรียบร้อยแล้ว ขณะนี้การจองของท่านอยู่ระหว่างดำเนินการยืนยันยอดชำระ`
+        : `หมายเลขการจองขนส่ง ${_trackingNumber} เราได้รับการจองรถของท่านเรียบร้อยแล้ว ขณะนี้การจองของท่านอยู่ระหว่างการตอบรับจากคนขับ`
       await NotificationModel.sendNotification({
         userId: customer._id,
         varient: 'info',
-        title: 'การจองของท่านอยู่ระหว่างการยืนยัน',
-        message: [
-          `หมายเลขการจองขนส่ง ${_trackingNumber} เราได้รับการจองรถของท่านเรียบร้อยแล้ว ขณะนี้การจองของท่านอยู่ระหว่างดำเนินการยืนยันยอดชำระ`,
-        ],
+        title: notiTitle,
+        message: [notiMsg],
         infoText: 'ติดตามการขนส่ง',
-        infoLink: `/main/tracking/${_trackingNumber}`,
+        infoLink: `/main/tracking?tracking_number=${_trackingNumber}`,
       })
 
       // Sent email
       // Prepare email sender
       const emailTranspoter = email_sender()
-      const tracking_link = `https://www.movematethailand.com/main/tracking/${response.trackingNumber}`
+      const tracking_link = `https://www.movematethailand.com/main/tracking?tracking_number=${response.trackingNumber}`
       const movemate_link = `https://www.movematethailand.com`
       // Email sender
       const email =

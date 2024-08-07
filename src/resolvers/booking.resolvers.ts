@@ -10,6 +10,8 @@ import UserModel from '@models/user.model'
 import { BusinessCustomer } from '@models/customerBusiness.model'
 import { Types } from 'mongoose'
 import ShipmentModel from '@models/shipment.model'
+import SearchHistoryModel from '@models/searchHistory.model'
+import { getLatestCount } from '@configs/rateLimit'
 
 @Resolver()
 export default class BookingResolver {
@@ -97,12 +99,28 @@ export default class BookingResolver {
   }
 
   @Mutation(() => SubtotalCalculatedPayload)
+  @UseMiddleware(AllowGuard)
   async subtotalCalculation(
     @Ctx() ctx: GraphQLContext,
     @Args() args: SubtotalCalculationArgs,
   ): Promise<SubtotalCalculatedPayload> {
     try {
       const calculate = await ShipmentModel.calculate(args)
+
+      const ip = ctx.req.ip
+      const type: TSearchType = 'pricing'
+      const count = await getLatestCount(ip, type)
+      const searchHistory = new SearchHistoryModel({
+        ipaddress: ctx.req.ip,
+        isCache: false,
+        inputRaw: JSON.stringify(args),
+        resultRaw: JSON.stringify(calculate),
+        count,
+        limit: ctx.req.limit,
+        type: type,
+      })
+
+      await searchHistory.save()
       return calculate
     } catch (error) {
       throw error

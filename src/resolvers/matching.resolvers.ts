@@ -1,15 +1,17 @@
-import { Resolver, Ctx, Args, Query, UseMiddleware, Arg, Int } from 'type-graphql'
+import { Resolver, Ctx, Args, Query, UseMiddleware, Arg, Int, Mutation } from 'type-graphql'
 import { LoadmoreArgs } from '@inputs/query.input'
 import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
-import ShipmentModel, { Shipment } from '@models/shipment.model'
+import ShipmentModel, { Shipment, StatusLog } from '@models/shipment.model'
 import UserModel from '@models/user.model'
-import { get } from 'lodash'
+import { get, last, slice } from 'lodash'
 import { IndividualDriver } from '@models/driverIndividual.model'
 import { GraphQLError } from 'graphql'
 import { FilterQuery, Types } from 'mongoose'
 import { Ref } from '@typegoose/typegoose'
 import { VehicleType } from '@models/vehicleType.model'
+import { REPONSE_NAME } from 'constants/status'
+import NotificationModel from '@models/notification.model'
 
 type TShipmentStatus = 'new' | 'progressing' | 'dilivered' | 'cancelled'
 
@@ -61,7 +63,7 @@ export default class MatchingResolver {
     const userId = ctx.req.user_id
     if (!userId) {
       const message = "ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน";
-      throw new GraphQLError(message, { extensions: { code: "NOT_FOUND", errors: [{ message }] } })
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
     const user = await UserModel.findById(userId).populate('individualDriver').lean()
@@ -69,7 +71,7 @@ export default class MatchingResolver {
 
     if (!individualDriver) {
       const message = "ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน";
-      throw new GraphQLError(message, { extensions: { code: "NOT_FOUND", errors: [{ message }] } })
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
     const query = this.generateQueery(status, userId, individualDriver.serviceVehicleType)
@@ -78,13 +80,29 @@ export default class MatchingResolver {
     return shipments;
   }
 
+  @Query(() => Shipment)
+  @UseMiddleware(AuthGuard(["driver"]))
+  async getAvailableShipmentByTrackingNumber(@Ctx() ctx: GraphQLContext, @Arg("tracking") trackingNumber: string): Promise<Shipment> {
+    const userId = ctx.req.user_id
+    if (!userId) {
+      const message = "ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน";
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    const shipment = await ShipmentModel.findOne({ trackingNumber: trackingNumber })
+    if (!shipment) {
+      const message = "ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว";
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }], } })
+    }
+    return shipment
+  }
+
   @Query(() => Int)
   @UseMiddleware(AuthGuard(["driver"]))
   async totalAvailableShipment(@Ctx() ctx: GraphQLContext, @Arg("status") status: TShipmentStatus): Promise<number> {
     const userId = ctx.req.user_id
     if (!userId) {
       const message = "ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน";
-      throw new GraphQLError(message, { extensions: { code: "NOT_FOUND", errors: [{ message }] } })
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
     const user = await UserModel.findById(userId).populate('individualDriver').lean()
@@ -92,7 +110,7 @@ export default class MatchingResolver {
 
     if (!individualDriver) {
       const message = "ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน";
-      throw new GraphQLError(message, { extensions: { code: "NOT_FOUND", errors: [{ message }] } })
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
     const query = this.generateQueery(status, userId, individualDriver.serviceVehicleType)
@@ -100,4 +118,57 @@ export default class MatchingResolver {
     const shipmentCount = await ShipmentModel.countDocuments(query)
     return shipmentCount
   }
+
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(["driver"]))
+  async acceptShipment(@Ctx() ctx: GraphQLContext, @Arg("shipmentId") shipmentId: string): Promise<boolean> {
+    const userId = ctx.req.user_id
+    if (!userId) {
+      const message = "ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน";
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    const shipment = await ShipmentModel.findById(shipmentId)
+    if (!shipment) {
+      const message = "ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว";
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }], } })
+    }
+    // Check shipment are available
+    if (shipment.status === 'idle' && shipment.driverAcceptanceStatus === 'pending') {
+      const lastestStatus = last(shipment.statusLog)
+      const other = slice(shipment.statusLog, 0, -1)
+      const statusLog: StatusLog[] = [
+        ...other,
+        { ...lastestStatus, status: 'complete' },
+        { status: 'complete', text: 'คนขับตอบรับ', createdAt: new Date() },
+        { status: 'pending', text: 'คนขับเตรียมพร้อมเริ่มงาน', createdAt: new Date() }
+      ]
+
+      await ShipmentModel.findByIdAndUpdate(shipmentId, {
+        status: 'progressing',
+        driverAcceptanceStatus: 'accepted',
+        driver: userId,
+        statusLog,
+      })
+
+      // Notification
+      const customerId = get(shipment, 'customer._id', '')
+      if (customerId) {
+        await NotificationModel.sendNotification({
+          userId: customerId,
+          varient: 'master',
+          title: `${shipment.trackingNumber} คนขับตอบรับแล้ว`,
+          message: [`งานขนส่งเลขที่ ${shipment.trackingNumber} ได้รับการตอบรับจากคนขับแล้ว คนขับจะติดต่อหาท่านเพื่อนัดหมาย`],
+        })
+      }
+
+      return true
+    }
+    const message = "ไม่สามารถรับงานขนส่งนี้ได้ เนื่องจากงานขนส่งดังกล่าวมีผู้รับไปแล้ว";
+    throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.EXISTING_SHIPMENT_DRIVER, errors: [{ message }], } })
+  }
+
+  // 1. accept
+  // 2. ติดต่อเพื่อนัดเวลา
+  // 3. ถ่ายรูป และ กดถัดไป
 }

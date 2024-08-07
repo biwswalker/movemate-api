@@ -6,6 +6,9 @@ import LocationAutocompleteModel, { LocationAutocomplete } from "@models/locatio
 import { loadCache, saveCache } from "@configs/cache";
 import logger from "@configs/logger";
 import { LocationInput } from "@inputs/location.input";
+import SearchHistoryModel, { SearchHistory } from "@models/searchHistory.model";
+import { GraphQLContext } from "@configs/graphQL.config";
+import { rateLimiter, getLatestCount } from "@configs/rateLimit";
 
 const removePlusCode = (formattedAddress: string) => {
     if (formattedAddress) {
@@ -24,22 +27,43 @@ const removePlusCode = (formattedAddress: string) => {
     return ''
 };
 
+async function saveSearchingLog(detail: Omit<SearchHistory, '_id' | 'createdAt' | 'updatedAt'>) {
+    const searchHistory = new SearchHistoryModel(detail)
+    await searchHistory.save()
+}
+
 /**
  * 
  * @param query for search location
  * @url Document - https://developers.google.com/maps/documentation/places/web-service/place-autocomplete
  * @returns locations
  */
-export async function getAutocomplete(query: string, latitude: number, longitude: number, session?: string): Promise<LocationAutocomplete[]> {
+export async function getAutocomplete(ctx: GraphQLContext, query: string, latitude: number, longitude: number, session?: string): Promise<LocationAutocomplete[]> {
     // Get cache
+    const inputString = JSON.stringify({ query, latitude, longitude, session })
+    const ip = ctx.req.ip
+    const limit = ctx.req.limit
     const cacheType = 'places';
     const key = `${query}:${latitude}:${longitude}`;
     const cached = await loadCache(cacheType, key);
     if (cached) {
+        const count = await getLatestCount(ip, cacheType)
+        await saveSearchingLog({
+            ipaddress: ip,
+            isCache: true,
+            inputRaw: inputString,
+            resultRaw: JSON.stringify(cached),
+            count,
+            limit,
+            type: cacheType,
+        })
         logger.info('Cache hit for searchLocations');
         return cached;
     }
-    // ------
+
+    // Limit check
+    const { count } = await rateLimiter(ip, cacheType, limit)
+    console.log(ip, limit, count)
 
     const request = {
         input: query,
@@ -65,6 +89,15 @@ export async function getAutocomplete(query: string, latitude: number, longitude
     })
 
     await saveCache(cacheType, key, locations);
+    await saveSearchingLog({
+        ipaddress: ip,
+        isCache: false,
+        inputRaw: inputString,
+        resultRaw: JSON.stringify(locations),
+        count,
+        limit,
+        type: 'places',
+    })
     return locations
 }
 
@@ -110,16 +143,31 @@ export async function getPlaceLocationDetail(placeId: string, session?: string):
  * @returns 
  * @url Document - https://developers.google.com/maps/documentation/geocoding/address-descriptors/requests-address-descriptors
  */
-export async function getGeocode(latitude: number, longitude: number, session?: string) {
+export async function getGeocode(ctx: GraphQLContext, latitude: number, longitude: number, session?: string) {
     // Get cache
+    const inputString = JSON.stringify({ latitude, longitude, session })
+    const ip = ctx.req.ip
+    const limit = ctx.req.limit
     const cacheType = 'geocode';
     const key = `${latitude}:${longitude}`;
     const cached = await loadCache(cacheType, key);
     if (cached) {
+        const count = await getLatestCount(ip, cacheType)
+        await saveSearchingLog({
+            ipaddress: ip,
+            isCache: true,
+            inputRaw: inputString,
+            resultRaw: JSON.stringify(cached),
+            count,
+            limit,
+            type: cacheType,
+        })
         logger.info('Cache hit for getLocationByCoords');
         return cached;
     }
-    // ------
+
+    // Limit check
+    const { count } = await rateLimiter(ip, cacheType, limit)
 
     const response = await axios.get<google.maps.GeocoderResponse>(GOOGLEAPI_GEOCODE, {
         params: {
@@ -143,7 +191,15 @@ export async function getGeocode(latitude: number, longitude: number, session?: 
     })
 
     await saveCache(cacheType, key, marker);
-
+    await saveSearchingLog({
+        ipaddress: ip,
+        isCache: false,
+        inputRaw: inputString,
+        resultRaw: JSON.stringify(marker),
+        count,
+        limit,
+        type: 'places',
+    })
     return marker
 }
 

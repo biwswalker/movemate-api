@@ -1,4 +1,4 @@
-import { Field, Float, InputType } from "type-graphql";
+import { Field, Float, InputType, Int } from "type-graphql";
 import { FileInput } from "./file.input";
 
 @InputType()
@@ -26,6 +26,9 @@ export class VehicleTypeInput {
 
     @Field(() => Float)
     maxCapacity: number;
+
+    @Field(() => Int)
+    maxDroppoint: number;
 
     @Field(() => FileInput, { nullable: true })
     image: FileInput;

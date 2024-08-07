@@ -24,7 +24,8 @@ export const VehicleTypeSchema = (isEdit: boolean = false) => Yup.object().shape
     width: Yup.number().required('ระบุขนาดความกว้างรถ (เซนติเมตร)'),
     length: Yup.number().required('ระบุขนาดความยาวรถ (เซนติเมตร)'),
     height: Yup.number().required('ระบุขนาดความสูงรถ (เซนติเมตร)'),
-    maxCapacity: Yup.number().required('น้ำหนักบรรทุกสูงสุด (ตัน)*'),
+    maxCapacity: Yup.number().required('ระบุน้ำหนักบรรทุกสูงสุด (กิโลกรัม)'),
+    maxDroppoint: Yup.number().required('ระบุจำนวนจุดส่งสูงสุด'),
     ...(isEdit
         ? { image: Yup.mixed() }
         : { image: Yup.mixed().required('ระบุรูปประเภทรถ') }),
