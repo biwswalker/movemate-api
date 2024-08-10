@@ -4,9 +4,10 @@ import dotenv from 'dotenv'
 // Load environment variables from .env file
 dotenv.config()
 
+const host = process.env.REDIS_HOST || '0.0.0.0'
 const port = Number(process.env.REDIS_PORT || 6379)
 const _password = Number(process.env.REDIS_PASSWORD || '')
-const redis = new Redis(port)
+const redis = new Redis(port, host)
 redis.on('connect', () => {
   console.log('🍄 Redis connected! listen at: ', port)
 })

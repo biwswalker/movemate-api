@@ -12,6 +12,7 @@ declare namespace NodeJS {
         GOOGLE_SERVICE_ID: string
         GOOGLE_CLIENT_ID: string
         GOOGLE_CLIENT_SECERT: string
+        REDIS_HOST: string
         REDIS_PORT: string
         REDIS_PASSWORD: string
     }
