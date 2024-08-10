@@ -8,3 +8,6 @@ type TPaymentStatus = 'waiting_confirm_payment' | 'invoice' | 'billed' | 'confir
 type TShipingLogStatus = 'pending' | 'inprogress' | 'complete' | 'cancelled' | 'rejected' | 'refund'
 
 type TCriteriaStatus = 'all' | 'progress' | 'refund' | 'finish'
+
+type TStepStatus = 'idle' | 'progressing' | 'done' | 'expire' | 'cancelled'
+type TStepDefinition = 'CREATED' | 'CASH_VERIFY' | 'DRIVER_ACCEPTED' | 'CONFIRM_DATETIME' | 'ARRIVAL_PICKUP_LOCATION' | 'PICKUP' | 'ARRIVAL_DROPOFF' | 'DROPOFF' | 'POD' | 'FINISH'

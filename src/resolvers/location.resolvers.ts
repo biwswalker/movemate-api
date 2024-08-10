@@ -20,7 +20,7 @@ const handlePlaceError = (error: any, apiName: string) => {
     } else {
         console.log('error', error)
         logger.error(`Error in searchLocations: `, error);
-        throw new GraphQLError(error.message)
+        throw error
     }
 }
 
@@ -33,7 +33,7 @@ const handleGeocodeError = (error: any, apiName: string) => {
     } else {
         console.log('error', error)
         logger.error(`Error in searchLocations: `, error);
-        throw new GraphQLError(error.message)
+        throw error
     }
 }
 
@@ -61,7 +61,7 @@ export default class LocationResolver {
         const sessionId = ctx.req.headers['x-location-session']
         if (!sessionId || typeof sessionId !== 'string') { throw new GraphQLError('session token are required') }
         try {
-            const places = await getPlaceLocationDetail(placeId, sessionId)
+            const places = await getPlaceLocationDetail(ctx, placeId, sessionId)
             return places
         } catch (error) {
             handlePlaceError(error, 'locationMarker')

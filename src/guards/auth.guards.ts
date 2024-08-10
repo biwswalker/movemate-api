@@ -74,8 +74,11 @@ export const AllowGuard: MiddlewareFn<GraphQLContext> = async (
         req.user_id = user_id;
         req.user_role = user_role;
         req.limit = limit
+
+        return next()
       }
     }
+    req.limit = 10
     return next();
   } catch (error) {
     console.log("error: ", error);

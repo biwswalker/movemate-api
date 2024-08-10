@@ -2,7 +2,7 @@ import { Resolver, Ctx, Args, Query, UseMiddleware, Arg, Int, Mutation } from 't
 import { LoadmoreArgs } from '@inputs/query.input'
 import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
-import ShipmentModel, { Shipment, StatusLog } from '@models/shipment.model'
+import ShipmentModel, { Shipment } from '@models/shipment.model'
 import UserModel from '@models/user.model'
 import { get, last, slice } from 'lodash'
 import { IndividualDriver } from '@models/driverIndividual.model'
@@ -12,6 +12,7 @@ import { Ref } from '@typegoose/typegoose'
 import { VehicleType } from '@models/vehicleType.model'
 import { REPONSE_NAME } from 'constants/status'
 import NotificationModel from '@models/notification.model'
+import { ConfirmShipmentDateInput, NextShipmentStepInput } from '@inputs/matching.input'
 
 type TShipmentStatus = 'new' | 'progressing' | 'dilivered' | 'cancelled'
 
@@ -135,20 +136,11 @@ export default class MatchingResolver {
     }
     // Check shipment are available
     if (shipment.status === 'idle' && shipment.driverAcceptanceStatus === 'pending') {
-      const lastestStatus = last(shipment.statusLog)
-      const other = slice(shipment.statusLog, 0, -1)
-      const statusLog: StatusLog[] = [
-        ...other,
-        { ...lastestStatus, status: 'complete' },
-        { status: 'complete', text: 'คนขับตอบรับ', createdAt: new Date() },
-        { status: 'pending', text: 'คนขับเตรียมพร้อมเริ่มงาน', createdAt: new Date() }
-      ]
-
+      await shipment.nextStep()
       await ShipmentModel.findByIdAndUpdate(shipmentId, {
         status: 'progressing',
         driverAcceptanceStatus: 'accepted',
         driver: userId,
-        statusLog,
       })
 
       // Notification
@@ -168,7 +160,45 @@ export default class MatchingResolver {
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.EXISTING_SHIPMENT_DRIVER, errors: [{ message }], } })
   }
 
-  // 1. accept
-  // 2. ติดต่อเพื่อนัดเวลา
-  // 3. ถ่ายรูป และ กดถัดไป
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(["driver"]))
+  async confirmShipmentDatetime(@Ctx() ctx: GraphQLContext, @Arg("data") data: ConfirmShipmentDateInput): Promise<boolean> {
+    const userId = ctx.req.user_id
+    if (!userId) {
+      const message = "ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน";
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    const shipment = await ShipmentModel.findById(data.shipmentId)
+    if (!shipment) {
+      const message = "ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว";
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }], } })
+    }
+
+    await shipment.nextStep()
+    await shipment.updateOne({
+      bookingDateTime: data.datetime,
+      isBookingWithDate: true
+    })
+
+    return true
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(["driver"]))
+  async nextShipmentStep(@Ctx() ctx: GraphQLContext, @Arg("data") data: NextShipmentStepInput): Promise<boolean> {
+    const userId = ctx.req.user_id
+    if (!userId) {
+      const message = "ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน";
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    const shipment = await ShipmentModel.findById(data.shipmentId)
+    if (!shipment) {
+      const message = "ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว";
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }], } })
+    }
+
+    await shipment.nextStep(data.images || [])
+
+    return true
+  }
 }

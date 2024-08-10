@@ -2,7 +2,7 @@ import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { GetShipmentArgs, ShipmentInput } from '@inputs/shipment.input'
 import PaymentModel, { CashDetail } from '@models/payment.model'
-import ShipmentModel, { Shipment, StatusLog } from '@models/shipment.model'
+import ShipmentModel, { Shipment } from '@models/shipment.model'
 import ShipmentAdditionalServicePriceModel from '@models/shipmentAdditionalServicePrice.model'
 import UserModel from '@models/user.model'
 import { generateTrackingNumber } from '@utils/string.utils'
@@ -359,8 +359,8 @@ export default class ShipmentResolver {
       const adminAcceptanceStatus: TAdminAcceptanceStatus = isCreditPaymentMethod ? 'reach' : 'pending'
       const driverAcceptanceStatus: TDriverAcceptanceStatus = isCreditPaymentMethod ? 'pending' : 'idle'
       // Initial status log
-      const text = isCreditPaymentMethod ? favoriteDriverId ? 'รอคนขับคนโปรดรับงาน' : 'รอคนขับรับงาน' : 'รอเจ้าหน้าที่ยืนยันยอดการชำระ'
-      const startStatus: StatusLog = { status: 'pending', text, createdAt: new Date() }
+      // const text = isCreditPaymentMethod ? favoriteDriverId ? 'รอคนขับคนโปรดรับงาน' : 'รอคนขับรับงาน' : 'รอเจ้าหน้าที่ยืนยันยอดการชำระ'
+      // const startStatus: StatusLog = { status: 'pending', text, createdAt: new Date() }
 
       const _trackingNumber = await generateTrackingNumber('MMTH', 'tracking')
       const shipment = new ShipmentModel({
@@ -378,11 +378,12 @@ export default class ShipmentResolver {
         status,
         adminAcceptanceStatus,
         driverAcceptanceStatus,
-        statusLog: [startStatus]
+        // statusLog: [startStatus]
       })
       await shipment.save()
 
       const response = await ShipmentModel.findById(shipment._id)
+      await response.initialStepDefinition()
 
       // Notification
       const notiTitle = isCashPaymentMethod ? 'การจองของท่านอยู่ระหว่างการยืนยัน' : 'การจองของท่านรอคนขับตอบรับ'
@@ -464,8 +465,13 @@ export default class ShipmentResolver {
 // DO-NEXT
 // 1. Handle get shipment for driver and favorit
 // 2. Handle get shipment count of pending status for show counting
-// 1. npm install node-cron
-// 2. Setup Cron
-// 3. Handle Notification logic - every 10min / 50min / 120min / 120min
+// 3. npm install node-cron
+// 4. Setup Cron
+// 5. Handle Notification logic - every 10min / 50min / 120min / 120min
 // 
+// Financial for customer
+// DO-NEXT
+// 1. Get - payment of shipment of user
+// 2. Get sum of month
+
 // Workprogress
