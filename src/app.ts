@@ -46,7 +46,7 @@ async function server() {
     ],
   })
   app.use(alllowedCors);
-  app.use(express.json({ limit: '3mb' }));
+  app.use(express.json({ limit: '10mb' }));
   app.use(morgan(':graphql-query'))
   app.use(bodyParser.urlencoded({ extended: false }));
   app.use(graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }));
@@ -61,7 +61,7 @@ async function server() {
   await connectToMongoDB();
   await server.start();
 
-  app.use('/graphql', alllowedCors, express.json({ limit: '3mb' }), expressMiddleware(server, {
+  app.use('/graphql', alllowedCors, express.json({ limit: '10mb' }), expressMiddleware(server, {
     context: async ({ req, res }) => ({ req, res }),
   }))
   app.use("/api/v1", api_v1);

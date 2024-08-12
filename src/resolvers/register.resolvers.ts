@@ -27,7 +27,7 @@ export default class RegisterResolver {
         await CustomerIndividualModel.findOne({ email });
       if (isExistingEmailWithIndividual) {
         throw new GraphQLError(
-          "ไม่สามารถใช้อีเมลร่วมกับสมากชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ",
+          "ไม่สามารถใช้อีเมลร่วมกับสมาชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ",
           {
             extensions: {
               code: "ERROR_VALIDATION",
@@ -35,7 +35,7 @@ export default class RegisterResolver {
                 {
                   field: fieldName,
                   message:
-                    "ไม่สามารถใช้อีเมลร่วมกับสมากชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ",
+                    "ไม่สามารถใช้อีเมลร่วมกับสมาชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ",
                 },
               ],
             },

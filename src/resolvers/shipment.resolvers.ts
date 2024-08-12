@@ -156,6 +156,10 @@ export default class ShipmentResolver {
 
       const filterQuery = this.shipmentQuery(args, user_role, user_id)
 
+      console.log('---shipments---')
+      console.log('paginate: ', paginate)
+      console.log('filterQuery: ', filterQuery)
+
       const shipments = ShipmentModel.find(filterQuery, undefined, paginate)
       if (!shipments) {
         const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
