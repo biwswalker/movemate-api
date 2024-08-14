@@ -121,30 +121,54 @@ export class VehicleCost extends TimeStamps {
       });
     }
 
-    let subTotalCost = 0
-    let subTotalPrice = 0
-    const calculations: CalculationResultPayload[] = []
+    function calculateStep(distanceInput: number) {
+      let _subTotalCost = 0
+      let _subTotalPrice = 0
+      const _calculations: CalculationResultPayload[] = []
 
-    // Calculate for each distance
-    const { distance } = data
-    forEach(steps, (step) => {
-      if (distance >= step.from) {
-        const stepTo = step.to === step.from ? Infinity : step.to
-        const applicableDistance = Math.min(distance, stepTo ?? distance) - step.from + 1
-        const calculatedCost = step.unit === EDistanceCostPricingUnit.KM ? step.cost * applicableDistance : step.cost
-        const calculatedPrice = step.unit === EDistanceCostPricingUnit.KM ? step.price * applicableDistance : step.price
+      // Calculate for each distance
+      forEach(steps, (step) => {
+        if (distanceInput >= step.from) {
+          const stepTo = step.to === step.from ? Infinity : step.to
+          const applicableDistance = Math.min(distanceInput, stepTo ?? distanceInput) - step.from + 1
+          const calculatedCost = step.unit === EDistanceCostPricingUnit.KM ? step.cost * applicableDistance : step.cost
+          const calculatedPrice = step.unit === EDistanceCostPricingUnit.KM ? step.price * applicableDistance : step.price
 
-        subTotalCost += calculatedCost
-        subTotalPrice += calculatedPrice
+          _subTotalCost += calculatedCost
+          _subTotalPrice += calculatedPrice
 
-        calculations.push({
-          ...step,
-          costResult: calculatedCost,
-          priceResult: calculatedPrice,
-        })
+          _calculations.push({
+            ...step,
+            costResult: calculatedCost,
+            priceResult: calculatedPrice,
+          })
+        }
+      })
 
+      return {
+        calculations: _calculations,
+        cost: _subTotalCost,
+        price: _subTotalPrice,
       }
-    })
+    }
+
+    function getPriceOf(_cost: number, _state: 'origin' | 'returned') {
+      const allDistance = sum([data.distance, data.returnedDistance])
+      if (_state === 'origin') {
+        const originPercent = (data.distance * 100) / allDistance
+        const priceNumber = (originPercent / 100) * _cost
+        return priceNumber
+      } else if (_state === 'returned') {
+        const returnedPercent = (data.returnedDistance * 100) / allDistance
+        const priceNumber = (returnedPercent / 100) * _cost
+        return priceNumber
+      }
+    }
+
+    const distanceForCalculation = data.isRounded ? sum([data.distance, data.returnedDistance]) : data.distance
+    const { calculations, cost, price } = calculateStep(distanceForCalculation)
+    const subTotalCost = data.isRounded ? getPriceOf(cost, 'origin') : cost
+    const subTotalPrice = data.isRounded ? getPriceOf(price, 'origin') : price
 
     // Additional Service
     const additionalServices = vehicleCost.additionalServices as AdditionalServiceCostPricing[]
@@ -171,6 +195,8 @@ export class VehicleCost extends TimeStamps {
     // Rounded percent
     let subTotalRoundedCost = 0
     let subTotalRoundedPrice = 0
+    let roundedCostPercent = 0
+    let roundedPricePercent = 0
     if (data.isRounded) {
       const additionalServiceRouned = find(additionalServices, (service: AdditionalServiceCostPricing) => {
         const coreService = service.additionalService as AdditionalService
@@ -179,12 +205,12 @@ export class VehicleCost extends TimeStamps {
 
       // As percent
       if (additionalServiceRouned) {
-        const roundedCostPercent = (additionalServiceRouned.cost || 0) / 100
-        const roundedPricePercent = (additionalServiceRouned.price || 0) / 100
-
-
-        subTotalRoundedCost = roundedCostPercent * subTotalCost
-        subTotalRoundedPrice = roundedPricePercent * subTotalPrice
+        roundedCostPercent = (additionalServiceRouned.cost || 0)
+        roundedPricePercent = (additionalServiceRouned.price || 0)
+        const roundedCostPercentCal = (additionalServiceRouned.cost || 0) / 100
+        const roundedPricePercentCal = (additionalServiceRouned.price || 0) / 100
+        subTotalRoundedCost = roundedCostPercentCal * getPriceOf(cost, 'returned')
+        subTotalRoundedPrice = roundedPricePercentCal * getPriceOf(price, 'returned')
       }
     }
 
@@ -199,6 +225,8 @@ export class VehicleCost extends TimeStamps {
       subTotalPrice,
       subTotalRoundedCost,
       subTotalRoundedPrice,
+      roundedCostPercent,
+      roundedPricePercent,
       totalCost,
       totalPrice,
       calculations

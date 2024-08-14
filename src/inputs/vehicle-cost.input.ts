@@ -53,7 +53,11 @@ export class PricingCalculationMethodArgs {
      */
     @Field(() => Float, { nullable: true })
     distance: number
-
+    /**
+     * @description Kilometers
+     */
+    @Field(() => Float, { nullable: true })
+    returnedDistance: number
     /**
      * @description Drop point not included start point
      */

@@ -79,10 +79,16 @@ export class ShipmentInput {
   locations: DestinationInput[]
 
   @Field(() => Float)
-  estimatedDistance: number
+  displayDistance: number
 
   @Field()
-  estimatedTime: number
+  displayTime: number
+
+  @Field(() => Float)
+  distance: number
+
+  @Field(() => Float)
+  returnDistance: number
 
   @Field()
   isRoundedReturn: boolean

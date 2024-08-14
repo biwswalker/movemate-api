@@ -336,13 +336,15 @@ export default class ShipmentResolver {
       // Remark: Payment
       const droppoint = locations.length - 1
       const _calculation = await VehicleCostModel.calculatePricing(vehicleCost._id, {
-        distance: data.estimatedDistance / 1000,
+        distance: data.distance / 1000,
+        returnedDistance: data.returnDistance / 1000,
         dropPoint: droppoint,
         isRounded: data.isRoundedReturn,
       })
       const _invoice = await ShipmentModel.calculate({
         vehicleTypeId: data.vehicleId,
-        distanceMeter: data.estimatedDistance,
+        distanceMeter: data.distance,
+        distanceReturnMeter: data.returnDistance,
         dropPoint: droppoint,
         isRounded: data.isRoundedReturn,
         serviceIds: additionalServices,

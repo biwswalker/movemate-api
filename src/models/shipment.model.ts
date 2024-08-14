@@ -100,6 +100,10 @@ export class ShipmentPODAddress {
   @Field()
   @Property({ required: true })
   phoneNumber: string
+
+  @Field({ nullable: true })
+  @Property()
+  remark: string
 }
 
 @ObjectType()
@@ -181,11 +185,19 @@ export class Shipment extends TimeStamps {
 
   @Field(() => Float)
   @Property()
-  estimatedDistance: number
+  displayDistance: number
 
   @Field()
   @Property()
-  estimatedTime: number
+  displayTime: number
+
+  @Field(() => Float)
+  @Property()
+  distance: number
+
+  @Field(() => Float)
+  @Property()
+  returnDistance: number
 
   @Field(() => Boolean)
   @Property()
@@ -286,18 +298,21 @@ export class Shipment extends TimeStamps {
 
   static paginate: mongoose.PaginateModel<typeof Shipment>['paginate']
 
-  static async calculate({ vehicleTypeId, distanceMeter, dropPoint, isRounded, discountId, serviceIds }: SubtotalCalculationArgs): Promise<SubtotalCalculatedPayload> {
+  static async calculate({ vehicleTypeId, distanceMeter, distanceReturnMeter, dropPoint, isRounded, discountId, serviceIds }: SubtotalCalculationArgs): Promise<SubtotalCalculatedPayload> {
     try {
       const vehicleCost = await VehicleCostModel.findByVehicleId(vehicleTypeId)
       const distanceKilometers = distanceMeter / 1000 // TODO: Recheck decimal calculation with owner
+      const distanceReturnKilometers = distanceReturnMeter / 1000 // TODO: Recheck decimal calculation with owner
       const calculated = await VehicleCostModel.calculatePricing(vehicleCost._id, {
         distance: distanceKilometers, // TODO: Recheck decimal calculation with owner
+        returnedDistance: distanceReturnKilometers,
         dropPoint,
         isRounded,
       })
 
       const vehicleName = get(vehicleCost, 'vehicleType.name', '')
       const distanceKM = fNumber(distanceKilometers, '0.0')
+      const distanceReturnKM = fNumber(distanceReturnKilometers, '0.0')
 
       const additionalservices = await AdditionalServiceCostPricingModel.getServicesPricing(serviceIds)
 
@@ -328,7 +343,7 @@ export class Shipment extends TimeStamps {
       return {
         shippingPrices: [
           { label: `${vehicleName} (${distanceKM} กม.)`, price: calculated.subTotalPrice },
-          ...(isRounded ? [{ label: 'ไป-กลับ', price: calculated.subTotalRoundedPrice }] : []),
+          ...(isRounded ? [{ label: `ไป-กลับ ${calculated.roundedPricePercent}% (${distanceReturnKM} กม.)`, price: calculated.subTotalRoundedPrice }] : []),
         ],
         additionalServices: [
           ...(dropPoint > 1 ? [{ label: 'หลายจุดส่ง', price: calculated.subTotalDropPointPrice }] : []),

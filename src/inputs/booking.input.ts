@@ -4,7 +4,7 @@ import { ArgsType, Field, Float, InputType, Int } from "type-graphql"
 export class PODAddressInput {
     @Field({ nullable: true })
     _id?: string
-    
+
     @Field()
     fullname: string
 
@@ -25,6 +25,9 @@ export class PODAddressInput {
 
     @Field()
     phoneNumber: string
+
+    @Field({ nullable: true })
+    remark?: string
 }
 
 @ArgsType()
@@ -34,6 +37,9 @@ export class SubtotalCalculationArgs {
 
     @Field(() => Float)
     distanceMeter: number
+
+    @Field(() => Float)
+    distanceReturnMeter: number
 
     @Field(() => Boolean)
     isRounded: boolean

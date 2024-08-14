@@ -52,6 +52,14 @@ export class PricingCalculationMethodPayload {
     @Field(() => Float)
     @Property()
     totalPrice: number
+
+    @Field(() => Float)
+    @Property()
+    roundedCostPercent: number
+
+    @Field(() => Float)
+    @Property()
+    roundedPricePercent: number
 }
 
 

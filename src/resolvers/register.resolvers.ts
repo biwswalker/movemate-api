@@ -121,6 +121,7 @@ export default class RegisterResolver {
           ...individualDetail,
         });
 
+
         await individualCustomer.save();
 
         const user = new UserModel({
@@ -144,6 +145,7 @@ export default class RegisterResolver {
         await user.save();
 
         const host = getCurrentHost(ctx)
+        // http://api.movematethailand.com/api/v1/activate/customer/MMIN0003
         const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
         const movemate_link = `https://www.movematethailand.com`
         // Email sender

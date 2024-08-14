@@ -11,11 +11,12 @@ activate_api.get('/customer/:user_number', async (req, res) => {
             if (!user) {
                 throw Error('ไม่พบผู้ใช้')
             }
+            const username = user.username
             if (user.isVerifiedEmail) {
-                res.redirect('https://www.movematethailand.com/activate/exist')
+                res.redirect(`https://www.movematethailand.com/activate/exist/${username}`)
             } else {
                 await user.updateOne({ status: 'active', isVerifiedEmail: true })
-                res.redirect('https://www.movematethailand.com/activate/success')
+                res.redirect(`https://www.movematethailand.com/activate/success/${username}`)
             }
         } else {
             throw Error('รหัสผู้ใช้ไม่สมบูรณ์')

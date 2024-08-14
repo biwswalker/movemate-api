@@ -40,6 +40,10 @@ export class PODAddress extends TimeStamps {
     @Property({ required: true })
     phoneNumber: string
 
+    @Field({ nullable: true })
+    @Property()
+    remark: string;
+
     @Field()
     @Property({ default: Date.now })
     createdAt: Date
