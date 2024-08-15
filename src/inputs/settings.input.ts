@@ -52,6 +52,9 @@ export class SettingBusinessTypeInput {
 
     @Field()
     name: string
+
+    @Field()
+    seq: number
 }
 
 @InputType()

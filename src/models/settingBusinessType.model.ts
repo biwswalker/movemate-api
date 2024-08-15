@@ -25,6 +25,10 @@ export class SettingBusinessType extends TimeStamps {
     @Property()
     available: boolean
 
+    @Field({ defaultValue: 0 })
+    @Property({ default: 0 })
+    seq: number
+
     @Field(() => [UpdateHistory], { nullable: true })
     @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
     history: Ref<UpdateHistory>[];
@@ -45,21 +49,21 @@ export class SettingBusinessType extends TimeStamps {
         const bulkOperations = [];
         const updateHistories: DocumentType<UpdateHistory>[] = [];
 
-        await Aigle.forEach(data, async ({ _id, name }) => {
+        await Aigle.forEach(data, async ({ _id, name, seq }) => {
             let businessType = _id ? await this.findById(_id) : null
 
             const beforeUpdate = businessType
                 ? businessType.toObject()
                 : {};
-            const beforeUpdatePick = pick(beforeUpdate, ["name", "available"]);
+            const beforeUpdatePick = pick(beforeUpdate, ["name", "available", "seq"]);
 
             if (!businessType) {
                 businessType = new SettingBusinessTypeModel();
             }
 
-            Object.assign(businessType, { name });
+            Object.assign(businessType, { name, seq });
 
-            const afterUpdatePick = pick(businessType, ["name", "available"]);
+            const afterUpdatePick = pick(businessType, ["name", "available", "seq"]);
 
             const hasChanged =
                 JSON.stringify(beforeUpdatePick) !== JSON.stringify(afterUpdatePick);
@@ -80,7 +84,7 @@ export class SettingBusinessType extends TimeStamps {
                     updateOne: {
                         filter: { _id: newId },
                         update: {
-                            $set: { name, modifiedBy: new Types.ObjectId(userId) },
+                            $set: { name, seq, modifiedBy: new Types.ObjectId(userId) },
                             $setOnInsert: { available: true },
                             $push: { history: updateHistory },
                         },
@@ -108,7 +112,7 @@ export class SettingBusinessType extends TimeStamps {
     }
 
     static async findAvailable(): Promise<DocumentType<SettingBusinessType>[]> {
-        return SettingBusinessTypeModel.find({ available: true });
+        return SettingBusinessTypeModel.find({ available: true }).sort({ seq: 1 });
     }
 }
 

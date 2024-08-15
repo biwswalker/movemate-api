@@ -295,7 +295,7 @@ export default class SettingsResolver {
     async getBusinessTypeInfo(@Arg("includeOther", { nullable: true }) oncludeOther: boolean = false): Promise<SettingBusinessType[]> {
         try {
             const currentDate = new Date()
-            const other: SettingBusinessType = { _id: '', available: true, name: 'อื่นๆ', createdAt: currentDate, updatedAt: currentDate, history: [] }
+            const other: SettingBusinessType = { _id: '', available: true, name: 'อื่นๆ', createdAt: currentDate, updatedAt: currentDate, history: [], seq: 999 }
             const settingBusinessTypes = await SettingBusinessTypeModel.findAvailable()
             if (!settingBusinessTypes) {
                 return [...(oncludeOther ? [other] : [])]
