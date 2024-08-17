@@ -13,16 +13,12 @@ import morgan from 'morgan'
 import cors from "cors";
 import http from 'http'
 import "reflect-metadata";
+import { get } from "lodash";
 
 morgan.token('graphql-query', (req: Request) => {
-  const ip = req.ip || undefined
-  const method = req.method || undefined
-  const baseUrl = req.baseUrl || undefined
-  const { operationName } = req.body;
-  if (operationName) {
-    return `GRAPHQL: ${operationName}`;
-  }
-  return `${ip} ${method} ${baseUrl}`
+  const operationName = get(req, 'body.operationName', '')
+  const variables = get(req, 'body.variables', {})
+  return `${operationName} ${JSON.stringify(variables)}`
 });
 
 dotenv.config();
@@ -47,7 +43,7 @@ async function server() {
   })
   app.use(alllowedCors);
   app.use(express.json({ limit: '10mb' }));
-  app.use(morgan(':graphql-query'))
+  app.use(morgan(':method :url :graphql-query'))
   app.use(bodyParser.urlencoded({ extended: false }));
   app.use(graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }));
   app.use("/source", authenticateTokenAccessImage, express.static("uploads"));

@@ -12,7 +12,7 @@ import { BusinessCustomer } from "./customerBusiness.model";
 import { File } from "./file.model"
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { decryption } from "@utils/encryption";
-import { isEmpty } from "lodash";
+import { find, get, isEmpty } from "lodash";
 import { EXISTING_USERS, GET_CUSTOMER_BY_EMAIL } from "@pipelines/user.pipeline";
 import { Notification } from "./notification.model";
 import { IndividualDriver } from "./driverIndividual.model";
@@ -180,6 +180,67 @@ export class User extends TimeStamps {
   @Field(() => [Notification], { nullable: true })
   @Property({ ref: () => Notification, default: [] })
   notifications: Ref<Notification>[];
+
+  @Field({ nullable: true })
+  get fullname(): string {
+    const userRole = get(this, '_doc.userRole', '') || this.userRole || ''
+    const userType = get(this, '_doc.userType', '') || this.userType || ''
+    if (userRole === 'customer') {
+      if (userType === 'individual') {
+        const individualDetail: IndividualCustomer | undefined = get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
+        if (individualDetail) {
+          const title = get(individualDetail, 'title', '')
+          const otherTitle = get(individualDetail, 'otherTitle', '')
+          const firstname = get(individualDetail, 'firstname', '')
+          const lastname = get(individualDetail, 'lastname', '')
+
+          const INDIVIDUAL_TITLE_NAME_OPTIONS = [
+            { value: 'Miss', label: 'นางสาว' },
+            { value: 'Mrs.', label: 'นาง' },
+            { value: 'Mr.', label: 'นาย' },
+            { value: 'other', label: 'อื่นๆ' },
+          ]
+          const titleName = title !== "other" ? find(INDIVIDUAL_TITLE_NAME_OPTIONS, ['value', title]).label : otherTitle
+
+          return `${titleName}${firstname} ${lastname}`;
+        }
+        return ''
+      } else if (userType === 'business') {
+        const businessDetail: BusinessCustomer | undefined = get(this, '_doc.businessCustomer', undefined) || this.businessDetail || undefined
+        if (businessDetail) {
+          const BUSINESS_TITLE_NAME_OPTIONS = [
+            { value: 'Co', label: 'บจก.' },
+            { value: 'Part', label: 'หจก.' },
+            { value: 'Pub', label: 'บมจ.' },
+          ]
+          const title = find(BUSINESS_TITLE_NAME_OPTIONS, ['value', businessDetail.businessTitle]).label
+          return `${title} ${businessDetail.businessName}`
+        }
+        return ''
+      }
+    } else if (userRole === 'driver') {
+      if (userType === 'individual') {
+        const individualDriver: IndividualDriver | undefined = get(this, '_doc.individualDriver', undefined) || this.individualDriver || undefined
+        return individualDriver ? individualDriver.fullname : ''
+      } else if (userType === 'business') {
+        return ''
+      }
+    }
+    return ''
+  }
+
+  @Field({ nullable: true })
+  get email(): string {
+    const userType = get(this, '_doc.userType', '') || this.userType || ''
+    if (userType === 'individual') {
+      const individualDetail: IndividualCustomer | undefined = get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
+      return individualDetail ? individualDetail.email : ''
+    } else if (userType === 'business') {
+      const businessDetail: BusinessCustomer | undefined = get(this, '_doc.businessCustomer', undefined) || this.businessDetail || undefined
+      return businessDetail ? businessDetail.businessEmail : ''
+    }
+    return ''
+  }
 
   async validatePassword(password: string): Promise<boolean> {
     const password_decryption = decryption(password)

@@ -8,7 +8,7 @@ import UserModel from '@models/user.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
-import { AnyBulkWriteOperation, FilterQuery } from 'mongoose'
+import { AnyBulkWriteOperation, FilterQuery, PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import lodash, { get, head, isEmpty, map, omitBy, reduce, tail, values } from 'lodash'
 import AdditionalServiceCostPricingModel from '@models/additionalServiceCostPricing.model'
@@ -22,9 +22,10 @@ import VehicleTypeModel from '@models/vehicleType.model'
 import { DistanceCostPricing } from '@models/distanceCostPricing.model'
 import { email_sender } from '@utils/email.utils'
 import NotificationModel from '@models/notification.model'
-import { ShipmentPaginationPayload, TotalRecordPayload } from '@payloads/shipment.payloads'
+import { ShipmentPaginationAggregatePayload, ShipmentPaginationPayload, TotalRecordPayload } from '@payloads/shipment.payloads'
 import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
 import { reformPaginate } from '@utils/pagination.utils'
+import { SHIPMENT_LIST } from '@pipelines/shipment.pipeline'
 
 Aigle.mixin(lodash, {})
 
@@ -64,35 +65,76 @@ export default class ShipmentResolver {
     }
   }
 
+  shipmentQuery({ dateRangeStart, dateRangeEnd, trackingNumber, vehicleTypeId, status, startWorkingDate, endWorkingDate }: GetShipmentArgs, user_role: string | undefined, user_id: string | undefined): FilterQuery<typeof Shipment> {
+    // Status
+
+    console.log('status: ', status)
+    const statusFilterOr = status === 'all'
+      ? ['idle', 'progressing', 'dilivered', 'cancelled', 'refund']
+      : status === 'progress'
+        ? ['idle', 'progressing']
+        : status === 'finish' ? ['dilivered']
+          : status === 'refund'
+            ? ['refund']
+            : []
+
+
+    // Create at
+    const startOfCreated = dateRangeStart ? new Date(new Date(dateRangeStart).setHours(0, 0, 0, 0)) : null;
+    const endOfCreated = dateRangeEnd ? new Date(new Date(dateRangeEnd).setHours(23, 59, 59, 999)) : null;
+    // Working
+    const startOfWorking = startWorkingDate ? new Date(new Date(startWorkingDate).setHours(0, 0, 0, 0)) : null;
+    const endOfWorking = endWorkingDate ? new Date(new Date(endWorkingDate).setHours(23, 59, 59, 999)) : null;
+
+    // Query
+    const regex = new RegExp(trackingNumber, 'i')
+    const orQuery = [
+      ...(trackingNumber
+        ? [
+          { trackingNumber: { $regex: regex }, $or: !isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [] },
+          { refId: { $regex: regex }, $or: !isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [] }
+        ]
+        : (!isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [])
+      )
+    ]
+    const filterQuery: FilterQuery<typeof Shipment> = {
+      ...(vehicleTypeId ? { vehicleId: vehicleTypeId } : {}),
+      ...(startOfCreated || endOfCreated ? {
+        createdAt: {
+          ...(startOfCreated ? { $gte: startOfCreated } : {}),
+          ...(endOfCreated ? { $lte: endOfCreated } : {}),
+        }
+      } : {}),
+      ...(startOfWorking && endOfWorking ? {
+        bookingDateTime: {
+          ...(startOfWorking ? { $gte: startOfWorking } : {}),
+          ...(endOfWorking ? { $lte: endOfWorking } : {}),
+        }
+      } : {}),
+      ...(!isEmpty(orQuery) ? { $or: orQuery } : {}),
+      ...(user_role === 'customer' && user_id ? { customer: user_id } : {})
+    }
+    return filterQuery
+  }
+
+
   @Query(() => ShipmentPaginationPayload)
   @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
   async shipmentList(
     @Ctx() ctx: GraphQLContext,
-    @Args() query: GetShipmentArgs,
+    @Args() { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...query }: GetShipmentArgs,
     @Args() paginate: PaginationArgs,
   ): Promise<ShipmentPaginationPayload> {
     const user_id = ctx.req.user_id
     const user_role = ctx.req.user_role
     try {
-      // Pagination
-      const pagination = reformPaginate(paginate)
-      // Query
-      const filterEmptyQuery = omitBy(query, isEmpty)
-      const filterQuery: FilterQuery<typeof Shipment> = {
-        ...filterEmptyQuery,
-        ...(query.trackingNumber
-          ? {
-            $or: [
-              { trackingNumber: { $regex: query.trackingNumber, $options: 'i' } },
-              { refId: { $regex: query.trackingNumber, $options: 'i' } },
-            ],
-          }
-          : {}),
-        ...(query.vehicleTypeId ? { vehicleId: query.vehicleTypeId } : {}),
-        ...(user_role === 'customer' && user_id ? { customer: user_id } : {})
-      }
-
-      const shipments = (await ShipmentModel.paginate(filterQuery, pagination)) as ShipmentPaginationPayload
+      const reformSorts: PaginateOptions = reformPaginate(paginate)
+      const filterQuery = omitBy(query, isEmpty)
+      console.log('query: ', query)
+      console.log('filterQuery: ', filterQuery)
+      console.log('raw: ', JSON.stringify(SHIPMENT_LIST({ startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery }, user_role, user_id)))
+      const aggregate = UserModel.aggregate(SHIPMENT_LIST({ startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery }, user_role, user_id))
+      const shipments = (await ShipmentModel.aggregatePaginate(aggregate, reformSorts)) as ShipmentPaginationAggregatePayload
       if (!shipments) {
         const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
         throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
@@ -102,42 +144,6 @@ export default class ShipmentResolver {
       console.log(error)
       throw error
     }
-  }
-
-  shipmentQuery({ dateRangeStart, dateRangeEnd, trackingNumber, vehicleTypeId, status, ...query }: GetShipmentArgs, user_role: string | undefined, user_id: string | undefined): FilterQuery<typeof Shipment> {
-    // Status
-    const statusFilterOr = status === 'all'
-      ? ['idle', 'progressing', 'dilivered', 'cancelled', 'refund']
-      : status === 'progress'
-        ? ['idle', 'progressing']
-        : status === 'finish' ? ['dilivered']
-          : status === 'refund'
-            ? ['refund']
-            : []
-    // Query
-    const filterEmptyQuery = omitBy(query, isEmpty)
-    const regex = new RegExp(trackingNumber, 'i')
-    const filterQuery: FilterQuery<typeof Shipment> = {
-      ...filterEmptyQuery,
-      ...(vehicleTypeId ? { vehicleId: vehicleTypeId } : {}),
-      ...(dateRangeStart || dateRangeEnd ? {
-        createdAt: {
-          ...(dateRangeStart ? { $gte: dateRangeStart } : {}),
-          ...(dateRangeEnd ? { $lte: dateRangeEnd } : {}),
-        }
-      } : {}),
-      $or: [
-        ...(trackingNumber
-          ? [
-            { trackingNumber: { $regex: regex }, $or: !isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [] },
-            { refId: { $regex: regex }, $or: !isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [] }
-          ]
-          : (!isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [])
-        )
-      ],
-      ...(user_role === 'customer' && user_id ? { customer: user_id } : {})
-    }
-    return filterQuery
   }
 
   @Query(() => [Shipment])
@@ -350,8 +356,10 @@ export default class ShipmentResolver {
         serviceIds: additionalServices,
         discountId: discountId,
       })
+      const _paymentNumber = await generateTrackingNumber(paymentMethod === 'credit' ? 'MMPAYCE' : 'MMPAYCA', 'payment')
       const _payment = new PaymentModel({
         cashDetail,
+        paymentNumber: _paymentNumber,
         creditDetail: paymentDetail,
         invoice: _invoice,
         calculation: _calculation,

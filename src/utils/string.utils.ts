@@ -47,8 +47,8 @@ export async function generateId(prefix: string, type: TGenerateIDType) {
 
 export async function generateTrackingNumber(prefix: string, type: TGenerateIDType) {
     const counter = await CouterModel.getNextCouter(type)
-    // TODO: Tracking Number Format
-    const running_id = padStart(`${counter}`, 6, '0')
+    const counterNumberStr = `${counter}`
+    const running_id = counterNumberStr.length > 6 ? counterNumberStr : padStart(counterNumberStr, 6, '0')
     return `${prefix}${running_id}`
 }
 

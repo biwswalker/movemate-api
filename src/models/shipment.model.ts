@@ -1,5 +1,5 @@
 import { Field, Float, ID, Int, ObjectType } from 'type-graphql'
-import { prop as Property, getModelForClass, Ref, Severity, plugin, ReturnModelType, DocumentType } from '@typegoose/typegoose'
+import { prop as Property, getModelForClass, Ref, Severity, plugin } from '@typegoose/typegoose'
 import { User } from './user.model'
 import { IsEnum } from 'class-validator'
 import PrivilegeModel, { Privilege } from './privilege.model'
@@ -18,14 +18,12 @@ import { SubtotalCalculationArgs } from '@inputs/booking.input'
 import VehicleCostModel from './vehicleCost.model'
 import lodash, { filter, find, flatten, get, isEqual, map, min, range, sum, values } from 'lodash'
 import { fNumber } from '@utils/formatNumber'
-import AdditionalServiceCostPricingModel, { AdditionalServiceCostPricing } from './additionalServiceCostPricing.model'
+import AdditionalServiceCostPricingModel from './additionalServiceCostPricing.model'
 import { SubtotalCalculatedPayload } from '@payloads/booking.payloads'
 import StepDefinitionModel, { EStepDefinition, EStepDefinitionName, EStepStatus, StepDefinition } from './shipmentStepDefinition.model'
 import { FileInput } from '@inputs/file.input'
 import Aigle from 'aigle'
-import { AnyBulkWriteOperation } from 'mongoose'
-import { AdditionalService } from './additionalService.model'
-import { GraphQLError } from 'graphql'
+import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
 
 Aigle.mixin(lodash, {});
 
@@ -139,6 +137,7 @@ export class Destination {
 
 @plugin(mongooseAutoPopulate)
 @plugin(mongoosePagination)
+@plugin(mongooseAggregatePaginate)
 @ObjectType()
 export class Shipment extends TimeStamps {
   @Field(() => ID)
@@ -297,6 +296,7 @@ export class Shipment extends TimeStamps {
   updatedAt: Date
 
   static paginate: mongoose.PaginateModel<typeof Shipment>['paginate']
+  static aggregatePaginate: mongoose.AggregatePaginateModel<typeof Shipment>['aggregatePaginate']
 
   static async calculate({ vehicleTypeId, distanceMeter, distanceReturnMeter, dropPoint, isRounded, discountId, serviceIds }: SubtotalCalculationArgs): Promise<SubtotalCalculatedPayload> {
     try {

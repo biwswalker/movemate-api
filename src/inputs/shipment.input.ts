@@ -150,21 +150,38 @@ export class GetShipmentArgs {
   @Field({ nullable: true })
   status?: TCriteriaStatus
 
-  @Field(() => Date, { nullable: true })
-  dateRangeStart?: Date
-
-  @Field(() => Date, { nullable: true })
-  dateRangeEnd?: Date
-
   @Field({ nullable: true })
   vehicleTypeId?: string
 
   @Field({ nullable: true })
   paymentMethod?: TPaymentMethod
 
+  @Field(() => Date, { nullable: true })
+  dateRangeStart?: Date
+
+  @Field(() => Date, { nullable: true })
+  dateRangeEnd?: Date
+
+  // News
+  @Field(() => Date, { nullable: true })
+  startWorkingDate?: Date
+
+  @Field(() => Date, { nullable: true })
+  endWorkingDate?: Date
+
+  // Recheck
   @Field({ nullable: true })
   paymentStatus?: TPaymentStatus
 
-  // Customer
-  // Driver
+  @Field({ nullable: true })
+  paymentNumber?: string
+
+  @Field({ nullable: true })
+  customerName?: string
+
+  @Field({ nullable: true })
+  driverName?: string
+
+  @Field({ nullable: true })
+  driverAgentName?: string
 }

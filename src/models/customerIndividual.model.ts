@@ -1,7 +1,7 @@
 import { ObjectType, Field, ID } from "type-graphql";
 import { prop as Property, getModelForClass } from "@typegoose/typegoose";
 import { IsEmail, IsNotEmpty, IsString, Length } from "class-validator";
-import { get } from "lodash";
+import { find, get } from "lodash";
 
 @ObjectType()
 export class IndividualCustomer {
@@ -80,9 +80,20 @@ export class IndividualCustomer {
 
   @Field({ nullable: true })
   get fullname(): string {
+    const title = get(this, '_doc.title', '') || get(this, 'title', '')
+    const otherTitle = get(this, '_doc.otherTitle', '') || get(this, 'otherTitle', '')
     const firstname = get(this, '_doc.firstname', '') || get(this, 'firstname', '')
     const lastname = get(this, '_doc.lastname', '') || get(this, 'lastname', '')
-    return `${firstname} ${lastname}`;
+
+    const INDIVIDUAL_TITLE_NAME_OPTIONS = [
+      { value: 'Miss', label: 'นางสาว' },
+      { value: 'Mrs.', label: 'นาง' },
+      { value: 'Mr.', label: 'นาย' },
+      { value: 'other', label: 'อื่นๆ' },
+    ]
+    const titleName = title !== 'other' ? find(INDIVIDUAL_TITLE_NAME_OPTIONS, ['value', title]).label : otherTitle
+
+    return `${titleName}${firstname} ${lastname}`;
   }
 
   static async findByUserNumber(userNumber: string): Promise<IndividualCustomer | null> {

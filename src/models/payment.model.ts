@@ -86,6 +86,10 @@ export class Payment extends TimeStamps {
     readonly _id: string
 
     @Field()
+    @Property()
+    paymentNumber: string
+
+    @Field()
     @IsEnum(EPaymentStatus)
     @Property({ enum: EPaymentStatus, default: EPaymentStatus.WAITING_CONFIRM_PAYMENT })
     status: TPaymentStatus

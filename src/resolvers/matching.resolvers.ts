@@ -14,6 +14,7 @@ import { REPONSE_NAME } from 'constants/status'
 import NotificationModel from '@models/notification.model'
 import { ConfirmShipmentDateInput, NextShipmentStepInput } from '@inputs/matching.input'
 
+// Custom status for driver
 type TShipmentStatus = 'new' | 'progressing' | 'dilivered' | 'cancelled'
 
 @Resolver()
