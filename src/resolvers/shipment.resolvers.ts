@@ -67,8 +67,6 @@ export default class ShipmentResolver {
 
   shipmentQuery({ dateRangeStart, dateRangeEnd, trackingNumber, vehicleTypeId, status, startWorkingDate, endWorkingDate }: GetShipmentArgs, user_role: string | undefined, user_id: string | undefined): FilterQuery<typeof Shipment> {
     // Status
-
-    console.log('status: ', status)
     const statusFilterOr = status === 'all'
       ? ['idle', 'progressing', 'dilivered', 'cancelled', 'refund']
       : status === 'progress'
@@ -130,10 +128,8 @@ export default class ShipmentResolver {
     try {
       const reformSorts: PaginateOptions = reformPaginate(paginate)
       const filterQuery = omitBy(query, isEmpty)
-      console.log('query: ', query)
-      console.log('filterQuery: ', filterQuery)
       console.log('raw: ', JSON.stringify(SHIPMENT_LIST({ startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery }, user_role, user_id)))
-      const aggregate = UserModel.aggregate(SHIPMENT_LIST({ startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery }, user_role, user_id))
+      const aggregate = ShipmentModel.aggregate(SHIPMENT_LIST({ startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery }, user_role, user_id))
       const shipments = (await ShipmentModel.aggregatePaginate(aggregate, reformSorts)) as ShipmentPaginationAggregatePayload
       if (!shipments) {
         const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
@@ -143,6 +139,27 @@ export default class ShipmentResolver {
     } catch (error) {
       console.log(error)
       throw error
+    }
+  }
+
+  @Query(() => [String])
+  @UseMiddleware(AuthGuard(["admin"]))
+  async allshipmentIds(
+    @Ctx() ctx: GraphQLContext,
+    @Args() { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...query }: GetShipmentArgs): Promise<string[]> {
+    const user_id = ctx.req.user_id
+    const user_role = ctx.req.user_role
+    try {
+      const filterQuery = omitBy(query, isEmpty)
+      console.log('raw: ', JSON.stringify(SHIPMENT_LIST({ startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery }, user_role, user_id)))
+      const shipments = await ShipmentModel.aggregate(SHIPMENT_LIST({ startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery }, user_role, user_id))
+      const ids = map(shipments, ({ _id }) => _id)
+      console.log('users: ', shipments, ids)
+
+      return ids;
+    } catch (error) {
+      console.log(error);
+      throw new GraphQLError("ไม่สามารถเรียกข้อมูลงานขนส่งได้ โปรดลองอีกครั้ง");
     }
   }
 
@@ -199,20 +216,39 @@ export default class ShipmentResolver {
     const user_role = ctx.req.user_role
     const user_id = ctx.req.user_id
     if (user_id) {
-      // Query
-      const filterQuery = (status: TCriteriaStatus) => this.shipmentQuery({ ...args, status }, user_role, user_id)
+      if (user_role === 'admin') {
+        const all = await ShipmentModel.countDocuments()
+        const idle = await ShipmentModel.countDocuments({ status: 'idle' })
+        const progressing = await ShipmentModel.countDocuments({ status: 'progressing' })
+        const dilivered = await ShipmentModel.countDocuments({ status: 'dilivered' })
+        const cancelled = await ShipmentModel.countDocuments({ status: 'cancelled' })
+        const refund = await ShipmentModel.countDocuments({ status: 'refund' })
+        const expire = await ShipmentModel.countDocuments({ status: 'expire' })
 
-      const allCount = await ShipmentModel.countDocuments(filterQuery('all'))
-      const progressingCount = await ShipmentModel.countDocuments(filterQuery('progress'))
-      const refundCount = await ShipmentModel.countDocuments(filterQuery('refund'))
-      const finishCount = await ShipmentModel.countDocuments(filterQuery('finish'))
+        return [
+          { label: 'ทั้งหมด', key: 'all', count: all },
+          { label: 'รอตรวจสอบการชำระ/รอคนขับตอบรับ', key: 'idle', count: idle },
+          { label: 'กำลังดำเนินการขนส่ง', key: 'progressing', count: progressing },
+          { label: 'เสร็จสิ้น', key: 'dilivered', count: dilivered },
+          { label: 'ยกเลิก', key: 'cancelled', count: cancelled },
+          { label: 'คนเงิน', key: 'refund', count: refund },
+          { label: 'หมดอายุ', key: 'expire', count: expire },
+        ];
+      } else {
+        const filterQuery = (status: TCriteriaStatus) => this.shipmentQuery({ ...args, status }, user_role, user_id)
 
-      return [
-        { label: 'ทั้งหมด', key: 'all', count: allCount },
-        { label: 'ดำเนินการ', key: 'progress', count: progressingCount },
-        { label: 'คืนเงินแล้ว', key: 'refund', count: refundCount },
-        { label: 'เสร็จสิ้น', key: 'finish', count: finishCount },
-      ]
+        const allCount = await ShipmentModel.countDocuments(filterQuery('all'))
+        const progressingCount = await ShipmentModel.countDocuments(filterQuery('progress'))
+        const refundCount = await ShipmentModel.countDocuments(filterQuery('refund'))
+        const finishCount = await ShipmentModel.countDocuments(filterQuery('finish'))
+
+        return [
+          { label: 'ทั้งหมด', key: 'all', count: allCount },
+          { label: 'ดำเนินการ', key: 'progress', count: progressingCount },
+          { label: 'คืนเงินแล้ว', key: 'refund', count: refundCount },
+          { label: 'เสร็จสิ้น', key: 'finish', count: finishCount },
+        ]
+      }
     }
     return []
   }

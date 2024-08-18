@@ -87,8 +87,6 @@ export default class UserResolver {
       const filterQuery = omitBy(query, isEmpty)
       const users = (await UserModel.aggregate(GET_USERS(filterQuery)))
       const ids = map(users, ({ _id }) => _id)
-      console.log('users: ', ids)
-
       return ids;
     } catch (error) {
       console.log(error);
