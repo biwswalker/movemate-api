@@ -24,6 +24,8 @@ export enum EStepDefinition {
   DROPOFF = 'DROPOFF',
   POD = 'POD',
   FINISH = 'FINISH',
+  REJECTED_PAYMENT = 'REJECTED_PAYMENT',
+  REFUND = 'REFUND',
 }
 
 export enum EStepDefinitionName {
@@ -37,6 +39,8 @@ export enum EStepDefinitionName {
   DROPOFF = 'จัดส่งสินค้า',
   FINISH = 'จัดส่งสำเร็จ',
   POD = 'แนบเอกสารและส่งเอกสาร POD',
+  REJECTED_PAYMENT = 'ไม่อนุมัติการชำระเงิน',
+  REFUND = 'ดำเนินการคืนเงิน'
 }
 
 @plugin(mongooseAutoPopulate)

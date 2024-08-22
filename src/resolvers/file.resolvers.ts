@@ -1,7 +1,6 @@
 import { Resolver, Arg, Mutation, UseMiddleware, Ctx } from 'type-graphql'
 import { GraphQLUpload, FileUpload } from 'graphql-upload-ts'
 import { createWriteStream } from 'fs'
-import { AuthGuard } from '@guards/auth.guards'
 import { GraphQLContext } from '@configs/graphQL.config'
 import { generateId, generateRandomNumberPattern } from '@utils/string.utils'
 import { extname, join } from 'path'
@@ -9,7 +8,7 @@ import { FileUploadPayload } from '@payloads/file.payloads'
 import { get } from 'lodash'
 
 @Resolver()
-export default class MapsResolver {
+export default class FileResolver {
 
     @Mutation(() => FileUploadPayload)
     // @UseMiddleware(AuthGuard) // TODO: Must fixed request url source

@@ -40,6 +40,9 @@ export class PriceItem {
 
     @Field(() => Float)
     price: number
+
+    @Field(() => Float, { defaultValue: 0, nullable: true })
+    cost: number
 }
 
 
@@ -57,7 +60,23 @@ export class SubtotalCalculatedPayload {
     @Property({ allowMixed: Severity.ALLOW })
     additionalServices: PriceItem[]
 
-    @Field(() => Float)
+    @Field(() => [PriceItem])
+    @Property({ allowMixed: Severity.ALLOW })
+    taxs: PriceItem[]
+
+    @Field(() => Float, { defaultValue: 0 })
     @Property()
-    total: number
+    subTotalCost: number
+
+    @Field(() => Float, { defaultValue: 0 })
+    @Property()
+    subTotalPrice: number
+
+    @Field(() => Float, { defaultValue: 0 })
+    @Property()
+    totalCost: number
+
+    @Field(() => Float, { defaultValue: 0 })
+    @Property()
+    totalPrice: number
 }

@@ -48,14 +48,23 @@ export class AdditionalServiceCostPricing extends TimeStamps {
     @Property({ default: Date.now })
     updatedAt: Date
 
-    static async getServicesPricing(ids: string[]): Promise<{ additionalServices: AdditionalServiceCostPricing[], priceItems: PriceItem[], price: number }> {
+    static async getServicesPricing(ids: string[], costCalculation: boolean = false): Promise<{ additionalServices: AdditionalServiceCostPricing[], priceItems: PriceItem[], price: number, cost: number }> {
         const additionalServices = await AdditionalServiceCostPricingModel.find({ _id: { $in: ids } }).exec();
-        const servicePrices = map<AdditionalServiceCostPricing, PriceItem>(additionalServices, service => ({ label: get(service, 'additionalService.name', ''), price: service.price }))
-        const servicePrice = reduce(servicePrices, (prev, curr) => sum([prev, curr.price]), 0)
+        const servicePrices = map<AdditionalServiceCostPricing, PriceItem>(additionalServices, service => {
+            const serviceName = get(service, 'additionalService.name', '')
+            if (serviceName === 'POD') {
+                return ({ label: `บริการคืนใบส่งสินค้า (${serviceName})`, price: service.price, cost: costCalculation ? service.cost : 0 })
+            }
+            return ({ label: serviceName, price: service.price, cost: costCalculation ? service.cost : 0 })
+        })
+        const { price, cost } = reduce(servicePrices, (prev, curr) => {
+            return { ...prev, price: sum([prev.price, curr.price]), cost: sum([prev.cost, curr.cost]) }
+        }, { cost: 0, price: 0 })
         return {
             additionalServices,
             priceItems: servicePrices,
-            price: servicePrice
+            price,
+            cost
         };
     }
 }

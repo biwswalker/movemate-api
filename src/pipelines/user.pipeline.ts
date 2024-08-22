@@ -276,6 +276,11 @@ export const GET_USERS = ({ email, name, phoneNumber, taxId, userNumber, usernam
                 }
             }
         },
+        {
+            $sort: {
+                statusWeight: 1
+            }
+        },
         { $match: detailMatch }
     ]
 }

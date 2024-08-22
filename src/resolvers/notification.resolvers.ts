@@ -3,6 +3,10 @@ import NotificationModel, { Notification } from '@models/notification.model'
 import { LoadmoreArgs } from '@inputs/query.input'
 import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
+import { AdminNotificationCountPayload } from '@payloads/notification.payloads'
+import ShipmentModel from '@models/shipment.model'
+import UserModel from '@models/user.model'
+import { sum } from 'lodash'
 
 @Resolver()
 export default class NotificationResolver {
@@ -46,4 +50,26 @@ export default class NotificationResolver {
         await NotificationModel.markNotificationAsRead(notificationId)
         return true;
     }
+
+
+    @Query(() => AdminNotificationCountPayload)
+    @UseMiddleware(AuthGuard(["admin"]))
+    async getAdminNotificationCount(@Ctx() ctx: GraphQLContext): Promise<AdminNotificationCountPayload> {
+        const individualCustomer = await UserModel.countDocuments({ status: 'pending', userType: 'individual', userRole: 'customer' }).catch(() => 0)
+        // TODO : Business including upgrade request
+        const businessCustomer = await UserModel.countDocuments({ status: 'pending', userType: 'business', userRole: 'customer' }).catch(() => 0)
+        const individualDriver = await UserModel.countDocuments({ status: 'pending', userType: 'individual', userRole: 'driver' }).catch(() => 0)
+        const businessDriver = await UserModel.countDocuments({ status: 'pending', userType: 'business', userRole: 'driver' }).catch(() => 0)
+        const shipment = await ShipmentModel.countDocuments({ $or: [{ status: 'idle' }, { status: 'refund' }] }).catch(() => 0)
+        return {
+            customer: sum([individualCustomer, businessCustomer]),
+            individualCustomer,
+            businessCustomer,
+            driver: sum([individualDriver, businessDriver]),
+            individualDriver,
+            businessDriver,
+            shipment,
+        }
+    }
+
 }

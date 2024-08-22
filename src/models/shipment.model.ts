@@ -24,10 +24,12 @@ import StepDefinitionModel, { EStepDefinition, EStepDefinitionName, EStepStatus,
 import { FileInput } from '@inputs/file.input'
 import Aigle from 'aigle'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
+import { UpdateHistory } from './updateHistory.model'
+import { Refund } from './refund.model'
 
 Aigle.mixin(lodash, {});
 
-enum EShipingStatus {
+export enum EShipingStatus {
   IDLE = 'idle',
   PROGRESSING = 'progressing',
   DELIVERED = 'dilivered',
@@ -35,7 +37,7 @@ enum EShipingStatus {
   REFUND = 'refund',
 }
 
-enum EAdminAcceptanceStatus {
+export enum EAdminAcceptanceStatus {
   PENDING = 'pending',
   REACH = 'reach',
   ACCEPTED = 'accepted',
@@ -50,13 +52,18 @@ enum EDriverAcceptanceStatus {
   UNINTERESTED = 'uninterested',
 }
 
-enum EShipingLogStatus {
-  PENDING = 'pending',
-  INPROGRESS = 'inprogress',
-  CANCELLED = 'cancelled',
-  REJECTED = 'rejected',
-  COMPLETE = 'complete',
-  REFUND = 'refund'
+export enum EShipmentCancellationReason {
+  LOST_ITEM = 'lost_item',
+  INCOMPLETE_INFO = 'incomplete_info',
+  RECIPIENT_UNAVAILABLE = 'recipient_unavailable',
+  BOOKING_ISSUE = 'booking_issue',
+  VEHICLE_ISSUE = 'vehicle_issue',
+  DRIVER_CANCELLED = 'driver_cancelled',
+  DELAYED_SHIPMENT = 'delayed_shipment',
+  CUSTOMER_REQUEST = 'customer_request',
+  PACKING_ERROR = 'packing_error',
+  MANAGEMENT_DECISION = 'management_decision',
+  OTHER = 'other'
 }
 
 enum EIssueType {
@@ -274,18 +281,13 @@ export class Shipment extends TimeStamps {
   @Property({ default: 0 })
   currentStepSeq: number
 
-  // @Field({ nullable: true })
-  // @IsEnum(EIssueType)
-  // @Property({ enum: EIssueType })
-  // issueType: TIssueType;
-
-  // @Field({ nullable: true })
-  // @Property()
-  // issueReason?: string;
-
   @Field(() => Payment)
   @Property({ ref: () => Payment, required: true, autopopulate: true })
   payment: Ref<Payment>
+
+  @Field(() => Refund, { nullable: true })
+  @Property({ ref: () => Refund, required: false, autopopulate: true })
+  refund?: Ref<Refund>
 
   @Field()
   @Property({ default: Date.now })
@@ -295,16 +297,29 @@ export class Shipment extends TimeStamps {
   @Property({ default: Date.now })
   updatedAt: Date
 
+  @Field(() => [UpdateHistory], { nullable: true })
+  @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
+  history: Ref<UpdateHistory>[];
+
+  @Field(() => String, { nullable: true })
+  @IsEnum(EShipmentCancellationReason)
+  @Property({ enum: EShipmentCancellationReason, required: false })
+  cancellationReason: TShipmentCancellationReason
+
+  @Field(() => String, { nullable: true })
+  @Property({ required: false })
+  cancellationDetail: string
+
   static paginate: mongoose.PaginateModel<typeof Shipment>['paginate']
   static aggregatePaginate: mongoose.AggregatePaginateModel<typeof Shipment>['aggregatePaginate']
 
-  static async calculate({ vehicleTypeId, distanceMeter, distanceReturnMeter, dropPoint, isRounded, discountId, serviceIds }: SubtotalCalculationArgs): Promise<SubtotalCalculatedPayload> {
+  static async calculate({ vehicleTypeId, distanceMeter, distanceReturnMeter, dropPoint, isRounded, discountId, serviceIds, isBusinessCashPayment }: SubtotalCalculationArgs, costCalculation: boolean = false): Promise<SubtotalCalculatedPayload> {
     try {
       const vehicleCost = await VehicleCostModel.findByVehicleId(vehicleTypeId)
-      const distanceKilometers = distanceMeter / 1000 // TODO: Recheck decimal calculation with owner
-      const distanceReturnKilometers = distanceReturnMeter / 1000 // TODO: Recheck decimal calculation with owner
+      const distanceKilometers = distanceMeter / 1000 // as KM.
+      const distanceReturnKilometers = distanceReturnMeter / 1000 // as KM.
       const calculated = await VehicleCostModel.calculatePricing(vehicleCost._id, {
-        distance: distanceKilometers, // TODO: Recheck decimal calculation with owner
+        distance: distanceKilometers,
         returnedDistance: distanceReturnKilometers,
         dropPoint,
         isRounded,
@@ -314,8 +329,10 @@ export class Shipment extends TimeStamps {
       const distanceKM = fNumber(distanceKilometers, '0.0')
       const distanceReturnKM = fNumber(distanceReturnKilometers, '0.0')
 
-      const additionalservices = await AdditionalServiceCostPricingModel.getServicesPricing(serviceIds)
+      // Additional Services
+      const additionalservices = await AdditionalServiceCostPricingModel.getServicesPricing(serviceIds, costCalculation)
 
+      // Privilege
       let discountName = ''
       let totalDiscount = 0
       if (discountId) {
@@ -339,25 +356,48 @@ export class Shipment extends TimeStamps {
         }
       }
 
-      const total = sum([calculated.totalPrice, additionalservices.price, -totalDiscount])
+      const subTotalCost = sum([calculated.totalCost, additionalservices.cost])
+      const subTotalPrice = sum([calculated.totalPrice, additionalservices.price, -totalDiscount])
+
+      /**
+       * งานเงินสด 
+       * บริษัท
+       * - แสดงและคำนวณ WHT ทุกครั้ง และแสดงทุกครั้ง
+       * (ค่าขนส่งเกิน 1000 คิด WHT 1%)
+       * (ค่าขนส่งน้อยกว่า 1000 คิดราคาเต็ม)
+       */
+      let whtName = ''
+      let wht = 0
+      const isTaxCalculation = isBusinessCashPayment && subTotalPrice > 1000
+      if (isTaxCalculation) {
+        whtName = 'ค่าภาษีบริการขนส่งสินค้าจากบริษัท 1% (WHT)'
+        wht = subTotalPrice * (0.01)
+      }
+
+
+      const totalCost = sum([subTotalCost])
+      const totalPrice = sum([subTotalPrice, wht])
       return {
         shippingPrices: [
-          { label: `${vehicleName} (${distanceKM} กม.)`, price: calculated.subTotalPrice },
-          ...(isRounded ? [{ label: `ไป-กลับ ${calculated.roundedPricePercent}% (${distanceReturnKM} กม.)`, price: calculated.subTotalRoundedPrice }] : []),
+          { label: `${vehicleName} (${fNumber(distanceKM)} กม.)`, price: calculated.subTotalPrice, cost: costCalculation ? calculated.subTotalCost : 0 },
+          ...(isRounded ? [{ label: `ไป-กลับ ${calculated.roundedPricePercent}% (${distanceReturnKM} กม.)`, price: calculated.subTotalRoundedPrice, cost: costCalculation ? calculated.subTotalRoundedCost : 0 }] : []),
         ],
         additionalServices: [
-          ...(dropPoint > 1 ? [{ label: 'หลายจุดส่ง', price: calculated.subTotalDropPointPrice }] : []),
+          ...(dropPoint > 1 ? [{ label: 'หลายจุดส่ง', price: calculated.subTotalDropPointPrice, cost: costCalculation ? calculated.subTotalDropPointCost : 0 }] : []),
           ...additionalservices.priceItems,
         ],
-        discounts: discountId ? [{ label: discountName, price: totalDiscount }] : [],
-        total: total,
+        discounts: discountId ? [{ label: discountName, price: totalDiscount, cost: 0 }] : [],
+        taxs: isTaxCalculation ? [{ label: whtName, price: wht, cost: 0 }] : [],
+        subTotalCost: costCalculation ? subTotalCost : 0,
+        subTotalPrice: subTotalPrice,
+        totalCost: costCalculation ? totalCost : 0,
+        totalPrice: totalPrice,
       }
     } catch (error) {
       throw error
     }
   }
 
-  // 'CASH_VERIFY' | 'DRIVER_ACCEPTED' | 'CONFIRM_DATETIME' | 'ARRIVAL_PICKUP_LOCATION' | 'PICKUP' | 'ARRIVAL_DROPOFF' | 'DROPOFF' | 'POD' | 'FINISH'
   async initialStepDefinition(): Promise<boolean> {
     console.log('this: ', JSON.stringify(this))
     const shipmentId = get(this, '_doc._id', []) || get(this, '_id', [])

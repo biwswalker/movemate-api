@@ -231,7 +231,7 @@ export default class ShipmentResolver {
           { label: 'กำลังดำเนินการขนส่ง', key: 'progressing', count: progressing },
           { label: 'เสร็จสิ้น', key: 'dilivered', count: dilivered },
           { label: 'ยกเลิก', key: 'cancelled', count: cancelled },
-          { label: 'คนเงิน', key: 'refund', count: refund },
+          { label: 'คืนเงิน', key: 'refund', count: refund },
           { label: 'หมดอายุ', key: 'expire', count: expire },
         ];
       } else {
@@ -391,8 +391,9 @@ export default class ShipmentResolver {
         isRounded: data.isRoundedReturn,
         serviceIds: additionalServices,
         discountId: discountId,
-      })
-      const _paymentNumber = await generateTrackingNumber(paymentMethod === 'credit' ? 'MMPAYCE' : 'MMPAYCA', 'payment')
+        isBusinessCashPayment: customer.userType === 'business' && isCashPaymentMethod
+      }, true)
+      const _paymentNumber = await generateTrackingNumber(isCreditPaymentMethod ? 'MMPAYCE' : 'MMPAYCA', 'payment')
       const _payment = new PaymentModel({
         cashDetail,
         paymentNumber: _paymentNumber,

@@ -185,6 +185,7 @@ export class User extends TimeStamps {
   get fullname(): string {
     const userRole = get(this, '_doc.userRole', '') || this.userRole || ''
     const userType = get(this, '_doc.userType', '') || this.userType || ''
+
     if (userRole === 'customer') {
       if (userType === 'individual') {
         const individualDetail: IndividualCustomer | undefined = get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
@@ -206,7 +207,7 @@ export class User extends TimeStamps {
         }
         return ''
       } else if (userType === 'business') {
-        const businessDetail: BusinessCustomer | undefined = get(this, '_doc.businessCustomer', undefined) || this.businessDetail || undefined
+        const businessDetail: BusinessCustomer | undefined = get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
         if (businessDetail) {
           const BUSINESS_TITLE_NAME_OPTIONS = [
             { value: 'Co', label: 'บจก.' },
@@ -236,7 +237,7 @@ export class User extends TimeStamps {
       const individualDetail: IndividualCustomer | undefined = get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
       return individualDetail ? individualDetail.email : ''
     } else if (userType === 'business') {
-      const businessDetail: BusinessCustomer | undefined = get(this, '_doc.businessCustomer', undefined) || this.businessDetail || undefined
+      const businessDetail: BusinessCustomer | undefined = get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
       return businessDetail ? businessDetail.businessEmail : ''
     }
     return ''

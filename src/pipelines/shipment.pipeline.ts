@@ -362,6 +362,29 @@ export const SHIPMENT_LIST = ({ dateRangeStart, dateRangeEnd, trackingNumber, ve
         preserveNullAndEmptyArrays: true
       }
     },
+    {
+      $addFields: {
+        statusWeight: {
+          $switch: {
+            branches: [
+              {
+                case: {
+                  $eq: ["$status", "idle"]
+                },
+                then: 0
+              },
+              {
+                case: {
+                  $eq: ["$status", "refund"]
+                },
+                then: 1
+              },
+            ],
+            default: 2
+          }
+        }
+      }
+    },
     ...payments,
     ...customers,
     ...drivers,

@@ -152,23 +152,9 @@ export class VehicleCost extends TimeStamps {
       }
     }
 
-    function getPriceOf(_cost: number, _state: 'origin' | 'returned') {
-      const allDistance = sum([data.distance, data.returnedDistance])
-      if (_state === 'origin') {
-        const originPercent = (data.distance * 100) / allDistance
-        const priceNumber = (originPercent / 100) * _cost
-        return priceNumber
-      } else if (_state === 'returned') {
-        const returnedPercent = (data.returnedDistance * 100) / allDistance
-        const priceNumber = (returnedPercent / 100) * _cost
-        return priceNumber
-      }
-    }
-
-    const distanceForCalculation = data.isRounded ? sum([data.distance, data.returnedDistance]) : data.distance
-    const { calculations, cost, price } = calculateStep(distanceForCalculation)
-    const subTotalCost = data.isRounded ? getPriceOf(cost, 'origin') : cost
-    const subTotalPrice = data.isRounded ? getPriceOf(price, 'origin') : price
+    const originCalculation = calculateStep(data.distance)
+    const subTotalCost = originCalculation.cost
+    const subTotalPrice = originCalculation.price
 
     // Additional Service
     const additionalServices = vehicleCost.additionalServices as AdditionalServiceCostPricing[]
@@ -209,8 +195,12 @@ export class VehicleCost extends TimeStamps {
         roundedPricePercent = (additionalServiceRouned.price || 0)
         const roundedCostPercentCal = (additionalServiceRouned.cost || 0) / 100
         const roundedPricePercentCal = (additionalServiceRouned.price || 0) / 100
-        subTotalRoundedCost = roundedCostPercentCal * getPriceOf(cost, 'returned')
-        subTotalRoundedPrice = roundedPricePercentCal * getPriceOf(price, 'returned')
+
+        // Round calculation
+        const roundedCalculation = calculateStep(data.returnedDistance)
+
+        subTotalRoundedCost = roundedCostPercentCal * roundedCalculation.cost
+        subTotalRoundedPrice = roundedPricePercentCal * roundedCalculation.price
       }
     }
 
@@ -229,7 +219,7 @@ export class VehicleCost extends TimeStamps {
       roundedPricePercent,
       totalCost,
       totalPrice,
-      calculations
+      calculations: originCalculation.calculations
     }
   }
 }

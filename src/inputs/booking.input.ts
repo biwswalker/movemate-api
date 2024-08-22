@@ -52,4 +52,7 @@ export class SubtotalCalculationArgs {
 
     @Field({ nullable: true })
     discountId?: string
+
+    @Field()
+    isBusinessCashPayment: boolean
 }
