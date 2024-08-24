@@ -61,7 +61,7 @@ const BilledMonthDateSchema = Yup.object().shape({
     jun: Yup.number(),
     jul: Yup.number(),
     aug: Yup.number(),
-    sept: Yup.number(),
+    sep: Yup.number(),
     oct: Yup.number(),
     nov: Yup.number(),
     dec: Yup.number(),

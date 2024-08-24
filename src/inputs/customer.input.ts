@@ -253,7 +253,7 @@ class BilledMonthInput {
   aug: number;
 
   @Field(() => Int)
-  sept: number;
+  sep: number;
 
   @Field(() => Int)
   oct: number;

@@ -1,4 +1,6 @@
 import { GetUserArgs } from "@inputs/user.input"
+import { format } from "date-fns"
+import { toNumber } from "lodash"
 import { PipelineStage, Types } from "mongoose"
 
 export const GET_USERS = ({ email, name, phoneNumber, taxId, userNumber, username, lineId, serviceVehicleType, ...query }: Partial<GetUserArgs>): PipelineStage[] => {
@@ -371,3 +373,47 @@ export const GET_CUSTOMER_BY_EMAIL = (email: string) => [
         }
     }
 ]
+
+export const GET_CUSTOMER_WITH_TODAY_BILLED_DATE = () => {
+    const today = new Date()
+    const currentMonth = format(today, 'MMM').toLowerCase()
+    const currentDay = toNumber(format(today, 'dd'))
+
+    return [
+        {
+            $lookup: {
+                from: 'businesscustomers',
+                localField: 'businessDetail',
+                foreignField: '_id',
+                as: 'businessDetail',
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "businesscustomercreditpayments",
+                            localField: "creditPayment",
+                            foreignField: "_id",
+                            as: "creditPayment"
+                        }
+                    },
+                    {
+                        $unwind: {
+                            path: "$creditPayment",
+                            preserveNullAndEmptyArrays: true
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $unwind: {
+                path: '$businessDetail',
+                preserveNullAndEmptyArrays: true
+            }
+        },
+        {
+            $match: {
+                [`businessDetail.creditPayment.billedDate.${currentMonth}`]: currentDay
+            }
+        },
+    ]
+}

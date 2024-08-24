@@ -17,18 +17,18 @@ import { EXISTING_USERS, GET_CUSTOMER_BY_EMAIL } from "@pipelines/user.pipeline"
 import { Notification } from "./notification.model";
 import { IndividualDriver } from "./driverIndividual.model";
 
-enum EUserRole {
+export enum EUserRole {
   CUSTOMER = 'customer',
   ADMIN = 'admin',
   DRIVER = 'driver'
 }
 
-enum EUserType {
+export enum EUserType {
   INDIVIDUAL = "individual",
   BUSINESS = "business",
 }
 
-enum EUserStatus {
+export enum EUserStatus {
   PENDING = "pending",
   ACTIVE = "active",
   INACTIVE = "inactive",

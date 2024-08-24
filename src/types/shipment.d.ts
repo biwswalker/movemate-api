@@ -28,3 +28,5 @@ type TShipmentCancellationReason =
   | 'other'
 
 
+type TBillingStatus = 'current' | 'overdue' | 'suspended' | 'paid'
+type TBillingPaymentStatus = 'paid' | 'pending' | 'failed'

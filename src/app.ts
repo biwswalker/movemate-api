@@ -14,6 +14,7 @@ import cors from "cors";
 import http from 'http'
 import "reflect-metadata";
 import { get } from "lodash";
+import configureCronjob from "@configs/cronjob";
 
 morgan.token('graphql-query', (req: Request) => {
   const operationName = get(req, 'body.operationName', '')
@@ -62,9 +63,13 @@ async function server() {
   }))
   app.use("/api/v1", api_v1);
 
+
   const PORT = process.env.API_PORT || 5000;
   await new Promise<void>((resolve) => httpServer.listen({ port: PORT }, resolve));
   console.log(`🚀 Server ready at :`, httpServer.address());
+
+  // Set timezone
+  configureCronjob()
 }
 
 server();

@@ -51,7 +51,7 @@ export class BilledMonth {
 
   @Field(() => Int)
   @Property()
-  sept: number;
+  sep: number;
 
   @Field(() => Int)
   @Property()

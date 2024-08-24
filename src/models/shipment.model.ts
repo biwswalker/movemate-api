@@ -310,6 +310,10 @@ export class Shipment extends TimeStamps {
   @Property({ required: false })
   cancellationDetail: string
 
+  @Field(() => Date, { nullable: true })
+  @Property({ required: false })
+  deliveredDate?: Date
+
   static paginate: mongoose.PaginateModel<typeof Shipment>['paginate']
   static aggregatePaginate: mongoose.AggregatePaginateModel<typeof Shipment>['aggregatePaginate']
 
