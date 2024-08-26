@@ -2,15 +2,20 @@ import { Resolver, Mutation, UseMiddleware, Ctx, Args } from 'type-graphql'
 import { AuthGuard } from '@guards/auth.guards'
 import { GraphQLContext } from '@configs/graphQL.config'
 import { ApprovalCashPaymentArgs } from '@inputs/payment.input'
-import PaymentModel, { EPaymentStatus } from '@models/payment.model'
+import PaymentModel, { EPaymentMethod, EPaymentStatus } from '@models/payment.model'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
 import UpdateHistoryModel from '@models/updateHistory.model'
 import ShipmentModel, { EAdminAcceptanceStatus, EShipingStatus } from '@models/shipment.model'
-import lodash, { filter, find, last } from 'lodash'
+import lodash, { filter, find, last, toNumber } from 'lodash'
 import StepDefinitionModel, { EStepDefinitionName, EStepStatus, StepDefinition } from '@models/shipmentStepDefinition.model'
 import Aigle from 'aigle'
 import NotificationModel from '@models/notification.model'
+import { format, parse } from 'date-fns'
+import { generateTrackingNumber } from '@utils/string.utils'
+import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
+import BillingPaymentModel, { EBillingPaymentStatus } from '@models/billingPayment.model'
+import { th } from 'date-fns/locale'
 
 Aigle.mixin(lodash, {});
 
@@ -47,6 +52,42 @@ export default class PaymentResolver {
       })
       // Shipment
       const shipmentModel = await ShipmentModel.findById(args.shipmentId)
+
+      const today = new Date()
+      const _month = format(today, 'MM')
+      const _year = toNumber(format(today, 'yyyy')) + 543
+      const _billingNumber = await generateTrackingNumber(`IV${_month}${_year}`, 'invoice')
+
+      const paydate = format(payment.cashDetail.paymentDate, 'ddMMyyyy')
+      const paytime = format(payment.cashDetail.paymentDate, 'HH:mm')
+      const paymentDate = parse(`${paydate}-${paytime}`, 'ddMMyyyy-HH:mm', new Date(), { locale: th })
+      // TODO: Add receipt
+      const billingPayment = new BillingPaymentModel({
+        paymentNumber: payment.paymentNumber,
+        paymentAmount: 0,
+        paymentDate,
+        status: EBillingPaymentStatus.PAID,
+      })
+
+      const billingCycle = new BillingCycleModel({
+        user: shipmentModel.customer,
+        billingNumber: _billingNumber,
+        issueDate: today,
+        billingStartDate: today,
+        billingEndDate: today,
+        shipments: [args.shipmentId],
+        subTotalAmount: payment.invoice.subTotalPrice,
+        taxAmount: payment.invoice.taxs,
+        totalAmount: payment.invoice.totalPrice,
+        paymentDueDate: today,
+        billingStatus: EBillingStatus.PAID,
+        paymentMethod: EPaymentMethod.CASH,
+        billingPayment
+      })
+
+      await billingPayment.save()
+      await billingCycle.save()
+
       const currentStep = find(shipmentModel.steps, ['seq', shipmentModel.currentStepSeq]) as StepDefinition | undefined
       if (currentStep) {
         if (currentStep.step === 'CASH_VERIFY') {
@@ -60,6 +101,7 @@ export default class PaymentResolver {
         beforeUpdate: shipment,
         afterUpdate: { ...shipment, status: EShipingStatus.IDLE, adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED, steps: [{ ...currentStep, stepStatus: EStepStatus.DONE }] },
       });
+
       await ShipmentModel.findByIdAndUpdate(args.shipmentId, {
         status: EShipingStatus.IDLE,
         adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,

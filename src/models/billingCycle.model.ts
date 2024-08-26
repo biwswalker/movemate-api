@@ -22,14 +22,16 @@ import { VehicleType } from './vehicleType.model'
 import { fDate } from '@utils/formatTime'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
 import ThaiBahtText from 'thai-baht-text'
+import { AggregatePaginateModel } from 'mongoose'
 
 Aigle.mixin(lodash, {})
 
 export enum EBillingStatus {
   CURRENT = 'current',
   OVERDUE = 'overdue',
-  SUSPENDED = 'suspended',
-  PAID = 'PAID',
+  PAID = 'paid',
+  REFUND = 'refund',
+  REFUNDED = 'refunded',
 }
 
 @plugin(mongooseAutoPopulate)
@@ -62,6 +64,10 @@ export class BillingCycle extends TimeStamps {
   @Property({ enum: EBillingStatus, required: true, default: EBillingStatus.CURRENT })
   billingStatus: EBillingStatus
 
+  @Field()
+  @Property({ enum: EPaymentMethod, required: true })
+  paymentMethod: EPaymentMethod
+
   @Field(() => BillingPayment, { nullable: true })
   @Property({ ref: () => BillingPayment, autopopulate: true })
   billingPayment?: Ref<BillingPayment>
@@ -93,6 +99,8 @@ export class BillingCycle extends TimeStamps {
   @Field()
   @Property({ default: Date.now })
   updatedAt: Date
+
+  static aggregatePaginate: AggregatePaginateModel<typeof BillingCycle>['aggregatePaginate']
 
   static async createBillingCycleForUser(userId: string) {
     const customer = await UserModel.findById(userId)
@@ -155,6 +163,7 @@ export class BillingCycle extends TimeStamps {
             taxAmount,
             totalAmount,
             paymentDueDate,
+            paymentMethod: EPaymentMethod.CREDIT
             // billingStatus: '', Has Default
             // billingPayment: '', Not create for now
           })
@@ -209,7 +218,7 @@ export async function checkBillingStatus() {
   })
 
   await Aigle.forEach(suspendedBillingCycles, async (suspendedBill) => {
-    await suspendedBill.updateOne({ billingStatus: EBillingStatus.SUSPENDED })
+    await suspendedBill.updateOne({ billingStatus: EBillingStatus.OVERDUE })
     const customer = await UserModel.findById(suspendedBill.user)
     if (customer) {
       await customer.updateOne({ status: EUserStatus.BANNED })

@@ -7,6 +7,7 @@ import { AdminNotificationCountPayload } from '@payloads/notification.payloads'
 import ShipmentModel from '@models/shipment.model'
 import UserModel from '@models/user.model'
 import { sum } from 'lodash'
+import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
 
 @Resolver()
 export default class NotificationResolver {
@@ -61,6 +62,7 @@ export default class NotificationResolver {
         const individualDriver = await UserModel.countDocuments({ status: 'pending', userType: 'individual', userRole: 'driver' }).catch(() => 0)
         const businessDriver = await UserModel.countDocuments({ status: 'pending', userType: 'business', userRole: 'driver' }).catch(() => 0)
         const shipment = await ShipmentModel.countDocuments({ $or: [{ status: 'idle' }, { status: 'refund' }] }).catch(() => 0)
+        const financial = await BillingCycleModel.countDocuments({ $or: [{ status: EBillingStatus.CURRENT }, { status: EBillingStatus.OVERDUE }, { status: EBillingStatus.REFUND }] }).catch(() => 0)
         return {
             customer: sum([individualCustomer, businessCustomer]),
             individualCustomer,
@@ -69,6 +71,7 @@ export default class NotificationResolver {
             individualDriver,
             businessDriver,
             shipment,
+            financial,
         }
     }
 

@@ -16,4 +16,6 @@ export class AdminNotificationCountPayload {
   businessDriver: number
   @Field(() => Int)
   shipment: number
+  @Field(() => Int)
+  financial: number
 }

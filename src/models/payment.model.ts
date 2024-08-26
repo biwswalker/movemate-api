@@ -7,7 +7,6 @@ import { PricingCalculationMethodPayload } from "@payloads/pricing.payloads"
 import { SubtotalCalculatedPayload } from "@payloads/booking.payloads"
 import mongooseAutoPopulate from "mongoose-autopopulate"
 import { UpdateHistory } from "./updateHistory.model"
-import { BillingCycle } from "./billingCycle.model"
 
 export enum EPaymentMethod {
     CASH = 'cash',

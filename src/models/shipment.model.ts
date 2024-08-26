@@ -380,7 +380,7 @@ export class Shipment extends TimeStamps {
 
 
       const totalCost = sum([subTotalCost])
-      const totalPrice = sum([subTotalPrice, wht])
+      const totalPrice = sum([subTotalPrice, -wht])
       return {
         shippingPrices: [
           { label: `${vehicleName} (${fNumber(distanceKM)} กม.)`, price: calculated.subTotalPrice, cost: costCalculation ? calculated.subTotalCost : 0 },
