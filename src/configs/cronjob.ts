@@ -12,7 +12,4 @@ export default function configureCronjob() {
   }, { timezone: 'Asia/Bangkok' })
 
   console.log('🌽 Cronjob started')
-
-  // Temporary comment
-  // generateInvoice()
 }

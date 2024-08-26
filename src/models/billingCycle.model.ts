@@ -1,12 +1,12 @@
 import { Field, Float, ID, ObjectType } from 'type-graphql'
-import { prop as Property, Ref, getModelForClass } from '@typegoose/typegoose'
+import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import UserModel, { EUserRole, EUserStatus, EUserType, User } from './user.model'
 import ShipmentModel, { EShipingStatus, Shipment } from './shipment.model'
 import { BillingPayment } from './billingPayment.model'
 import { BusinessCustomer } from './customerBusiness.model'
 import { BusinessCustomerCreditPayment } from './customerBusinessCreditPayment.model'
-import lodash, { get, isEmpty, property, range, reduce, size, sum, toNumber, toString } from 'lodash'
+import lodash, { get, isEmpty, reduce, sum, toNumber, toString, slice, forEach, head, tail } from 'lodash'
 import { addDays, addMonths, format } from 'date-fns'
 import { EPaymentMethod, Payment } from './payment.model'
 import { generateTrackingNumber } from '@utils/string.utils'
@@ -17,6 +17,11 @@ import { th } from 'date-fns/locale'
 import PDFDocument from 'pdfkit-table'
 import fs from 'fs'
 import path from 'path'
+import { fCurrency } from '@utils/formatNumber'
+import { VehicleType } from './vehicleType.model'
+import { fDate } from '@utils/formatTime'
+import mongooseAutoPopulate from 'mongoose-autopopulate'
+import ThaiBahtText from 'thai-baht-text'
 
 Aigle.mixin(lodash, {})
 
@@ -27,13 +32,14 @@ export enum EBillingStatus {
   PAID = 'PAID',
 }
 
+@plugin(mongooseAutoPopulate)
 @ObjectType()
 export class BillingCycle extends TimeStamps {
   @Field(() => ID)
   readonly _id: string
 
   @Field(() => User)
-  @Property({ ref: () => User, required: true })
+  @Property({ ref: () => User, required: true, autopopulate: true })
   user: Ref<User>
 
   @Field()
@@ -57,11 +63,11 @@ export class BillingCycle extends TimeStamps {
   billingStatus: EBillingStatus
 
   @Field(() => BillingPayment, { nullable: true })
-  @Property({ ref: () => BillingPayment })
+  @Property({ ref: () => BillingPayment, autopopulate: true })
   billingPayment?: Ref<BillingPayment>
 
   @Field(() => [Shipment])
-  @Property({ ref: () => Shipment, required: true, default: [] })
+  @Property({ ref: () => Shipment, required: true, default: [], autopopulate: true })
   shipments: Ref<Shipment>[]
 
   @Field(() => Float)
@@ -224,13 +230,12 @@ export async function issueEmailToCustomer() {
   await Aigle.forEach(billingCycles, async (billingCycle) => {
     const customer = await UserModel.findById(billingCycle.user)
     if (customer) {
-      ;((customer.businessDetail as BusinessCustomer).creditPayment as BusinessCustomerCreditPayment)
-        .financialContactEmails
       const financialEmails = get(customer, 'businessDetail.creditPayment.financialContactEmails', [])
       const emails = [customer.email, ...financialEmails]
       const month_text = format(new Date(), 'MMMM', { locale: th })
       const year_number = toNumber(format(new Date(), 'yyyy', { locale: th }))
       const year_text = toString(year_number + 543)
+      const invoiceFilePath = await generateInvoice(billingCycle)
       await emailTranspoter.sendMail({
         from: process.env.NOREPLY_EMAIL,
         to: emails,
@@ -244,7 +249,10 @@ export async function issueEmailToCustomer() {
           contact_number: '02-xxx-xxxx',
           movemate_link: `https://www.movematethailand.com`,
         },
-        // attachments: []
+        attachments: [{
+          filename: path.basename(invoiceFilePath),
+          path: invoiceFilePath,
+        }]
       })
     }
   })
@@ -259,191 +267,210 @@ const sarabunSemiBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-SemiBol
 const sarabunBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-Bold.ttf')
 const sarabunExtraBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-ExtraBold.ttf')
 
-// export async function generateInvoice(billingCycle: BillingCycle) {
-export async function generateInvoice() {
+export async function generateInvoice(billingCycle: BillingCycle) {
   const logoPath = path.join(__dirname, '..', 'assets/images/logo_bluesky.png')
   const kbankPath = path.join(__dirname, '..', 'assets/images/kbank-full.png')
-  const filePath = path.join(__dirname, `invoice_IV086700001.pdf`)
-  // const filePath = path.join(__dirname, `invoice_${billingCycle.billingNumber}.pdf`)
+  const filePath = path.join(__dirname, '..', '..', 'generated/invoice', `invoice_${billingCycle.billingNumber}.pdf`)
 
   const doc = new PDFDocument({ size: 'A4', margins: { top: 60, bottom: 56, left: 22, right: 22 } })
   const writeStream = fs.createWriteStream(filePath)
   doc.pipe(writeStream)
 
-  // Logo
-  doc.image(logoPath, 22, 60, { width: 80 })
+  function HeaderComponent(page: number, totalPage: number) {
+    // Logo
+    doc.image(logoPath, 22, 60, { width: 80 })
 
-  // Company Movemate info
-  doc.font(sarabunMedium).fontSize(8).text('บริษัท เทพพรชัย เอ็นเทอร์ไพรส์ จํากัด', 110)
-  doc.font(sarabunLight).fontSize(7)
-  doc.text('สาขา : (สำนักงานใหญ่)', 280, 61)
-  doc.moveDown(0.8)
-  doc.text('เลขที่ 156 ซอยลาดพร้าว 96 ถนนลาดพร้าว แขวงพลับพลา เขตวังทองหลาง กรุงเทพมหานคร 10310', 110)
-  doc.moveDown(0.6)
-  doc.text('เลขประจําตัวผู้เสียภาษี: 0105564086723', 110)
-  doc.moveDown(0.6)
-  doc.text('ติดต่อ: 02-xxx-xxxx', 110)
-  doc.moveDown(0.6)
-  doc.text('อีเมล์: acc@movematethailand.com', 110)
+    // Company Movemate info
+    doc.font(sarabunMedium).fontSize(8).text('บริษัท เทพพรชัย เอ็นเทอร์ไพรส์ จํากัด', 110)
+    doc.font(sarabunLight).fontSize(7)
+    doc.text('สาขา : (สำนักงานใหญ่)', 280, 61)
+    doc.moveDown(0.8)
+    doc.text('เลขที่ 156 ซอยลาดพร้าว 96 ถนนลาดพร้าว แขวงพลับพลา เขตวังทองหลาง กรุงเทพมหานคร 10310', 110)
+    doc.moveDown(0.6)
+    doc.text('เลขประจําตัวผู้เสียภาษี: 0105564086723', 110)
+    doc.moveDown(0.6)
+    doc.text('ติดต่อ: 02-xxx-xxxx', 110)
+    doc.moveDown(0.6)
+    doc.text('อีเมล์: acc@movematethailand.com', 110)
 
-  // Invoice number detail
-  doc.font(sarabunRegular).fontSize(13).text('INVOICE', 420, 55, { align: 'center', width: 162 })
-  doc.moveDown(0.3)
-  doc.font(sarabunLight).fontSize(9)
-  doc.text('ใบแจ้งหนี้ (ต้นฉบับ)', 420, doc.y, { align: 'center', width: 162 })
-  doc
-    .lineCap('butt')
-    .lineWidth(1)
-    .moveTo(420, doc.y + 4)
-    .lineTo(582, doc.y + 4)
-    .stroke()
-  doc.moveDown(0.5)
-  doc.fontSize(8)
-  doc.font(sarabunMedium).text('Invoice No.:', 420, doc.y, { align: 'right', width: 74 }) // 81
-  doc.font(sarabunLight).text('IV2308009', 504, doc.y - 10, { align: 'left' })
-  doc.moveDown(0.3)
-  doc.font(sarabunMedium).text('Date :', 420, doc.y, { align: 'right', width: 74 }) // 81
-  doc.font(sarabunLight).text('31/8/2566', 504, doc.y - 10, { align: 'left' })
-  doc.moveDown(0.3)
-  doc.font(sarabunMedium).text('Due Date :', 420, doc.y, { align: 'right', width: 74 }) // 81
-  doc.font(sarabunLight).text('7/9/2566', 504, doc.y - 10, { align: 'left' })
-  doc.rect(420, 54, 162, 84).lineWidth(2).stroke()
-
-  // Seperate line
-  doc
-    .lineCap('butt')
-    .lineWidth(1.5)
-    .moveTo(22, doc.y + 16)
-    .lineTo(584, doc.y + 16)
-    .stroke()
-
-  // Customer detail
-  doc.moveDown(2.8)
-  doc.font(sarabunMedium).fontSize(7)
-  doc.text('ชื่อลูกค้า :', 22)
-  doc.text('บริษัท ABC จำกัด', 110, doc.y - 9)
-  doc.font(sarabunLight)
-  doc.text('สาขา :', 280, doc.y - 9)
-  doc.text('สำนักงานใหญ่', 308, doc.y - 9)
-  doc.moveDown(0.6)
-  doc.font(sarabunMedium).text('เลขประจำตัวผู้เสียภาษี :', 22)
-  doc.font(sarabunLight).text('0125556678900', 110, doc.y - 9)
-  doc.moveDown(0.6)
-  doc.font(sarabunMedium).text('ที่อยู่ :', 22)
-  doc
-    .font(sarabunLight)
-    .text('เลขที่ x ถนน x แขวง/ตำบล บางนา เขต/อำเภอ บางนา จังหวัด กรุงเทพมหานคร 1060', 110, doc.y - 9)
-
-  // Page detail
-  doc.moveDown(2.1)
-  doc.fontSize(8)
-  doc.font(sarabunMedium).text('Page :', 0, doc.y, { width: 500, align: 'right' })
-  doc.font(sarabunLight).text('1 of 1', 500, doc.y - 10, { align: 'center', width: 76 })
-  doc.moveDown(0.5)
-  doc.font(sarabunMedium).text('รายละเอียด', 22)
-  doc.font(sarabunMedium).text('สกุลเงิน :', 0, doc.y - 10, { width: 500, align: 'right' })
-  doc.font(sarabunLight).text('บาท (THB)', 500, doc.y - 10, { align: 'center', width: 76 })
-
-  // Seperate line
-  doc
-    .lineCap('butt')
-    .lineWidth(1.5)
-    .moveTo(22, doc.y + 4)
-    .lineTo(584, doc.y + 4)
-    .stroke()
-
-  doc.moveDown(1)
-  doc.font(sarabunMedium).fontSize(7)
-  doc.text('ลำดับ', 22, doc.y, { width: 32, align: 'center' })
-  doc.text('วันที่ใช้บริการ', 54, doc.y - 9, { width: 64, align: 'center' })
-  doc.text('หมายเลขงาน', 118, doc.y - 9, { width: 64, align: 'center' })
-  doc.text('รายละเอียด', 182, doc.y - 9, { width: 260, align: 'center' })
-  doc.text('จำนวนเงิน', 442, doc.y - 9, { width: 64, align: 'center' })
-  doc.text('จำนวนเงินสุทธิ', 506, doc.y - 9, { width: 78, align: 'center' })
-  doc.moveDown(0.5)
-
-  // Seperate line
-  doc
-    .lineCap('butt')
-    .lineWidth(1.5)
-    .moveTo(22, doc.y + 4)
-    .lineTo(584, doc.y + 4)
-    .stroke()
-
-  doc.moveDown(0.5)
-
-  doc.moveDown(0.5)
-
-  range(1, 34).map((num) => {
+    // Invoice number detail
+    doc.font(sarabunRegular).fontSize(13).text('INVOICE', 420, 55, { align: 'center', width: 162 })
+    doc.moveDown(0.3)
+    doc.font(sarabunLight).fontSize(9)
+    doc.text('ใบแจ้งหนี้ (ต้นฉบับ)', 420, doc.y, { align: 'center', width: 162 })
     doc
-      .moveDown(0.5)
+      .lineCap('butt')
+      .lineWidth(1)
+      .moveTo(420, doc.y + 4)
+      .lineTo(582, doc.y + 4)
+      .stroke()
+    doc.moveDown(0.5)
+    doc.fontSize(8)
+    doc.font(sarabunMedium).text('Invoice No.:', 420, doc.y, { align: 'right', width: 74 }) // 81
+    doc.font(sarabunLight).text('IV2308009', 504, doc.y - 10, { align: 'left' })
+    doc.moveDown(0.3)
+    doc.font(sarabunMedium).text('Date :', 420, doc.y, { align: 'right', width: 74 }) // 81
+    doc.font(sarabunLight).text('31/8/2566', 504, doc.y - 10, { align: 'left' })
+    doc.moveDown(0.3)
+    doc.font(sarabunMedium).text('Due Date :', 420, doc.y, { align: 'right', width: 74 }) // 81
+    doc.font(sarabunLight).text('7/9/2566', 504, doc.y - 10, { align: 'left' })
+    doc.rect(420, 54, 162, 84).lineWidth(2).stroke()
+
+    // Seperate line
+    doc
+      .lineCap('butt')
+      .lineWidth(1.5)
+      .moveTo(22, doc.y + 16)
+      .lineTo(584, doc.y + 16)
+      .stroke()
+
+    // Customer detail
+    doc.moveDown(2.8)
+    doc.font(sarabunMedium).fontSize(7)
+    doc.text('ชื่อลูกค้า :', 22)
+    doc.text('บริษัท ABC จำกัด', 110, doc.y - 9)
+    doc.font(sarabunLight)
+    doc.text('สาขา :', 280, doc.y - 9)
+    doc.text('สำนักงานใหญ่', 308, doc.y - 9)
+    doc.moveDown(0.6)
+    doc.font(sarabunMedium).text('เลขประจำตัวผู้เสียภาษี :', 22)
+    doc.font(sarabunLight).text('0125556678900', 110, doc.y - 9)
+    doc.moveDown(0.6)
+    doc.font(sarabunMedium).text('ที่อยู่ :', 22)
+    doc
       .font(sarabunLight)
-      .fontSize(8)
-      .text(`${num}`, 22, doc.y, { width: 32, align: 'center' })
-      .text('1/8/2566', 54, doc.y - 10, { width: 64, align: 'center' })
-      .text('MM1234567', 118, doc.y - 10, { width: 64, align: 'center' })
-      .text(
-        `ค่าขนส่ง${'รถกระบะตู้ทึบ'} ${'บางนา'} ไปยัง ${'ชลบุรี'} ------- ค่าขนส่ง${'รถกระบะตู้ทึบ'} ${'บางนา'} ไปยัง ${'ชลบุรี'}ค่าขนส่ง${'รถกระบะตู้ทึบ'} ${'บางนา'} ไปยัง ${'ชลบุรี'}ค่าขนส่ง${'รถกระบะตู้ทึบ'} ${'บางนา'} ไปยัง ${'ชลบุรี'}ค่าขนส่ง${'รถกระบะตู้ทึบ'} ${'บางนา'} ไปยัง ${'ชลบุรี'}ค่าขนส่ง${'รถกระบะตู้ทึบ'} ${'บางนา'} ไปยัง ${'ชลบุรี'}ค่าขนส่ง${'รถกระบะตู้ทึบ'} ${'บางนา'} ไปยัง ${'ชลบุรี'}ค่าขนส่ง${'รถกระบะตู้ทึบ'} ${'บางนา'} ไปยัง ${'ชลบุรี'}ค่าขนส่ง${'รถกระบะตู้ทึบ'} ${'บางนา'} ไปยัง ${'ชลบุรี'}`,
-        182,
-        doc.y - 10,
-        { width: 260, align: 'left' },
-      )
-      .text('1,500.00', 442, doc.y - 10, { width: 64, align: 'right' })
-      .text('1,500.00', 506, doc.y - 10, { width: 78, align: 'right' })
-    const heig = doc.heightOfString(
-      `ค่าขนส่ง${'รถกระบะตู้ทึบ'} ${'บางนา'}`,
-      { width: 260 },
-    )
-    console.log('dff: ', heig)
+      .text('เลขที่ x ถนน x แขวง/ตำบล บางนา เขต/อำเภอ บางนา จังหวัด กรุงเทพมหานคร 1060', 110, doc.y - 9)
+
+    // Page detail
+    doc.moveDown(2.1)
+    doc.fontSize(8)
+    doc.font(sarabunMedium).text('Page :', 0, doc.y, { width: 500, align: 'right' })
+    doc.font(sarabunLight).text(`${page} of ${totalPage}`, 500, doc.y - 10, { align: 'center', width: 76 })
+    doc.moveDown(0.5)
+    doc.font(sarabunMedium).text('รายละเอียด', 22)
+    doc.font(sarabunMedium).text('สกุลเงิน :', 0, doc.y - 10, { width: 500, align: 'right' })
+    doc.font(sarabunLight).text('บาท (THB)', 500, doc.y - 10, { align: 'center', width: 76 })
+
+    // Seperate line
+    doc
+      .lineCap('butt')
+      .lineWidth(1.5)
+      .moveTo(22, doc.y + 4)
+      .lineTo(584, doc.y + 4)
+      .stroke()
+
+    doc.moveDown(1)
+    doc.font(sarabunMedium).fontSize(7)
+    doc.text('ลำดับ', 22, doc.y, { width: 32, align: 'center' })
+    doc.text('วันที่ใช้บริการ', 54, doc.y - 9, { width: 64, align: 'center' })
+    doc.text('หมายเลขงาน', 118, doc.y - 9, { width: 64, align: 'center' })
+    doc.text('รายละเอียด', 182, doc.y - 9, { width: 260, align: 'center' })
+    doc.text('จำนวนเงิน', 442, doc.y - 9, { width: 64, align: 'center' })
+    doc.text('จำนวนเงินสุทธิ', 506, doc.y - 9, { width: 78, align: 'center' })
+    doc.moveDown(0.5)
+
+    // Seperate line
+    doc
+      .lineCap('butt')
+      .lineWidth(1.5)
+      .moveTo(22, doc.y + 4)
+      .lineTo(584, doc.y + 4)
+      .stroke()
+
+    doc.moveDown(1)
+  }
+
+  let splitIndex: number[] = []
+  let stackHeight = 0
+  const maxHeight = 326
+  doc.font(sarabunLight).fontSize(8)
+  const billingShipments = get(billingCycle, 'shipments', []) as Shipment[]
+  billingShipments.forEach((data, index) => {
+    const pickup = head(data.destinations)
+    const dropoffs = tail(data.destinations)
+    const venicle = get(data, 'vehicleId', undefined) as VehicleType | undefined
+    const details = `ค่าขนส่ง${venicle.name} ${pickup.name} ไปยัง ${reduce(dropoffs, (prev, curr) => prev ? curr.name : `${prev}, ${curr.name}`, '')}`
+    const contentHeight = doc.heightOfString(details, { width: 260 })
+    const totalHeight = contentHeight + stackHeight + 3
+    if (totalHeight > maxHeight) {
+      splitIndex = [...splitIndex, index]
+      stackHeight = 0
+    } else {
+      stackHeight = totalHeight
+      if (billingShipments.length - 1 === index) {
+        splitIndex = [...splitIndex, index + 1]
+      }
+    }
   })
 
-  // doc.table(
-  //   {
-  //     headers: [
-  //       { label: 'ลำดับ', property: 'no', renderer: null, width: 32, align: 'center' },
-  //       { label: 'วันที่ใช้บริการ', property: 'bookingDate', renderer: null, width: 64, align: 'center' },
-  //       { label: 'หมายเลขงาน', property: 'trackingNumber', renderer: null, width: 64, align: 'center' },
-  //       { label: 'รายละเอียด', property: 'detail', renderer: null, width: 260, align: 'left' },
-  //       { label: 'จำนวนเงิน', property: 'subtotal', renderer: null, width: 64, align: 'right' },
-  //       { label: 'จำนวนเงินสุทธิ', property: 'total', renderer: null, width: 78, align: 'right' },
-  //     ],
-  //     datas: range(1, 34).map((num) => ({
-  //       no: `${num}`,
-  //       bookingDate: '1/8/2566',
-  //       trackingNumber: 'MM1234567',
-  //       detail: `ค่าขนส่ง${'รถกระบะตู้ทึบ'} ${'บางนา'} ไปยัง ${'ชลบุรี'}`,
-  //       subtotal: '1,500.00',
-  //       total: '1,500.00',
-  //     })),
-  //   },
-  //   {
-  //     hideHeader: true,
-  //     divider: { horizontal: { disabled: true } },
-  //     prepareRow: (_row, _indexColumn, _indexRow, _rectRow, _rectCell) => doc.font(sarabunLight).fontSize(8),
-  //     padding: [8, 4, 4, 4, 4, 8],
-  //     x: 22,
-  //   },
-  // )
+  const shipmentGroup = splitIndex.reduce<Shipment[][]>((prev, curr, currentIndex) => {
+    if (currentIndex === 0) {
+      const data = slice(billingShipments, 0, curr)
+      return [data]
+    } else {
+      const data = slice(billingShipments, splitIndex[currentIndex - 1], curr)
+      return [...prev, data]
+    }
+  }, [])
 
+  let latestHeight = 0
+  let rowNumber = 0
+  forEach(shipmentGroup, (shipments, index) => {
+    if (index !== 0) {
+      doc
+        .lineCap('butt')
+        .lineWidth(1.5)
+        .moveTo(22, doc.y + latestHeight + 8)
+        .lineTo(584, doc.y + latestHeight + 8)
+        .stroke()
+      doc.addPage()
+    }
+    HeaderComponent(index + 1, shipmentGroup.length)
+    forEach(shipments, (shipment, itemIndex) => {
+      const pickup = head(shipment.destinations)
+      const dropoffs = tail(shipment.destinations)
+      const venicle = get(shipment, 'vehicleId', undefined) as VehicleType | undefined
+      const details = `ค่าขนส่ง${venicle.name} ${pickup.name} ไปยัง ${reduce(dropoffs, (prev, curr) => prev ? curr.name : `${prev}, ${curr.name}`, '')}`
+      const contentHeight = doc.heightOfString(details, { width: 260 })
+      latestHeight = contentHeight
+      const currentY = doc.y + (itemIndex === 0 ? 0 : contentHeight)
+      const no = rowNumber + 1
+      const payment = get(shipment, 'payment', undefined) as Payment
+
+      doc
+        .moveDown(0.5)
+        .font(sarabunLight)
+        .fontSize(8)
+        .text(`${no}`, 22, currentY, { width: 32, align: 'center' })
+        .text(fDate(shipment.bookingDateTime, 'dd/MM/yyyy'), 54, currentY, { width: 64, align: 'center' })
+        .text(shipment.trackingNumber, 118, currentY, { width: 64, align: 'center' })
+        .text(details, 182, currentY, { width: 260, align: 'left' })
+        .text(fCurrency(payment.invoice.totalPrice || 0), 442, currentY, { width: 64, align: 'right' })
+        .text(fCurrency(payment.invoice.totalPrice || 0), 506, currentY, { width: 78, align: 'right' })
+    })
+  })
+
+  // Summary and Payment detail
   // Seperate line
-  doc.lineCap('butt').lineWidth(1.5).moveTo(22, doc.y).lineTo(584, doc.y).stroke()
+  // doc.moveDown(2)
+  doc.lineCap('butt').lineWidth(1.5).moveTo(22, doc.y + latestHeight).lineTo(584, doc.y + latestHeight).stroke()
+
 
   // Total detail
-  doc.moveDown(2)
   doc.fontSize(8)
-  doc.font(sarabunMedium).text('รวมเป็นเงิน :', 0, doc.y, { width: 450, align: 'right' })
-  doc.font(sarabunLight).text('175,406.00', 450, doc.y - 10, { align: 'right', width: 128 })
+  doc.font(sarabunMedium).text('รวมเป็นเงิน :', 0, doc.y + latestHeight + 16, { width: 450, align: 'right' })
+  doc.font(sarabunLight).text(fCurrency(billingCycle.subTotalAmount), 450, doc.y - 10, { align: 'right', width: 128 })
   doc.moveDown(1.6)
   doc.font(sarabunMedium).text('ภาษีหัก ณ ที่จ่าย 1% :', 0, doc.y - 10, { width: 450, align: 'right' })
-  doc.font(sarabunLight).text('1,754.06', 450, doc.y - 10, { align: 'right', width: 128 })
+  doc.font(sarabunLight).text(fCurrency(billingCycle.taxAmount), 450, doc.y - 10, { align: 'right', width: 128 })
   doc.moveDown(2.6)
   doc.fontSize(10)
   doc.font(sarabunMedium).text('รวมที่ต้องชำระทั้งสิ้น :', 0, doc.y - 12, { width: 450, align: 'right' })
-  doc.font(sarabunSemiBold).text('173,651.96', 450, doc.y - 12, { align: 'right', width: 128 })
+  doc.font(sarabunSemiBold).text(fCurrency(billingCycle.totalAmount), 450, doc.y - 12, { align: 'right', width: 128 })
   doc
     .fontSize(7)
     .font(sarabunLight)
-    .text('( หนึ่งแสนเจ็ดหมื่นสามพันหกร้อยห้าสิบเอ็ดบาทเก้าสิบสี่สตางค์ )', 0, doc.y + 4, {
+    .text(`( ${ThaiBahtText(billingCycle.totalAmount)} )`, 0, doc.y + 4, {
       align: 'right',
       width: 578,
     })
