@@ -1,27 +1,26 @@
-import { GraphQLContext } from "@configs/graphQL.config"
-import { AuthGuard } from "@guards/auth.guards"
-import { BillingCycleRefundArgs, GetBillingCycleArgs } from "@inputs/billingCycle.input"
-import { PaginationArgs } from "@inputs/query.input"
-import BillingCycleModel, { BillingCycle, EBillingStatus } from "@models/billingCycle.model"
-import FileModel, { File } from "@models/file.model"
-import RefundModel from "@models/refund.model"
-import ShipmentModel from "@models/shipment.model"
-import { BillingCyclePaginationAggregatePayload, TotalBillingRecordPayload } from "@payloads/billingCycle.payloads"
-import { BILLING_CYCLE_LIST } from "@pipelines/billingCycle.pipeline"
-import { reformPaginate } from "@utils/pagination.utils"
-import { GraphQLError } from "graphql"
-import { isEmpty, map, omitBy } from "lodash"
-import { PaginateOptions } from "mongoose"
-import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from "type-graphql"
+import { GraphQLContext } from '@configs/graphQL.config'
+import { AuthGuard } from '@guards/auth.guards'
+import { BillingCycleRefundArgs, GetBillingCycleArgs } from '@inputs/billingCycle.input'
+import { PaginationArgs } from '@inputs/query.input'
+import BillingCycleModel, { BillingCycle, EBillingStatus } from '@models/billingCycle.model'
+import FileModel, { File } from '@models/file.model'
+import RefundModel from '@models/refund.model'
+import ShipmentModel from '@models/shipment.model'
+import { BillingCyclePaginationAggregatePayload, TotalBillingRecordPayload } from '@payloads/billingCycle.payloads'
+import { BILLING_CYCLE_LIST } from '@pipelines/billingCycle.pipeline'
+import { reformPaginate } from '@utils/pagination.utils'
+import { GraphQLError } from 'graphql'
+import { isEmpty, map, omitBy } from 'lodash'
+import { PaginateOptions } from 'mongoose'
+import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 
 @Resolver(BillingCycle)
 export default class BillingCycleResolver {
-
   @Query(() => BillingCyclePaginationAggregatePayload)
   @UseMiddleware(AuthGuard(['admin']))
   async billingCycleList(
     @Args() query: GetBillingCycleArgs,
-    @Args() paginate: PaginationArgs
+    @Args() paginate: PaginationArgs,
   ): Promise<BillingCyclePaginationAggregatePayload> {
     try {
       const reformSorts: PaginateOptions = reformPaginate(paginate)
@@ -29,7 +28,10 @@ export default class BillingCycleResolver {
       // Aggregrated
       console.log('BILLING_CYCLE_LIST: ', JSON.stringify(BILLING_CYCLE_LIST(filterQuery)))
       const aggregate = BillingCycleModel.aggregate(BILLING_CYCLE_LIST(filterQuery))
-      const billingCycles = (await BillingCycleModel.aggregatePaginate(aggregate, reformSorts)) as BillingCyclePaginationAggregatePayload
+      const billingCycles = (await BillingCycleModel.aggregatePaginate(
+        aggregate,
+        reformSorts,
+      )) as BillingCyclePaginationAggregatePayload
       if (!billingCycles) {
         const message = `ไม่สามารถเรียกข้อมูลใบแจ้งหนี้`
         throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
@@ -42,7 +44,7 @@ export default class BillingCycleResolver {
   }
 
   @Query(() => [TotalBillingRecordPayload])
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard(['admin']))
   async statusBillingCount(): Promise<TotalBillingRecordPayload[]> {
     const all = await BillingCycleModel.countDocuments()
     const verify = await BillingCycleModel.countDocuments({ billingStatus: EBillingStatus.VERIFY })
@@ -59,29 +61,28 @@ export default class BillingCycleResolver {
       { label: 'เกินกำหนดชำระ', key: EBillingStatus.OVERDUE, count: overdue },
       { label: 'อยู่ในรอบบิล', key: EBillingStatus.CURRENT, count: current },
       { label: 'คืนเงินแล้ว', key: EBillingStatus.REFUNDED, count: refunded },
-      { label: 'ชำระเงินแล้ว', key: EBillingStatus.PAID, count: paid }
-    ];
+      { label: 'ชำระเงินแล้ว', key: EBillingStatus.PAID, count: paid },
+    ]
   }
 
   @Query(() => [String])
-  @UseMiddleware(AuthGuard(["admin"]))
-  async allBillingCycleIds(
-    @Args() query: GetBillingCycleArgs): Promise<string[]> {
+  @UseMiddleware(AuthGuard(['admin']))
+  async allBillingCycleIds(@Args() query: GetBillingCycleArgs): Promise<string[]> {
     try {
       const filterQuery = omitBy(query, isEmpty)
       console.log('BILLING_CYCLE_LIST: ', JSON.stringify(BILLING_CYCLE_LIST(filterQuery)))
       const billingCycles = await BillingCycleModel.aggregate(BILLING_CYCLE_LIST(filterQuery))
       const ids = map(billingCycles, ({ _id }) => _id)
-      return ids;
+      return ids
     } catch (error) {
-      console.log(error);
-      throw new GraphQLError("ไม่สามารถเรียกข้อมูลงานขนส่งได้ โปรดลองอีกครั้ง");
+      console.log(error)
+      throw new GraphQLError('ไม่สามารถเรียกข้อมูลงานขนส่งได้ โปรดลองอีกครั้ง')
     }
   }
 
   @Query(() => BillingCycle)
   @UseMiddleware(AuthGuard(['admin']))
-  async billingCycle(@Arg("billingNumber") billingNumber: string): Promise<BillingCycle> {
+  async billingCycle(@Arg('billingNumber') billingNumber: string): Promise<BillingCycle> {
     try {
       const billingCycle = await BillingCycleModel.findOne({ billingNumber })
       if (!billingCycle) {
@@ -97,7 +98,7 @@ export default class BillingCycleResolver {
 
   @Query(() => String)
   @UseMiddleware(AuthGuard(['admin']))
-  async billingNumberByShipment(@Arg("trackingNumber") trackingNumber: string): Promise<string> {
+  async billingNumberByShipment(@Arg('trackingNumber') trackingNumber: string): Promise<string> {
     try {
       const shipment = await ShipmentModel.findOne({ trackingNumber })
       const billingCycle = await BillingCycleModel.findOne({ shipments: { $in: [shipment._id] } })
@@ -108,7 +109,6 @@ export default class BillingCycleResolver {
     }
   }
 
-  // TODO:
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard(['admin']))
   async refund(@Ctx() ctx: GraphQLContext, @Args() data: BillingCycleRefundArgs): Promise<boolean> {
@@ -119,15 +119,35 @@ export default class BillingCycleResolver {
       const refunded = new RefundModel({
         imageEvidence: imageEvidenceFile,
         paymentDate: data.paymentDate,
-        paymentTime: data.paymentTime
+        paymentTime: data.paymentTime,
       })
       await refunded.save()
-      // await BillingCycleModel.markAsRefund({
-      //   billingCycleId: data.billingCycleId,
-      //   imageEvidenceId: imageEvidenceFile._id,
-      //   paymentDate: data.paymentDate,
-      //   paymentTime: data.paymentTime,
-      // }, user_id)
+      await BillingCycleModel.markAsRefund(
+        {
+          billingCycleId: data.billingCycleId,
+          imageEvidenceId: imageEvidenceFile._id,
+          paymentDate: data.paymentDate,
+          paymentTime: data.paymentTime,
+        },
+        user_id,
+      )
+      return true
+    } catch (error) {
+      console.log(error)
+      throw error
+    }
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(['admin']))
+  async norefund(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('billingCycleId') billingCycleId: string,
+    @Arg('reason', { nullable: true }) reason?: string,
+  ): Promise<boolean> {
+    const user_id = ctx.req.user_id
+    try {
+      await BillingCycleModel.markAsNoRefund(billingCycleId, user_id, reason)
       return true
     } catch (error) {
       console.log(error)

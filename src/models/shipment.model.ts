@@ -20,7 +20,12 @@ import lodash, { filter, find, flatten, get, isEqual, last, map, min, range, sum
 import { fNumber } from '@utils/formatNumber'
 import AdditionalServiceCostPricingModel from './additionalServiceCostPricing.model'
 import { SubtotalCalculatedPayload } from '@payloads/booking.payloads'
-import StepDefinitionModel, { EStepDefinition, EStepDefinitionName, EStepStatus, StepDefinition } from './shipmentStepDefinition.model'
+import StepDefinitionModel, {
+  EStepDefinition,
+  EStepDefinitionName,
+  EStepStatus,
+  StepDefinition,
+} from './shipmentStepDefinition.model'
 import { FileInput } from '@inputs/file.input'
 import Aigle from 'aigle'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
@@ -30,7 +35,7 @@ import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
 import NotificationModel from './notification.model'
 
-Aigle.mixin(lodash, {});
+Aigle.mixin(lodash, {})
 
 export enum EShipingStatus {
   IDLE = 'idle',
@@ -66,7 +71,7 @@ export enum EShipmentCancellationReason {
   CUSTOMER_REQUEST = 'customer_request',
   PACKING_ERROR = 'packing_error',
   MANAGEMENT_DECISION = 'management_decision',
-  OTHER = 'other'
+  OTHER = 'other',
 }
 
 enum EIssueType {
@@ -91,19 +96,19 @@ export class ShipmentPODAddress {
 
   @Field()
   @Property({ required: true })
-  province: string;
+  province: string
 
   @Field()
   @Property({ required: true })
-  district: string;
+  district: string
 
   @Field()
   @Property({ required: true })
-  subDistrict: string;
+  subDistrict: string
 
   @Field()
   @Property({ required: true })
-  postcode: string;
+  postcode: string
 
   @Field()
   @Property({ required: true })
@@ -302,7 +307,7 @@ export class Shipment extends TimeStamps {
 
   @Field(() => [UpdateHistory], { nullable: true })
   @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
-  history: Ref<UpdateHistory>[];
+  history: Ref<UpdateHistory>[]
 
   @Field(() => String, { nullable: true })
   @IsEnum(EShipmentCancellationReason)
@@ -320,7 +325,19 @@ export class Shipment extends TimeStamps {
   static paginate: mongoose.PaginateModel<typeof Shipment>['paginate']
   static aggregatePaginate: mongoose.AggregatePaginateModel<typeof Shipment>['aggregatePaginate']
 
-  static async calculate({ vehicleTypeId, distanceMeter, distanceReturnMeter, dropPoint, isRounded, discountId, serviceIds, isBusinessCashPayment }: SubtotalCalculationArgs, costCalculation: boolean = false): Promise<SubtotalCalculatedPayload> {
+  static async calculate(
+    {
+      vehicleTypeId,
+      distanceMeter,
+      distanceReturnMeter,
+      dropPoint,
+      isRounded,
+      discountId,
+      serviceIds,
+      isBusinessCashPayment,
+    }: SubtotalCalculationArgs,
+    costCalculation: boolean = false,
+  ): Promise<SubtotalCalculatedPayload> {
     try {
       const vehicleCost = await VehicleCostModel.findByVehicleId(vehicleTypeId)
       const distanceKilometers = distanceMeter / 1000 // as KM.
@@ -359,7 +376,9 @@ export class Shipment extends TimeStamps {
           } else {
             totalDiscount = 0
           }
-          discountName = `${privilege.name} (${privilege.discount}${privilege.unit === 'currency' ? ' บาท' : privilege.unit === 'percentage' ? '%' : ''})`
+          discountName = `${privilege.name} (${privilege.discount}${
+            privilege.unit === 'currency' ? ' บาท' : privilege.unit === 'percentage' ? '%' : ''
+          })`
         }
       }
 
@@ -367,7 +386,7 @@ export class Shipment extends TimeStamps {
       const subTotalPrice = sum([calculated.totalPrice, additionalservices.price, -totalDiscount])
 
       /**
-       * งานเงินสด 
+       * งานเงินสด
        * บริษัท
        * - แสดงและคำนวณ WHT ทุกครั้ง และแสดงทุกครั้ง
        * (ค่าขนส่งเกิน 1000 คิด WHT 1%)
@@ -378,19 +397,38 @@ export class Shipment extends TimeStamps {
       const isTaxCalculation = isBusinessCashPayment && subTotalPrice > 1000
       if (isTaxCalculation) {
         whtName = 'ค่าภาษีบริการขนส่งสินค้าจากบริษัท 1% (WHT)'
-        wht = subTotalPrice * (0.01)
+        wht = subTotalPrice * 0.01
       }
-
 
       const totalCost = sum([subTotalCost])
       const totalPrice = sum([subTotalPrice, -wht])
       return {
         shippingPrices: [
-          { label: `${vehicleName} (${fNumber(distanceKM)} กม.)`, price: calculated.subTotalPrice, cost: costCalculation ? calculated.subTotalCost : 0 },
-          ...(isRounded ? [{ label: `ไป-กลับ ${calculated.roundedPricePercent}% (${distanceReturnKM} กม.)`, price: calculated.subTotalRoundedPrice, cost: costCalculation ? calculated.subTotalRoundedCost : 0 }] : []),
+          {
+            label: `${vehicleName} (${fNumber(distanceKM)} กม.)`,
+            price: calculated.subTotalPrice,
+            cost: costCalculation ? calculated.subTotalCost : 0,
+          },
+          ...(isRounded
+            ? [
+                {
+                  label: `ไป-กลับ ${calculated.roundedPricePercent}% (${distanceReturnKM} กม.)`,
+                  price: calculated.subTotalRoundedPrice,
+                  cost: costCalculation ? calculated.subTotalRoundedCost : 0,
+                },
+              ]
+            : []),
         ],
         additionalServices: [
-          ...(dropPoint > 1 ? [{ label: 'หลายจุดส่ง', price: calculated.subTotalDropPointPrice, cost: costCalculation ? calculated.subTotalDropPointCost : 0 }] : []),
+          ...(dropPoint > 1
+            ? [
+                {
+                  label: 'หลายจุดส่ง',
+                  price: calculated.subTotalDropPointPrice,
+                  cost: costCalculation ? calculated.subTotalDropPointCost : 0,
+                },
+              ]
+            : []),
           ...additionalservices.priceItems,
         ],
         discounts: discountId ? [{ label: discountName, price: totalDiscount, cost: 0 }] : [],
@@ -406,7 +444,6 @@ export class Shipment extends TimeStamps {
   }
 
   async initialStepDefinition(): Promise<boolean> {
-    console.log('this: ', JSON.stringify(this))
     const shipmentId = get(this, '_doc._id', []) || get(this, '_id', [])
     const destinations = get(this, '_doc.destinations', []) || get(this, 'destinations', [])
     const dropoffLength = destinations.length - 1
@@ -431,18 +468,22 @@ export class Shipment extends TimeStamps {
           },
         },
       },
-      ...(isCashMethod ? [{
-        insertOne: {
-          document: {
-            step: EStepDefinition.CASH_VERIFY,
-            seq: 0,
-            stepName: EStepDefinitionName.CASH_VERIFY,
-            customerMessage: 'ยืนยันการชำระเงิน',
-            driverMessage: '',
-            stepStatus: EStepStatus.PROGRESSING,
-          },
-        },
-      }] : []),
+      ...(isCashMethod
+        ? [
+            {
+              insertOne: {
+                document: {
+                  step: EStepDefinition.CASH_VERIFY,
+                  seq: 0,
+                  stepName: EStepDefinitionName.CASH_VERIFY,
+                  customerMessage: 'ยืนยันการชำระเงิน',
+                  driverMessage: '',
+                  stepStatus: EStepStatus.PROGRESSING,
+                },
+              },
+            },
+          ]
+        : []),
       {
         insertOne: {
           document: {
@@ -491,34 +532,36 @@ export class Shipment extends TimeStamps {
           },
         },
       },
-      ...flatten(map(range(1, dropoffLength + 1), (seq, index) => {
-        return [
-          {
-            insertOne: {
-              document: {
-                step: EStepDefinition.ARRIVAL_DROPOFF,
-                seq: 0,
-                stepName: EStepDefinitionName.ARRIVAL_DROPOFF,
-                customerMessage: dropoffLength > 1 ? `ถึงจุดส่งสินค้าที่ ${seq}` : 'ถึงจุดส่งสินค้า',
-                driverMessage: dropoffLength > 1 ? `ถึงจุดส่งสินค้าที่ ${seq}` : 'ถึงจุดส่งสินค้า',
-                stepStatus: EStepStatus.IDLE,
+      ...flatten(
+        map(range(1, dropoffLength + 1), (seq, index) => {
+          return [
+            {
+              insertOne: {
+                document: {
+                  step: EStepDefinition.ARRIVAL_DROPOFF,
+                  seq: 0,
+                  stepName: EStepDefinitionName.ARRIVAL_DROPOFF,
+                  customerMessage: dropoffLength > 1 ? `ถึงจุดส่งสินค้าที่ ${seq}` : 'ถึงจุดส่งสินค้า',
+                  driverMessage: dropoffLength > 1 ? `ถึงจุดส่งสินค้าที่ ${seq}` : 'ถึงจุดส่งสินค้า',
+                  stepStatus: EStepStatus.IDLE,
+                },
               },
             },
-          },
-          {
-            insertOne: {
-              document: {
-                step: EStepDefinition.DROPOFF,
-                seq: 0,
-                stepName: EStepDefinitionName.DROPOFF,
-                customerMessage: dropoffLength > 1 ? `จัดส่งสินค้าจุดที่ ${seq}` : 'จัดส่งสินค้า',
-                driverMessage: dropoffLength > 1 ? `จัดส่งสินค้าจุดที่ ${seq}` : 'จัดส่งสินค้า',
-                stepStatus: EStepStatus.IDLE,
+            {
+              insertOne: {
+                document: {
+                  step: EStepDefinition.DROPOFF,
+                  seq: 0,
+                  stepName: EStepDefinitionName.DROPOFF,
+                  customerMessage: dropoffLength > 1 ? `จัดส่งสินค้าจุดที่ ${seq}` : 'จัดส่งสินค้า',
+                  driverMessage: dropoffLength > 1 ? `จัดส่งสินค้าจุดที่ ${seq}` : 'จัดส่งสินค้า',
+                  stepStatus: EStepStatus.IDLE,
+                },
               },
             },
-          },
-        ]
-      })),
+          ]
+        }),
+      ),
       {
         insertOne: {
           document: {
@@ -531,19 +574,23 @@ export class Shipment extends TimeStamps {
           },
         },
       },
-      ...(isPODService ? [{
-        insertOne: {
-          document: {
-            step: EStepDefinition.POD,
-            seq: 0,
-            stepName: EStepDefinitionName.POD,
-            customerMessage: 'แนบเอกสารและส่งเอกสาร POD',
-            driverMessage: 'แนบเอกสารและส่งเอกสาร POD',
-            stepStatus: EStepStatus.IDLE,
-          },
-        },
-      }] : [])
-    ];
+      ...(isPODService
+        ? [
+            {
+              insertOne: {
+                document: {
+                  step: EStepDefinition.POD,
+                  seq: 0,
+                  stepName: EStepDefinitionName.POD,
+                  customerMessage: 'แนบเอกสารและส่งเอกสาร POD',
+                  driverMessage: 'แนบเอกสารและส่งเอกสาร POD',
+                  stepStatus: EStepStatus.IDLE,
+                },
+              },
+            },
+          ]
+        : []),
+    ]
 
     const reSequenceBulkOperation = map(bulkOperations, ({ insertOne: { document } }, index) => ({
       insertOne: {
@@ -554,7 +601,7 @@ export class Shipment extends TimeStamps {
       },
     }))
 
-    const stepDefinitionResult = await StepDefinitionModel.bulkWrite(reSequenceBulkOperation);
+    const stepDefinitionResult = await StepDefinitionModel.bulkWrite(reSequenceBulkOperation)
     const _stepDefinitionIds = values(stepDefinitionResult.insertedIds)
     await ShipmentModel.findByIdAndUpdate(shipmentId, { steps: _stepDefinitionIds, currentStepSeq: 1 })
 
@@ -563,7 +610,6 @@ export class Shipment extends TimeStamps {
 
   async nextStep(images?: FileInput[]): Promise<boolean> {
     try {
-
       const currentStep = find(this.steps, ['seq', this.currentStepSeq])
       const uploadedFiles = await Aigle.map(images, async (image) => {
         const fileModel = new FileModel(image)
@@ -575,41 +621,15 @@ export class Shipment extends TimeStamps {
       await stepDefinitionModel.updateOne({
         stepStatus: EStepStatus.DONE,
         images: uploadedFiles,
-        updatedAt: new Date()
+        updatedAt: new Date(),
       })
       const nextStepDeifinition = find(this.steps, ['seq', this.currentStepSeq + 1])
       const nextStepId = get(nextStepDeifinition, '_id', '')
       if (nextStepId) {
         const nextStepDefinitionModel = await StepDefinitionModel.findById(nextStepId)
-
-        // --- IF Final step ---
-        if (nextStepDefinitionModel.step === 'FINISH') {
-          const nextPODStep = find(this.steps, ['seq', nextStepDefinitionModel.seq + 1])
-          const nextPODStepId = get(nextPODStep, '_id', '')
-          if (nextPODStepId) {
-            const podStepDefinitionModel = await StepDefinitionModel.findById(nextPODStepId)
-            await podStepDefinitionModel.updateOne({ stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() })
-            await ShipmentModel.findByIdAndUpdate(this._id, { currentStepSeq: podStepDefinitionModel.seq })
-          } else {
-            // True mean final step
-            // Set final
-
-            await nextStepDefinitionModel.updateOne({ stepStatus: EStepStatus.DONE, updatedAt: new Date() })
-            await ShipmentModel.findByIdAndUpdate(this._id, { currentStepSeq: nextStepDefinitionModel.seq, driverAcceptanceStatus: 'accepted', status: 'dilivered' })
-            return true
-          }
-          // --- IF Final step ---
-        } else if (nextStepDefinitionModel.step === 'POD') {
-          // Final
-          await nextStepDefinitionModel.updateOne({ stepStatus: EStepStatus.DONE, updatedAt: new Date() })
-          await ShipmentModel.findByIdAndUpdate(this._id, { currentStepSeq: nextStepDefinitionModel.seq, driverAcceptanceStatus: 'accepted', status: 'dilivered' })
-          // True mean final step
-          return true
-        } else {
-          // --- Continue if not success ---
-          await nextStepDefinitionModel.updateOne({ stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() })
-          await ShipmentModel.findByIdAndUpdate(this._id, { currentStepSeq: nextStepDefinitionModel.seq })
-        }
+        await nextStepDefinitionModel.updateOne({ stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() })
+        await ShipmentModel.findByIdAndUpdate(this._id, { currentStepSeq: nextStepDefinitionModel.seq })
+        return true
       }
       return false
     } catch (error) {
@@ -617,11 +637,62 @@ export class Shipment extends TimeStamps {
     }
   }
 
-  static async markAsCashVerified(_id: string, result: 'approve' | 'reject', userId: string, reason?: string, otherReason?: string) {
+  async finishJob(): Promise<boolean> {
+    try {
+      const currentStep = find(this.steps, ['seq', this.currentStepSeq])
+      const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', ''))
+      if (stepDefinitionModel.step === EStepDefinition.FINISH) {
+        await stepDefinitionModel.updateOne({
+          stepStatus: EStepStatus.DONE,
+          updatedAt: new Date(),
+        })
+        await ShipmentModel.findByIdAndUpdate(this._id, {
+          currentStepSeq: stepDefinitionModel.seq,
+          status: EShipingStatus.DELIVERED,
+        })
+
+        /**
+         * Notification
+         */
+        await NotificationModel.sendNotification({
+          userId: this.customer as string,
+          varient: 'success',
+          title: 'งานขนส่งสำเร็จ',
+          message: [
+            `เราขอประกาศด้วยความยินดีว่าการขนส่งเลขที่ ${this.trackingNumber} ของท่านได้เสร็จสมบูรณ์!`,
+            `สินค้าของท่านถูกนำส่งไปยังปลายทางเรียบร้อยแล้ว`,
+          ],
+          infoText: 'ดูสรุปการจองและค่าใช้จ่าย',
+          infoLink: `/main/tracking?tracking_number=${this.trackingNumber}`,
+        })
+
+        /**
+         * Email & Receipt generate TODO:
+         */
+
+        return true
+      } else {
+        const message = 'ยังไม่ถึงขึ้นตอนการจบงาน'
+        throw new GraphQLError(message, {
+          extensions: { code: REPONSE_NAME.SHIPMENT_NOT_FINISH, errors: [{ message }] },
+        })
+      }
+    } catch (error) {
+      throw error
+    }
+  }
+
+  static async markAsCashVerified(
+    _id: string,
+    result: 'approve' | 'reject',
+    userId: string,
+    reason?: string,
+    otherReason?: string,
+  ) {
     const shipmentModel = await ShipmentModel.findById(_id)
     const shipment = await ShipmentModel.findById(_id).lean()
     if (!shipmentModel) {
-      const message = "ไม่สามารถหาข้อมูลงานขนส่ง เนื่องจากไม่พบงานขนส่งดังกล่าว";
+      const message = 'ไม่สามารถหาข้อมูลงานขนส่ง เนื่องจากไม่พบงานขนส่งดังกล่าว'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
@@ -634,16 +705,21 @@ export class Shipment extends TimeStamps {
       }
       const _shipmentUpdateHistory = new UpdateHistoryModel({
         referenceId: _id,
-        referenceType: "Shipment",
+        referenceType: 'Shipment',
         who: userId,
         beforeUpdate: shipment,
-        afterUpdate: { ...shipment, status: EShipingStatus.IDLE, adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED, steps: [{ ...currentStep, stepStatus: EStepStatus.DONE }] },
-      });
+        afterUpdate: {
+          ...shipment,
+          status: EShipingStatus.IDLE,
+          adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,
+          steps: [{ ...currentStep, stepStatus: EStepStatus.DONE }],
+        },
+      })
       await _shipmentUpdateHistory.save()
       await ShipmentModel.findByIdAndUpdate(_id, {
         status: EShipingStatus.IDLE,
         adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,
-        $push: { history: _shipmentUpdateHistory }
+        $push: { history: _shipmentUpdateHistory },
       })
 
       /**
@@ -653,7 +729,10 @@ export class Shipment extends TimeStamps {
         userId: shipment.customer as string,
         varient: 'info',
         title: 'การจองของท่านยืนยันยอดชำระแล้ว',
-        message: [`เราขอแจ้งให้ท่าทราบว่าการจองรถเลขที่ ${shipment.trackingNumber} ของท่านยืนยันยอดชำระแล้ว`, `การจองจะถูกดำเนินการจับคู่หาคนขับในไม่ช้า`],
+        message: [
+          `เราขอแจ้งให้ท่าทราบว่าการจองรถเลขที่ ${shipment.trackingNumber} ของท่านยืนยันยอดชำระแล้ว`,
+          `การจองจะถูกดำเนินการจับคู่หาคนขับในไม่ช้า`,
+        ],
         infoText: 'ดูการจอง',
         infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
       })
@@ -662,7 +741,7 @@ export class Shipment extends TimeStamps {
        */
     } else if (result === 'reject') {
       if (!reason) {
-        const message = "ไม่สามารถทำรายการได้ เนื่องจากไม่พบเหตุผลการไม่อนุมัติ";
+        const message = 'ไม่สามารถทำรายการได้ เนื่องจากไม่พบเหตุผลการไม่อนุมัติ'
         throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
       }
       const currentStep = find(shipmentModel.steps, ['seq', shipmentModel.currentStepSeq]) as StepDefinition | undefined
@@ -671,13 +750,18 @@ export class Shipment extends TimeStamps {
         const deniedSteps = filter(shipmentModel.steps as StepDefinition[], (step) => step.seq >= currentStep.seq)
         const steps = await Aigle.map(deniedSteps, async (step) => {
           const isCashVerifyStep = step.step === EStepDefinition.CASH_VERIFY && step.seq === currentStep.seq
-          const cashVerifyStepChangeData = isCashVerifyStep ? {
-            step: EStepDefinition.REJECTED_PAYMENT,
-            stepName: EStepDefinitionName.REJECTED_PAYMENT,
-            customerMessage: EStepDefinitionName.REJECTED_PAYMENT,
-            driverMessage: EStepDefinitionName.REJECTED_PAYMENT,
-          } : {}
-          await StepDefinitionModel.findByIdAndUpdate(step._id, { stepStatus: EStepStatus.CANCELLED, ...cashVerifyStepChangeData })
+          const cashVerifyStepChangeData = isCashVerifyStep
+            ? {
+                step: EStepDefinition.REJECTED_PAYMENT,
+                stepName: EStepDefinitionName.REJECTED_PAYMENT,
+                customerMessage: EStepDefinitionName.REJECTED_PAYMENT,
+                driverMessage: EStepDefinitionName.REJECTED_PAYMENT,
+              }
+            : {}
+          await StepDefinitionModel.findByIdAndUpdate(step._id, {
+            stepStatus: EStepStatus.CANCELLED,
+            ...cashVerifyStepChangeData,
+          })
           return { ...step, stepStatus: EStepStatus.CANCELLED, ...cashVerifyStepChangeData }
         })
         // Add refund step
@@ -694,17 +778,22 @@ export class Shipment extends TimeStamps {
         // Update history
         const _shipmentUpdateHistory = new UpdateHistoryModel({
           referenceId: _id,
-          referenceType: "Shipment",
+          referenceType: 'Shipment',
           who: userId,
           beforeUpdate: { ...shipment, steps: shipmentModel.steps },
-          afterUpdate: { ...shipment, status: EShipingStatus.REFUND, adminAcceptanceStatus: EAdminAcceptanceStatus.REJECTED, steps: [...steps, refundStep] },
-        });
+          afterUpdate: {
+            ...shipment,
+            status: EShipingStatus.REFUND,
+            adminAcceptanceStatus: EAdminAcceptanceStatus.REJECTED,
+            steps: [...steps, refundStep],
+          },
+        })
         await _shipmentUpdateHistory.save()
         await ShipmentModel.findByIdAndUpdate(_id, {
           status: EShipingStatus.REFUND,
           adminAcceptanceStatus: EAdminAcceptanceStatus.REJECTED,
           currentStepSeq: newLatestSeq,
-          $push: { history: _shipmentUpdateHistory, steps: refundStep._id }
+          $push: { history: _shipmentUpdateHistory, steps: refundStep._id },
         })
 
         /**
@@ -714,7 +803,10 @@ export class Shipment extends TimeStamps {
           userId: shipment.customer as string,
           varient: 'error',
           title: 'การจองถูกยกเลิก',
-          message: [`เราเสียใจที่ต้องแจ้งให้ท่านทราบว่าการจองเลขที่ ${shipment.trackingNumber} ของท่านถูกยกเลิกโดยทีมผู้ดูแลระบบของเรา`, `สาเหตุการยกเลิกคือ ${otherReason} และการจองจะถูกดำเนินการคืนเงินต่อไป`],
+          message: [
+            `เราเสียใจที่ต้องแจ้งให้ท่านทราบว่าการจองเลขที่ ${shipment.trackingNumber} ของท่านถูกยกเลิกโดยทีมผู้ดูแลระบบของเรา`,
+            `สาเหตุการยกเลิกคือ ${otherReason} และการจองจะถูกดำเนินการคืนเงินต่อไป`,
+          ],
           infoText: 'ดูการจอง',
           infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
         })
@@ -729,7 +821,7 @@ export class Shipment extends TimeStamps {
     const shipmentModel = await ShipmentModel.findById(_id)
     const shipment = await ShipmentModel.findById(_id).lean()
     if (!shipmentModel) {
-      const message = "ไม่สามารถหาข้อมูลงานขนส่ง เนื่องจากไม่พบงานขนส่งดังกล่าว";
+      const message = 'ไม่สามารถหาข้อมูลงานขนส่ง เนื่องจากไม่พบงานขนส่งดังกล่าว'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
@@ -742,17 +834,46 @@ export class Shipment extends TimeStamps {
 
     const _shipmentUpdateHistory = new UpdateHistoryModel({
       referenceId: _id,
-      referenceType: "Shipment",
+      referenceType: 'Shipment',
       who: userId,
       beforeUpdate: shipment,
       afterUpdate: { ...shipment, steps: [{ ...currentStep, stepStatus: EStepStatus.DONE }], refund },
-    });
+    })
     await _shipmentUpdateHistory.save()
-    await ShipmentModel.findByIdAndUpdate(_id, { refund, $push: { history: _shipmentUpdateHistory } })
+    await ShipmentModel.findByIdAndUpdate(_id, {
+      status: EShipingStatus.CANCELLED,
+      refund,
+      $push: { history: _shipmentUpdateHistory },
+    })
   }
 
-  async markAsDone() {
-    console.log('markAsDone: ', this.status)
+  static async markAsNoRefund(_id: string, userId: string) {
+    const shipmentModel = await ShipmentModel.findById(_id)
+    const shipment = await ShipmentModel.findById(_id).lean()
+    if (!shipmentModel) {
+      const message = 'ไม่สามารถหาข้อมูลงานขนส่ง เนื่องจากไม่พบงานขนส่งดังกล่าว'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+
+    const currentStep = find(shipmentModel.steps, ['seq', shipmentModel.currentStepSeq]) as StepDefinition | undefined
+    if (currentStep) {
+      if (currentStep.step === 'REFUND') {
+        await StepDefinitionModel.findByIdAndUpdate(currentStep._id, { stepStatus: EStepStatus.CANCELLED })
+      }
+    }
+
+    const _shipmentUpdateHistory = new UpdateHistoryModel({
+      referenceId: _id,
+      referenceType: 'Shipment',
+      who: userId,
+      beforeUpdate: shipment,
+      afterUpdate: { ...shipment, steps: [{ ...currentStep, stepStatus: EStepStatus.CANCELLED }] },
+    })
+    await _shipmentUpdateHistory.save()
+    await ShipmentModel.findByIdAndUpdate(_id, {
+      status: EShipingStatus.CANCELLED,
+      $push: { history: _shipmentUpdateHistory },
+    })
   }
 }
 

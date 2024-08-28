@@ -4,7 +4,7 @@ type TPaymentMethod = 'cash' | 'credit'
 type TShipingStatus = 'idle' | 'progressing' | 'dilivered' | 'cancelled' | 'refund' | 'expire'
 type TAdminAcceptanceStatus = 'pending' | 'reach' | 'accepted' | 'rejected' | 'cancelled'
 type TDriverAcceptanceStatus = 'idle' | 'pending' | 'accepted' | 'uninterested'
-type TPaymentStatus = 'waiting_confirm_payment' | 'invoice' | 'billed' | 'confirm_payment' | 'paid' | 'refund' | 'refunded'
+type TPaymentStatus = 'waiting_confirm_payment' | 'invoice' | 'billed' | 'confirm_payment' | 'paid' | 'refund' | 'refunded' | 'cancelled'
 type TShipingLogStatus = 'pending' | 'inprogress' | 'complete' | 'cancelled' | 'rejected' | 'refund'
 
 type TCriteriaStatus = 'all' | 'progress' | 'refund' | 'finish' | 'idle' | 'progressing' | 'dilivered' | 'cancelled' | 'refund' | 'expire'
