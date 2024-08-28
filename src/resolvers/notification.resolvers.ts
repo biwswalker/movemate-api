@@ -62,7 +62,8 @@ export default class NotificationResolver {
         const individualDriver = await UserModel.countDocuments({ status: 'pending', userType: 'individual', userRole: 'driver' }).catch(() => 0)
         const businessDriver = await UserModel.countDocuments({ status: 'pending', userType: 'business', userRole: 'driver' }).catch(() => 0)
         const shipment = await ShipmentModel.countDocuments({ $or: [{ status: 'idle' }, { status: 'refund' }] }).catch(() => 0)
-        const financial = await BillingCycleModel.countDocuments({ $or: [{ status: EBillingStatus.CURRENT }, { status: EBillingStatus.OVERDUE }, { status: EBillingStatus.REFUND }] }).catch(() => 0)
+        const financial = await BillingCycleModel.countDocuments({ billingStatus: { $in: [EBillingStatus.VERIFY, EBillingStatus.OVERDUE, EBillingStatus.REFUND] } }).catch(() => 0)
+
         return {
             customer: sum([individualCustomer, businessCustomer]),
             individualCustomer,

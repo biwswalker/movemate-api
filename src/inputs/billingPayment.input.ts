@@ -3,10 +3,7 @@ import { ArgsType, Field } from "type-graphql";
 @ArgsType()
 export class ApprovalCashPaymentArgs {
   @Field()
-  _id: string;
-
-  @Field()
-  shipmentId: string;
+  billingCycleId: string;
 
   @Field()
   result: 'approve' | 'reject';

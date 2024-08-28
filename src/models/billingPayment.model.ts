@@ -2,9 +2,11 @@ import { Field, Float, ID, ObjectType } from "type-graphql"
 import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses"
 import mongooseAutoPopulate from "mongoose-autopopulate"
-import BillingCycleModel, { BillingCycle, EBillingStatus } from "./billingCycle.model"
-import { EPaymentStatus } from "./payment.model"
-import UserModel, { EUserStatus } from "./user.model"
+import lodash from "lodash"
+import Aigle from "aigle"
+import { File } from "./file.model"
+
+Aigle.mixin(lodash, {})
 
 export enum EBillingPaymentStatus {
   PAID = 'paid',
@@ -34,6 +36,23 @@ export class BillingPayment extends TimeStamps {
   @Property({ enum: EBillingPaymentStatus, required: true })
   status: EBillingPaymentStatus;
 
+  // 
+  @Field(() => File, { nullable: true })
+  @Property({ ref: () => File, autopopulate: true })
+  imageEvidence?: Ref<File, string>
+
+  @Field({ nullable: true })
+  @Property()
+  bank?: string
+
+  @Field({ nullable: true })
+  @Property()
+  bankName?: string
+
+  @Field({ nullable: true })
+  @Property()
+  bankNumber?: string
+
   @Field()
   @Property({ default: Date.now })
   createdAt: Date
@@ -41,26 +60,6 @@ export class BillingPayment extends TimeStamps {
   @Field()
   @Property({ default: Date.now })
   updatedAt: Date
-
-  async processPayment(userId: string, billingCycleId: string, paymentAmount: number) {
-    const billingCycle = await BillingCycleModel.findById(billingCycleId);
-    if (billingCycle) {
-      const payment = new BillingPaymentModel({
-        paymentNumber: '',
-        paymentAmount,
-        paymentDate: new Date(),
-        status: EBillingPaymentStatus.PAID,
-      });
-      await payment.save();
-
-      await billingCycle.updateOne({
-        billingPayment: payment,
-        billingStatus: EBillingStatus.PAID
-      })
-
-      await UserModel.findByIdAndUpdate(userId, { static: EUserStatus.ACTIVE })
-    }
-  }
 }
 
 const BillingPaymentModel = getModelForClass(BillingPayment)

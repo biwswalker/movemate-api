@@ -23,8 +23,8 @@ import AddressResolver from '@resolvers/address.resolvers'
 import OTPRequestResolver from '@resolvers/otp.resolver'
 import DriverResolver from '@resolvers/driver.resolvers'
 import MatchingResolver from '@resolvers/matching.resolvers'
-import PaymentResolver from '@resolvers/payment.resolvers'
 import BillingCycleResolver from '@resolvers/billingCycle.resolvers'
+import BillingPaymentResolver from '@resolvers/billingPayment.resolvers'
 
 export interface GraphQLContext {
   req: Request
@@ -53,8 +53,8 @@ export async function createGraphQLServer(httpServer: http.Server) {
       OTPRequestResolver,
       DriverResolver,
       MatchingResolver,
-      PaymentResolver,
-      BillingCycleResolver
+      BillingCycleResolver,
+      BillingPaymentResolver,
     ],
     authChecker: ({ context }: { context: GraphQLContext }) => {
       const userId = get(context, 'req.userId', '')

@@ -3,12 +3,12 @@ import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/type
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import UserModel, { EUserRole, EUserStatus, EUserType, User } from './user.model'
 import ShipmentModel, { EShipingStatus, Shipment } from './shipment.model'
-import { BillingPayment } from './billingPayment.model'
+import BillingPaymentModel, { BillingPayment, EBillingPaymentStatus } from './billingPayment.model'
 import { BusinessCustomer } from './customerBusiness.model'
 import { BusinessCustomerCreditPayment } from './customerBusinessCreditPayment.model'
 import lodash, { get, isEmpty, reduce, sum, toNumber, toString, slice, forEach, head, tail } from 'lodash'
 import { addDays, addMonths, format } from 'date-fns'
-import { EPaymentMethod, Payment } from './payment.model'
+import { EPaymentMethod, EPaymentRejectionReason, Payment } from './payment.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { GET_CUSTOMER_WITH_TODAY_BILLED_DATE } from '@pipelines/user.pipeline'
@@ -23,10 +23,17 @@ import { fDate } from '@utils/formatTime'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
 import ThaiBahtText from 'thai-baht-text'
 import { AggregatePaginateModel } from 'mongoose'
+import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
+import PaymentModel, { EPaymentStatus } from "./payment.model"
+import UpdateHistoryModel, { UpdateHistory } from "./updateHistory.model"
+import { IsEnum } from 'class-validator'
+import RefundModel, { Refund } from './refund.model'
+import NotificationModel from './notification.model'
 
 Aigle.mixin(lodash, {})
 
 export enum EBillingStatus {
+  VERIFY = 'verify',
   CURRENT = 'current',
   OVERDUE = 'overdue',
   PAID = 'paid',
@@ -34,7 +41,49 @@ export enum EBillingStatus {
   REFUNDED = 'refunded',
 }
 
+interface MarkAsPaidPaymentProps {
+  billingCycleId: string
+  paymentNumber: string
+  paymentAmount: number
+  paymentDate: Date
+  imageEvidenceId?: string
+  bank?: string
+  bankName?: string
+  bankNumber?: string
+}
+
+interface MarkAsRefundProps {
+  billingCycleId: string
+  imageEvidenceId: string
+  paymentDate: Date
+  paymentTime: Date
+}
+
+@ObjectType()
+class PostalInvoice {
+  @Field()
+  @Property({ required: true })
+  trackingNumber: string
+
+  @Field()
+  @Property({ required: true })
+  postalProvider: string
+
+  @Field()
+  @Property({ required: true })
+  sendedDate: Date
+
+  @Field()
+  @Property({ required: true })
+  sendedTime: Date
+
+  @Field()
+  @Property({ required: true })
+  createdDateTime: Date
+}
+
 @plugin(mongooseAutoPopulate)
+@plugin(mongooseAggregatePaginate)
 @ObjectType()
 export class BillingCycle extends TimeStamps {
   @Field(() => ID)
@@ -100,6 +149,31 @@ export class BillingCycle extends TimeStamps {
   @Property({ default: Date.now })
   updatedAt: Date
 
+  @Field({ nullable: true })
+  @Property({ required: false })
+  emailSendedTime: Date
+
+  @Field({ nullable: true })
+  @Property({ required: false })
+  postalInvoice: PostalInvoice
+
+  @Field(() => String, { nullable: true })
+  @IsEnum(EPaymentRejectionReason)
+  @Property({ enum: EPaymentRejectionReason, required: false })
+  rejectedReason: EPaymentRejectionReason
+
+  @Field(() => String, { nullable: true })
+  @Property({ required: false })
+  rejectedDetail: string
+
+  @Field(() => Refund, { nullable: true })
+  @Property({ ref: () => Refund, required: false, autopopulate: true })
+  refund?: Ref<Refund>
+
+  @Field(() => [UpdateHistory], { nullable: true })
+  @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
+  history: Ref<UpdateHistory>[];
+
   static aggregatePaginate: AggregatePaginateModel<typeof BillingCycle>['aggregatePaginate']
 
   static async createBillingCycleForUser(userId: string) {
@@ -164,8 +238,6 @@ export class BillingCycle extends TimeStamps {
             totalAmount,
             paymentDueDate,
             paymentMethod: EPaymentMethod.CREDIT
-            // billingStatus: '', Has Default
-            // billingPayment: '', Not create for now
           })
 
           await billingCycle.save()
@@ -173,6 +245,194 @@ export class BillingCycle extends TimeStamps {
           // TODO: Sent email and notification
         }
       }
+    }
+  }
+
+  static async processPayment({
+    billingCycleId,
+    paymentNumber,
+    paymentAmount,
+    imageEvidenceId,
+    bank,
+    bankName,
+    bankNumber,
+  }: MarkAsPaidPaymentProps) {
+    const billingCycle = await BillingCycleModel.findById(billingCycleId);
+    if (billingCycle) {
+      const payment = new BillingPaymentModel({
+        paymentNumber,
+        paymentAmount,
+        paymentDate: new Date(),
+        status: EBillingPaymentStatus.PENDING,
+        ...(imageEvidenceId ? { imageEvidence: imageEvidenceId } : {}),
+        ...(bank ? { bank } : {}),
+        ...(bankName ? { bankName } : {}),
+        ...(bankNumber ? { bankNumber } : {})
+      });
+      await payment.save();
+
+      await billingCycle.updateOne({
+        billingPayment: payment,
+        billingStatus: EBillingStatus.VERIFY
+      })
+    }
+  }
+
+  static async markAsPaid(billingCycleId: string, userId: string) {
+    const billingCycle = await BillingCycleModel.findById(billingCycleId).lean()
+    if (billingCycle) {
+      await BillingPaymentModel.findByIdAndUpdate(billingCycle.billingPayment, { status: EBillingPaymentStatus.PAID })
+      const _billingCycleUpdateHistory = new UpdateHistoryModel({
+        referenceId: billingCycleId,
+        referenceType: "BillingCycle",
+        who: userId,
+        beforeUpdate: billingCycle,
+        afterUpdate: { ...billingCycle, billingStatus: EBillingStatus.PAID },
+      });
+      await _billingCycleUpdateHistory.save()
+      await BillingCycleModel.findByIdAndUpdate(billingCycleId, { billingStatus: EBillingStatus.PAID, $push: { history: _billingCycleUpdateHistory } })
+      // Update shipment
+      const shipments = billingCycle.shipments
+      await Aigle.forEach(shipments as Shipment[], async (shipment) => {
+        const shipmentModel = await ShipmentModel.findById(shipment)
+        const payment = await PaymentModel.findById(shipmentModel.payment).lean()
+
+        // Update Payment model
+        const _paymentUpdateHistory = new UpdateHistoryModel({
+          referenceId: payment._id,
+          referenceType: "Payment",
+          who: userId,
+          beforeUpdate: payment,
+          afterUpdate: { ...payment, status: EPaymentStatus.PAID },
+        });
+        await _paymentUpdateHistory.save()
+        await PaymentModel.findByIdAndUpdate(payment._id, {
+          status: EPaymentStatus.PAID,
+          $push: { history: _paymentUpdateHistory }
+        })
+
+        // Update Shipment model
+        await ShipmentModel.markAsCashVerified(shipment._id, 'approve', userId)
+      })
+
+      // TODO: Recheck again
+      // const customerId = get(billingCycle, 'user._id', '')
+      // if (customerId) {
+      //   await UserModel.findByIdAndUpdate(customerId, { static: EUserStatus.ACTIVE })
+      // }
+    }
+  }
+
+  static async rejectedPayment(billingCycleId: string, userId: string, reason?: string, otherReason?: string) {
+    const billingCycle = await BillingCycleModel.findById(billingCycleId).lean()
+    if (billingCycle) {
+      await BillingPaymentModel.findByIdAndUpdate(billingCycle.billingPayment, { status: EBillingPaymentStatus.FAILED })
+      // Update Biling cycle model
+      const _billingCycleUpdateHistory = new UpdateHistoryModel({
+        referenceId: billingCycleId,
+        referenceType: "BillingCycle",
+        who: userId,
+        beforeUpdate: billingCycle,
+        afterUpdate: {
+          ...billingCycle, billingStatus: EBillingStatus.REFUND,
+          rejectedReason: reason,
+          rejectedDetail: otherReason,
+        },
+      });
+      await _billingCycleUpdateHistory.save()
+      await BillingCycleModel.findByIdAndUpdate(billingCycle._id, {
+        billingStatus: EBillingStatus.REFUND,
+        rejectedReason: reason,
+        rejectedDetail: otherReason,
+        $push: { history: _billingCycleUpdateHistory }
+      })
+      // Update shipment
+      const shipments = billingCycle.shipments
+      await Aigle.forEach(shipments as Shipment[], async (shipment) => {
+        const shipmentModel = await ShipmentModel.findById(shipment)
+        const payment = await PaymentModel.findById(shipmentModel.payment).lean()
+
+        // Update Payment model
+        const _paymentUpdateHistory = new UpdateHistoryModel({
+          referenceId: payment._id,
+          referenceType: "Payment",
+          who: userId,
+          beforeUpdate: payment,
+          afterUpdate: { ...payment, status: EPaymentStatus.REFUND, rejectionReason: reason, rejectionOtherReason: otherReason || '' },
+        });
+        await _paymentUpdateHistory.save()
+        await PaymentModel.findByIdAndUpdate(payment._id, {
+          status: EPaymentStatus.REFUND,
+          rejectionReason: reason, rejectionOtherReason: otherReason || '',
+          $push: { history: _paymentUpdateHistory }
+        })
+
+        // Update Shipment model
+        await ShipmentModel.markAsCashVerified(shipment._id, 'reject', userId, reason, otherReason)
+      })
+    }
+  }
+
+
+  static async markAsRefund(data: MarkAsRefundProps, userId: string) {
+    const billingCycle = await BillingCycleModel.findById(data.billingCycleId).lean()
+    if (billingCycle) {
+      const _refund = new RefundModel({
+        imageEvidence: data.imageEvidenceId,
+        paymentDate: data.paymentDate,
+        paymentTime: data.paymentTime
+      })
+      const _billingCycleUpdateHistory = new UpdateHistoryModel({
+        referenceId: data.billingCycleId,
+        referenceType: "BillingCycle",
+        who: userId,
+        beforeUpdate: billingCycle,
+        afterUpdate: { ...billingCycle, billingStatus: EBillingStatus.REFUNDED, refund: _refund },
+      });
+      await _refund.save()
+      await _billingCycleUpdateHistory.save()
+      await BillingCycleModel.findByIdAndUpdate(data.billingCycleId, { billingStatus: EBillingStatus.REFUNDED, refund: _refund, $push: { history: _billingCycleUpdateHistory } })
+
+      // Update shipment
+      const shipments = billingCycle.shipments
+      await Aigle.forEach(shipments as Shipment[], async (shipment) => {
+        const shipmentModel = await ShipmentModel.findById(shipment)
+        const payment = await PaymentModel.findById(shipmentModel.payment).lean()
+
+        // Update Payment model
+        const _paymentUpdateHistory = new UpdateHistoryModel({
+          referenceId: payment._id,
+          referenceType: "Payment",
+          who: userId,
+          beforeUpdate: payment,
+          afterUpdate: { ...payment, status: EPaymentStatus.REFUNDED },
+        });
+        await _paymentUpdateHistory.save()
+        await PaymentModel.findByIdAndUpdate(payment._id, {
+          status: EPaymentStatus.REFUNDED,
+          $push: { history: _paymentUpdateHistory }
+        })
+
+        // Update Shipment model
+        await ShipmentModel.markAsRefund(shipment._id, userId, _refund)
+      })
+
+
+      /**
+       * Sent notification
+       */
+      await NotificationModel.sendNotification({
+        userId: billingCycle.user as string,
+        varient: 'info',
+        title: 'การจองของท่านดำเนินคืนยอดชำระแล้ว',
+        message: [`เราขอแจ้งให้ท่าทราบว่าใบแจ้งหนี้เลขที่ ${billingCycle.billingNumber} ของท่านดำเนินคืนยอดชำระแล้ว`],
+        // infoText: 'ดูการจอง',
+        // infoLink: `/main/tracking?tracking_number=${billingCycle.billingNumber}`,
+      })
+      /**
+       * Sent email
+       * TODO:
+       */
     }
   }
 }

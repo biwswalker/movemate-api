@@ -1,4 +1,5 @@
 import { ArgsType, Field } from "type-graphql";
+import { FileInput } from "./file.input";
 
 @ArgsType()
 export class GetBillingCycleArgs {
@@ -25,4 +26,19 @@ export class GetBillingCycleArgs {
 
   @Field(() => [Date], { nullable: true })
   receiptDate?: Date[]
+}
+
+@ArgsType()
+export class BillingCycleRefundArgs {
+  @Field()
+  billingCycleId: string
+
+  @Field(() => FileInput)
+  imageEvidence: FileInput
+
+  @Field()
+  paymentDate: Date
+
+  @Field()
+  paymentTime: Date
 }

@@ -1,16 +1,16 @@
 import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { GetShipmentArgs, ShipmentInput } from '@inputs/shipment.input'
-import PaymentModel, { CashDetail } from '@models/payment.model'
+import PaymentModel, { CashDetail, EPaymentMethod } from '@models/payment.model'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import ShipmentAdditionalServicePriceModel from '@models/shipmentAdditionalServicePrice.model'
 import UserModel from '@models/user.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
-import { AnyBulkWriteOperation, FilterQuery, PaginateOptions } from 'mongoose'
+import { AnyBulkWriteOperation, FilterQuery, PaginateOptions, Types } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
-import lodash, { get, head, isEmpty, map, omitBy, reduce, tail, values } from 'lodash'
+import lodash, { get, head, isEmpty, map, omitBy, reduce, sum, tail, toNumber, values } from 'lodash'
 import AdditionalServiceCostPricingModel from '@models/additionalServiceCostPricing.model'
 import ShipmentDistancePricingModel from '@models/shipmentDistancePricing.model'
 import VehicleCostModel from '@models/vehicleCost.model'
@@ -26,6 +26,9 @@ import { ShipmentPaginationAggregatePayload, ShipmentPaginationPayload, TotalRec
 import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
 import { reformPaginate } from '@utils/pagination.utils'
 import { SHIPMENT_LIST } from '@pipelines/shipment.pipeline'
+import { format, parse } from 'date-fns'
+import { th } from 'date-fns/locale'
+import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
 
 Aigle.mixin(lodash, {})
 
@@ -363,6 +366,7 @@ export default class ShipmentResolver {
 
       const isCashPaymentMethod = paymentMethod === 'cash'
       const isCreditPaymentMethod = paymentMethod === 'credit'
+
       // Remark: Cash payment detail
       let cashDetail: CashDetail | null = null
       if (isCashPaymentMethod && cashPaymentDetail) {
@@ -406,6 +410,52 @@ export default class ShipmentResolver {
 
       await _payment.save()
 
+
+      // Create shipment id before
+      const shipmentId = new Types.ObjectId()
+
+      // Remark: Create billing cycle and billing payment
+      if (isCashPaymentMethod && cashDetail) {
+        const today = new Date()
+        const _month = format(today, 'MM')
+        const _year = toNumber(format(today, 'yyyy')) + 543
+        const _billingNumber = await generateTrackingNumber(`IV${_month}${_year}`, 'invoice')
+
+        const paydate = format(cashDetail.paymentDate, 'ddMMyyyy')
+        const paytime = format(cashDetail.paymentTime, 'HH:mm')
+        const paymentDate = parse(`${paydate}-${paytime}`, 'ddMMyyyy-HH:mm', new Date(), { locale: th })
+        const taxAmount = reduce(_invoice.taxs, (prev, curr) => {
+          return sum([prev, curr.price])
+        }, 0)
+        const _billingCycle = new BillingCycleModel({
+          user: user_id,
+          billingNumber: _billingNumber,
+          issueDate: today,
+          billingStartDate: today,
+          billingEndDate: today,
+          shipments: [shipmentId],
+          subTotalAmount: _invoice.subTotalPrice,
+          taxAmount,
+          totalAmount: _invoice.totalPrice,
+          paymentDueDate: today,
+          billingStatus: EBillingStatus.VERIFY,
+          paymentMethod: EPaymentMethod.CASH,
+        })
+
+        await _billingCycle.save()
+        await BillingCycleModel.processPayment({
+          billingCycleId: _billingCycle._id,
+          paymentNumber: _payment.paymentNumber,
+          paymentAmount: _invoice.totalPrice,
+          paymentDate,
+          imageEvidenceId: cashDetail.imageEvidence as string,
+          bank: cashDetail.bank,
+          bankName: cashDetail.bankName,
+          bankNumber: cashDetail.bankNumber,
+        })
+
+      }
+
       const status: TShipingStatus = 'idle'
       const adminAcceptanceStatus: TAdminAcceptanceStatus = isCreditPaymentMethod ? 'reach' : 'pending'
       const driverAcceptanceStatus: TDriverAcceptanceStatus = isCreditPaymentMethod ? 'pending' : 'idle'
@@ -416,6 +466,7 @@ export default class ShipmentResolver {
       const _trackingNumber = await generateTrackingNumber('MMTH', 'tracking')
       const shipment = new ShipmentModel({
         ...data,
+        _id: shipmentId,
         isRoundedReturn: data.isRoundedReturn || false,
         trackingNumber: _trackingNumber,
         customer: user_id,

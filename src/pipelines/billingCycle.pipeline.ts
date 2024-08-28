@@ -13,7 +13,7 @@ export const BILLING_CYCLE_LIST = ({
   receiptDate,
 }: GetBillingCycleArgs) => {
 
-  const statusFilter = status === 'all' ? [EBillingStatus.CURRENT, EBillingStatus.OVERDUE, EBillingStatus.PAID, EBillingStatus.REFUND, EBillingStatus.REFUNDED] : [status]
+  const statusFilter = status === 'all' ? [EBillingStatus.VERIFY, EBillingStatus.CURRENT, EBillingStatus.OVERDUE, EBillingStatus.PAID, EBillingStatus.REFUND, EBillingStatus.REFUNDED] : [status]
 
   const customerNameMatch = customerName ? [{
     $match: {
@@ -53,7 +53,7 @@ export const BILLING_CYCLE_LIST = ({
             ...(endIssueDate ? { $lte: endIssueDate } : {}),
           }
         } : {}),
-        ...(!isEmpty(statusFilter) ? [{ status: { $in: statusFilter } }] : [])
+        ...(!isEmpty(statusFilter) ? { billingStatus: { $in: statusFilter } } : {})
       }
     }
   ]
@@ -99,7 +99,7 @@ export const BILLING_CYCLE_LIST = ({
     },
     {
       $unwind: {
-        path: "$customer",
+        path: "$user",
         preserveNullAndEmptyArrays: true
       }
     },

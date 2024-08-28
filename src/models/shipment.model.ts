@@ -16,7 +16,7 @@ import mongoosePagination from 'mongoose-paginate-v2'
 import { DirectionsResult } from './directionResult.model'
 import { SubtotalCalculationArgs } from '@inputs/booking.input'
 import VehicleCostModel from './vehicleCost.model'
-import lodash, { filter, find, flatten, get, isEqual, map, min, range, sum, values } from 'lodash'
+import lodash, { filter, find, flatten, get, isEqual, last, map, min, range, sum, values } from 'lodash'
 import { fNumber } from '@utils/formatNumber'
 import AdditionalServiceCostPricingModel from './additionalServiceCostPricing.model'
 import { SubtotalCalculatedPayload } from '@payloads/booking.payloads'
@@ -24,8 +24,11 @@ import StepDefinitionModel, { EStepDefinition, EStepDefinitionName, EStepStatus,
 import { FileInput } from '@inputs/file.input'
 import Aigle from 'aigle'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
-import { UpdateHistory } from './updateHistory.model'
+import UpdateHistoryModel, { UpdateHistory } from './updateHistory.model'
 import { Refund } from './refund.model'
+import { GraphQLError } from 'graphql'
+import { REPONSE_NAME } from 'constants/status'
+import NotificationModel from './notification.model'
 
 Aigle.mixin(lodash, {});
 
@@ -612,6 +615,140 @@ export class Shipment extends TimeStamps {
     } catch (error) {
       throw error
     }
+  }
+
+  static async markAsCashVerified(_id: string, result: 'approve' | 'reject', userId: string, reason?: string, otherReason?: string) {
+    const shipmentModel = await ShipmentModel.findById(_id)
+    const shipment = await ShipmentModel.findById(_id).lean()
+    if (!shipmentModel) {
+      const message = "ไม่สามารถหาข้อมูลงานขนส่ง เนื่องจากไม่พบงานขนส่งดังกล่าว";
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+
+    if (result === 'approve') {
+      const currentStep = find(shipmentModel.steps, ['seq', shipmentModel.currentStepSeq]) as StepDefinition | undefined
+      if (currentStep) {
+        if (currentStep.step === 'CASH_VERIFY') {
+          shipmentModel.nextStep()
+        }
+      }
+      const _shipmentUpdateHistory = new UpdateHistoryModel({
+        referenceId: _id,
+        referenceType: "Shipment",
+        who: userId,
+        beforeUpdate: shipment,
+        afterUpdate: { ...shipment, status: EShipingStatus.IDLE, adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED, steps: [{ ...currentStep, stepStatus: EStepStatus.DONE }] },
+      });
+      await _shipmentUpdateHistory.save()
+      await ShipmentModel.findByIdAndUpdate(_id, {
+        status: EShipingStatus.IDLE,
+        adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,
+        $push: { history: _shipmentUpdateHistory }
+      })
+
+      /**
+       * Sent notification
+       */
+      await NotificationModel.sendNotification({
+        userId: shipment.customer as string,
+        varient: 'info',
+        title: 'การจองของท่านยืนยันยอดชำระแล้ว',
+        message: [`เราขอแจ้งให้ท่าทราบว่าการจองรถเลขที่ ${shipment.trackingNumber} ของท่านยืนยันยอดชำระแล้ว`, `การจองจะถูกดำเนินการจับคู่หาคนขับในไม่ช้า`],
+        infoText: 'ดูการจอง',
+        infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
+      })
+      /**
+       * Sent email ?
+       */
+    } else if (result === 'reject') {
+      if (!reason) {
+        const message = "ไม่สามารถทำรายการได้ เนื่องจากไม่พบเหตุผลการไม่อนุมัติ";
+        throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+      }
+      const currentStep = find(shipmentModel.steps, ['seq', shipmentModel.currentStepSeq]) as StepDefinition | undefined
+      const lastStep = last(shipmentModel.steps) as StepDefinition
+      if (currentStep) {
+        const deniedSteps = filter(shipmentModel.steps as StepDefinition[], (step) => step.seq >= currentStep.seq)
+        const steps = await Aigle.map(deniedSteps, async (step) => {
+          const isCashVerifyStep = step.step === EStepDefinition.CASH_VERIFY && step.seq === currentStep.seq
+          const cashVerifyStepChangeData = isCashVerifyStep ? {
+            step: EStepDefinition.REJECTED_PAYMENT,
+            stepName: EStepDefinitionName.REJECTED_PAYMENT,
+            customerMessage: EStepDefinitionName.REJECTED_PAYMENT,
+            driverMessage: EStepDefinitionName.REJECTED_PAYMENT,
+          } : {}
+          await StepDefinitionModel.findByIdAndUpdate(step._id, { stepStatus: EStepStatus.CANCELLED, ...cashVerifyStepChangeData })
+          return { ...step, stepStatus: EStepStatus.CANCELLED, ...cashVerifyStepChangeData }
+        })
+        // Add refund step
+        const newLatestSeq = lastStep.seq + 1
+        const refundStep = new StepDefinitionModel({
+          step: 'REFUND',
+          seq: newLatestSeq,
+          stepName: EStepDefinitionName.REFUND,
+          customerMessage: EStepDefinitionName.REFUND,
+          driverMessage: EStepDefinitionName.REFUND,
+          stepStatus: 'progressing',
+        })
+        await refundStep.save()
+        // Update history
+        const _shipmentUpdateHistory = new UpdateHistoryModel({
+          referenceId: _id,
+          referenceType: "Shipment",
+          who: userId,
+          beforeUpdate: { ...shipment, steps: shipmentModel.steps },
+          afterUpdate: { ...shipment, status: EShipingStatus.REFUND, adminAcceptanceStatus: EAdminAcceptanceStatus.REJECTED, steps: [...steps, refundStep] },
+        });
+        await _shipmentUpdateHistory.save()
+        await ShipmentModel.findByIdAndUpdate(_id, {
+          status: EShipingStatus.REFUND,
+          adminAcceptanceStatus: EAdminAcceptanceStatus.REJECTED,
+          currentStepSeq: newLatestSeq,
+          $push: { history: _shipmentUpdateHistory, steps: refundStep._id }
+        })
+
+        /**
+         * Sent notification
+         */
+        await NotificationModel.sendNotification({
+          userId: shipment.customer as string,
+          varient: 'error',
+          title: 'การจองถูกยกเลิก',
+          message: [`เราเสียใจที่ต้องแจ้งให้ท่านทราบว่าการจองเลขที่ ${shipment.trackingNumber} ของท่านถูกยกเลิกโดยทีมผู้ดูแลระบบของเรา`, `สาเหตุการยกเลิกคือ ${otherReason} และการจองจะถูกดำเนินการคืนเงินต่อไป`],
+          infoText: 'ดูการจอง',
+          infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
+        })
+        /**
+         * Sent email
+         */
+      }
+    }
+  }
+
+  static async markAsRefund(_id: string, userId: string, refund: Refund) {
+    const shipmentModel = await ShipmentModel.findById(_id)
+    const shipment = await ShipmentModel.findById(_id).lean()
+    if (!shipmentModel) {
+      const message = "ไม่สามารถหาข้อมูลงานขนส่ง เนื่องจากไม่พบงานขนส่งดังกล่าว";
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+
+    const currentStep = find(shipmentModel.steps, ['seq', shipmentModel.currentStepSeq]) as StepDefinition | undefined
+    if (currentStep) {
+      if (currentStep.step === 'REFUND') {
+        await StepDefinitionModel.findByIdAndUpdate(currentStep._id, { stepStatus: EStepStatus.DONE })
+      }
+    }
+
+    const _shipmentUpdateHistory = new UpdateHistoryModel({
+      referenceId: _id,
+      referenceType: "Shipment",
+      who: userId,
+      beforeUpdate: shipment,
+      afterUpdate: { ...shipment, steps: [{ ...currentStep, stepStatus: EStepStatus.DONE }], refund },
+    });
+    await _shipmentUpdateHistory.save()
+    await ShipmentModel.findByIdAndUpdate(_id, { refund, $push: { history: _shipmentUpdateHistory } })
   }
 
   async markAsDone() {

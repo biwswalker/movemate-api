@@ -22,7 +22,7 @@ export enum EPaymentStatus {
     REFUND = 'refund',
 }
 
-enum EPaymentRejectionReason {
+export enum EPaymentRejectionReason {
     INSUFFICIENT_FUNDS = 'insufficient_funds',
     UNABLE_VERIFY_EVIDENCE = 'unable_verify_evidence',
     OTHER = 'other',
