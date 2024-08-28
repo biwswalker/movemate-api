@@ -10,7 +10,7 @@ import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
 import { AnyBulkWriteOperation, FilterQuery, PaginateOptions, Types } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
-import lodash, { get, head, isEmpty, map, omitBy, reduce, sum, tail, toNumber, values } from 'lodash'
+import lodash, { get, head, isEmpty, map, omitBy, reduce, sum, tail, toNumber, toString, uniq, values } from 'lodash'
 import AdditionalServiceCostPricingModel from '@models/additionalServiceCostPricing.model'
 import ShipmentDistancePricingModel from '@models/shipmentDistancePricing.model'
 import VehicleCostModel from '@models/vehicleCost.model'
@@ -28,7 +28,8 @@ import { reformPaginate } from '@utils/pagination.utils'
 import { SHIPMENT_LIST } from '@pipelines/shipment.pipeline'
 import { format, parse } from 'date-fns'
 import { th } from 'date-fns/locale'
-import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
+import BillingCycleModel, { EBillingStatus, generateInvoice } from '@models/billingCycle.model'
+import path from 'path'
 
 Aigle.mixin(lodash, {})
 
@@ -292,6 +293,9 @@ export default class ShipmentResolver {
         })
       }
 
+      // Prepare email
+      const emailTranspoter = email_sender()
+
       // favoriteDriverId
 
       // Duplicate additional service cost for invoice data
@@ -410,7 +414,6 @@ export default class ShipmentResolver {
 
       await _payment.save()
 
-
       // Create shipment id before
       const shipmentId = new Types.ObjectId()
 
@@ -440,6 +443,7 @@ export default class ShipmentResolver {
           paymentDueDate: today,
           billingStatus: EBillingStatus.VERIFY,
           paymentMethod: EPaymentMethod.CASH,
+          emailSendedTime: today
         })
 
         await _billingCycle.save()
@@ -454,6 +458,9 @@ export default class ShipmentResolver {
           bankNumber: cashDetail.bankNumber,
         })
 
+        const billingCycle = await BillingCycleModel.findById(_billingCycle._id).exec()
+        const invoiceFilePath = await generateInvoice(billingCycle, customer)
+        await BillingCycleModel.findByIdAndUpdate(billingCycle._id, { issueInvoiceFilename: invoiceFilePath.filePath })
       }
 
       const status: TShipingStatus = 'idle'
@@ -503,7 +510,6 @@ export default class ShipmentResolver {
 
       // Sent email
       // Prepare email sender
-      const emailTranspoter = email_sender()
       const tracking_link = `https://www.movematethailand.com/main/tracking?tracking_number=${response.trackingNumber}`
       const movemate_link = `https://www.movematethailand.com`
       // Email sender

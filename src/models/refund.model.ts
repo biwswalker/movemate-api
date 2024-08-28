@@ -1,8 +1,10 @@
 import { Field, ID, ObjectType } from "type-graphql"
-import { prop as Property, Ref, getModelForClass } from '@typegoose/typegoose'
+import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses"
 import { File } from "./file.model"
+import mongooseAutoPopulate from "mongoose-autopopulate"
 
+@plugin(mongooseAutoPopulate)
 @ObjectType()
 export class Refund extends TimeStamps {
   @Field(() => ID)

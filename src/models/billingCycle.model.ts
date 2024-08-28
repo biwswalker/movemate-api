@@ -6,7 +6,7 @@ import ShipmentModel, { EShipingStatus, Shipment } from './shipment.model'
 import BillingPaymentModel, { BillingPayment, EBillingPaymentStatus } from './billingPayment.model'
 import { BusinessCustomer } from './customerBusiness.model'
 import { BusinessCustomerCreditPayment } from './customerBusinessCreditPayment.model'
-import lodash, { get, isEmpty, reduce, sum, toNumber, toString, slice, forEach, head, tail } from 'lodash'
+import lodash, { get, isEmpty, reduce, sum, toNumber, toString, slice, forEach, head, tail, uniq } from 'lodash'
 import { addDays, addMonths, format } from 'date-fns'
 import { EPaymentMethod, EPaymentRejectionReason, Payment } from './payment.model'
 import { generateTrackingNumber } from '@utils/string.utils'
@@ -29,6 +29,7 @@ import UpdateHistoryModel, { UpdateHistory } from './updateHistory.model'
 import { IsEnum } from 'class-validator'
 import RefundModel, { Refund } from './refund.model'
 import NotificationModel from './notification.model'
+import { IndividualCustomer } from './customerIndividual.model'
 
 Aigle.mixin(lodash, {})
 
@@ -178,6 +179,10 @@ export class BillingCycle extends TimeStamps {
   @Field(() => [UpdateHistory], { nullable: true })
   @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
   history: Ref<UpdateHistory>[]
+
+  @Field()
+  @Property({ required: false })
+  issueInvoiceFilename: string
 
   static aggregatePaginate: AggregatePaginateModel<typeof BillingCycle>['aggregatePaginate']
 
@@ -576,11 +581,11 @@ export async function issueEmailToCustomer() {
     const customer = await UserModel.findById(billingCycle.user)
     if (customer) {
       const financialEmails = get(customer, 'businessDetail.creditPayment.financialContactEmails', [])
-      const emails = [customer.email, ...financialEmails]
+      const emails = uniq([customer.email, ...financialEmails])
       const month_text = format(new Date(), 'MMMM', { locale: th })
       const year_number = toNumber(format(new Date(), 'yyyy', { locale: th }))
       const year_text = toString(year_number + 543)
-      const invoiceFilePath = await generateInvoice(billingCycle)
+      const invoiceFilePath = await generateInvoice(billingCycle, customer)
       await emailTranspoter.sendMail({
         from: process.env.NOREPLY_EMAIL,
         to: emails,
@@ -596,8 +601,8 @@ export async function issueEmailToCustomer() {
         },
         attachments: [
           {
-            filename: path.basename(invoiceFilePath),
-            path: invoiceFilePath,
+            filename: path.basename(invoiceFilePath.filePath),
+            path: invoiceFilePath.filePath,
           },
         ],
       })
@@ -614,10 +619,11 @@ const sarabunSemiBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-SemiBol
 const sarabunBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-Bold.ttf')
 const sarabunExtraBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-ExtraBold.ttf')
 
-export async function generateInvoice(billingCycle: BillingCycle) {
+export async function generateInvoice(billingCycle: BillingCycle, user: User) {
   const logoPath = path.join(__dirname, '..', 'assets/images/logo_bluesky.png')
   const kbankPath = path.join(__dirname, '..', 'assets/images/kbank-full.png')
-  const filePath = path.join(__dirname, '..', '..', 'generated/invoice', `invoice_${billingCycle.billingNumber}.pdf`)
+  const fileName = `invoice_${billingCycle.billingNumber}.pdf`
+  const filePath = path.join(__dirname, '..', '..', 'generated/invoice', fileName)
 
   const doc = new PDFDocument({ size: 'A4', margins: { top: 60, bottom: 56, left: 22, right: 22 } })
   const writeStream = fs.createWriteStream(filePath)
@@ -654,13 +660,19 @@ export async function generateInvoice(billingCycle: BillingCycle) {
     doc.moveDown(0.5)
     doc.fontSize(8)
     doc.font(sarabunMedium).text('Invoice No.:', 420, doc.y, { align: 'right', width: 74 }) // 81
-    doc.font(sarabunLight).text('IV2308009', 504, doc.y - 10, { align: 'left' })
+    doc.font(sarabunLight).text(billingCycle.billingNumber, 504, doc.y - 10, { align: 'left' })
     doc.moveDown(0.3)
     doc.font(sarabunMedium).text('Date :', 420, doc.y, { align: 'right', width: 74 }) // 81
-    doc.font(sarabunLight).text('31/8/2566', 504, doc.y - 10, { align: 'left' })
+
+    const issueInBEDateMonth = fDate(billingCycle.issueDate, 'dd/MM')
+    const issueInBEYear = toNumber(fDate(billingCycle.issueDate, 'yyyy')) + 543
+    doc.font(sarabunLight).text(`${issueInBEDateMonth}/${issueInBEYear}`, 504, doc.y - 10, { align: 'left' })
+
+    const duedateInBEDateMonth = fDate(billingCycle.paymentDueDate, 'dd/MM')
+    const duedateInBEYear = toNumber(fDate(billingCycle.paymentDueDate, 'yyyy')) + 543
     doc.moveDown(0.3)
     doc.font(sarabunMedium).text('Due Date :', 420, doc.y, { align: 'right', width: 74 }) // 81
-    doc.font(sarabunLight).text('7/9/2566', 504, doc.y - 10, { align: 'left' })
+    doc.font(sarabunLight).text(`${duedateInBEDateMonth}/${duedateInBEYear}`, 504, doc.y - 10, { align: 'left' })
     doc.rect(420, 54, 162, 84).lineWidth(2).stroke()
 
     // Seperate line
@@ -671,22 +683,47 @@ export async function generateInvoice(billingCycle: BillingCycle) {
       .lineTo(584, doc.y + 16)
       .stroke()
 
+    let address = '-'
+    const businessDetail = get(user, 'businessDetail', undefined) as BusinessCustomer | undefined
+    if (businessDetail.paymentMethod === 'cash') {
+      address = `${businessDetail.address} แขวง/ตำบล ${businessDetail.subDistrict} เขต/อำเภอ 
+                      ${businessDetail.district}
+                      จังหวัด ${businessDetail.province} ${businessDetail.postcode}`
+    } else if (businessDetail.paymentMethod === 'credit' && businessDetail.creditPayment) {
+      const creditPayment = businessDetail.creditPayment as BusinessCustomerCreditPayment | undefined
+      address = `${creditPayment.financialAddress} แขวง/ตำบล ${creditPayment.financialSubDistrict} เขต/อำเภอ 
+                      ${creditPayment.financialDistrict}
+                      จังหวัด ${creditPayment.financialProvince} ${creditPayment.financialPostcode}`
+    } else if (user.individualDetail) {
+      const individualDetail = user.individualDetail as IndividualCustomer | undefined
+      if (individualDetail.address) {
+        address = `${individualDetail.address} แขวง/ตำบล ${individualDetail.subDistrict} เขต/อำเภอ 
+                        ${individualDetail.district}
+                        จังหวัด ${individualDetail.province} ${individualDetail.postcode}`
+      }
+    }
+
+    const isBusiness = user.userType === 'business'
+    const businessBranch = get(user, 'businessDetail.businessBranch', '-')
+    const taxId = isBusiness ? get(user, 'businessDetail.taxNumber', '-') : get(user, 'individualDetail.taxId', '-')
     // Customer detail
     doc.moveDown(2.8)
     doc.font(sarabunMedium).fontSize(7)
     doc.text('ชื่อลูกค้า :', 22)
-    doc.text('บริษัท ABC จำกัด', 110, doc.y - 9)
+    doc.text(user.fullname, 110, doc.y - 9)
     doc.font(sarabunLight)
-    doc.text('สาขา :', 280, doc.y - 9)
-    doc.text('สำนักงานใหญ่', 308, doc.y - 9)
+    if (isBusiness) {
+      doc.text('สาขา :', 280, doc.y - 9)
+      doc.text(businessBranch, 308, doc.y - 9)
+    }
     doc.moveDown(0.6)
     doc.font(sarabunMedium).text('เลขประจำตัวผู้เสียภาษี :', 22)
-    doc.font(sarabunLight).text('0125556678900', 110, doc.y - 9)
+    doc.font(sarabunLight).text(taxId, 110, doc.y - 9)
     doc.moveDown(0.6)
     doc.font(sarabunMedium).text('ที่อยู่ :', 22)
     doc
       .font(sarabunLight)
-      .text('เลขที่ x ถนน x แขวง/ตำบล บางนา เขต/อำเภอ บางนา จังหวัด กรุงเทพมหานคร 1060', 110, doc.y - 9)
+      .text(address, 110, doc.y - 9)
 
     // Page detail
     doc.moveDown(2.1)
@@ -922,5 +959,5 @@ export async function generateInvoice(billingCycle: BillingCycle) {
 
   await new Promise((resolve) => writeStream.on('finish', resolve))
 
-  return filePath
+  return { fileName, filePath }
 }
