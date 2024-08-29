@@ -585,7 +585,7 @@ export async function issueEmailToCustomer() {
       const month_text = format(new Date(), 'MMMM', { locale: th })
       const year_number = toNumber(format(new Date(), 'yyyy', { locale: th }))
       const year_text = toString(year_number + 543)
-      const invoiceFilePath = await generateInvoice(billingCycle, customer)
+      const invoiceFilePath = await generateInvoice(billingCycle)
       await emailTranspoter.sendMail({
         from: process.env.NOREPLY_EMAIL,
         to: emails,
@@ -619,7 +619,7 @@ const sarabunSemiBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-SemiBol
 const sarabunBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-Bold.ttf')
 const sarabunExtraBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-ExtraBold.ttf')
 
-export async function generateInvoice(billingCycle: BillingCycle, user: User) {
+export async function generateInvoice(billingCycle: BillingCycle) {
   const logoPath = path.join(__dirname, '..', 'assets/images/logo_bluesky.png')
   const kbankPath = path.join(__dirname, '..', 'assets/images/kbank-full.png')
   const fileName = `invoice_${billingCycle.billingNumber}.pdf`
@@ -684,22 +684,18 @@ export async function generateInvoice(billingCycle: BillingCycle, user: User) {
       .stroke()
 
     let address = '-'
+    const user = get(billingCycle, 'user', undefined) as User | undefined
     const businessDetail = get(user, 'businessDetail', undefined) as BusinessCustomer | undefined
-    if (businessDetail.paymentMethod === 'cash') {
-      address = `${businessDetail.address} แขวง/ตำบล ${businessDetail.subDistrict} เขต/อำเภอ 
-                      ${businessDetail.district}
-                      จังหวัด ${businessDetail.province} ${businessDetail.postcode}`
-    } else if (businessDetail.paymentMethod === 'credit' && businessDetail.creditPayment) {
+    const paymentMethod = get(businessDetail, 'paymentMethod', '')
+    if (paymentMethod === 'cash') {
+      address = `${businessDetail.address} แขวง/ตำบล ${businessDetail.subDistrict} เขต/อำเภอ ${businessDetail.district} จังหวัด ${businessDetail.province} ${businessDetail.postcode}`
+    } else if (paymentMethod === 'credit' && businessDetail.creditPayment) {
       const creditPayment = businessDetail.creditPayment as BusinessCustomerCreditPayment | undefined
-      address = `${creditPayment.financialAddress} แขวง/ตำบล ${creditPayment.financialSubDistrict} เขต/อำเภอ 
-                      ${creditPayment.financialDistrict}
-                      จังหวัด ${creditPayment.financialProvince} ${creditPayment.financialPostcode}`
+      address = `${creditPayment.financialAddress} แขวง/ตำบล ${creditPayment.financialSubDistrict} เขต/อำเภอ ${creditPayment.financialDistrict} จังหวัด ${creditPayment.financialProvince} ${creditPayment.financialPostcode}`
     } else if (user.individualDetail) {
       const individualDetail = user.individualDetail as IndividualCustomer | undefined
       if (individualDetail.address) {
-        address = `${individualDetail.address} แขวง/ตำบล ${individualDetail.subDistrict} เขต/อำเภอ 
-                        ${individualDetail.district}
-                        จังหวัด ${individualDetail.province} ${individualDetail.postcode}`
+        address = `${individualDetail.address} แขวง/ตำบล ${individualDetail.subDistrict} เขต/อำเภอ ${individualDetail.district} จังหวัด ${individualDetail.province} ${individualDetail.postcode}`
       }
     }
 
@@ -803,6 +799,7 @@ export async function generateInvoice(billingCycle: BillingCycle, user: User) {
 
   let latestHeight = 0
   let rowNumber = 0
+
   forEach(shipmentGroup, (shipments, index) => {
     if (index !== 0) {
       doc
@@ -856,9 +853,11 @@ export async function generateInvoice(billingCycle: BillingCycle, user: User) {
   doc.fontSize(8)
   doc.font(sarabunMedium).text('รวมเป็นเงิน :', 0, doc.y + latestHeight + 16, { width: 450, align: 'right' })
   doc.font(sarabunLight).text(fCurrency(billingCycle.subTotalAmount), 450, doc.y - 10, { align: 'right', width: 128 })
-  doc.moveDown(1.6)
-  doc.font(sarabunMedium).text('ภาษีหัก ณ ที่จ่าย 1% :', 0, doc.y - 10, { width: 450, align: 'right' })
-  doc.font(sarabunLight).text(fCurrency(billingCycle.taxAmount), 450, doc.y - 10, { align: 'right', width: 128 })
+  if (billingCycle.taxAmount > 0) {
+    doc.moveDown(1.6)
+    doc.font(sarabunMedium).text('ภาษีหัก ณ ที่จ่าย 1% :', 0, doc.y - 10, { width: 450, align: 'right' })
+    doc.font(sarabunLight).text(`-${fCurrency(billingCycle.taxAmount)}`, 450, doc.y - 10, { align: 'right', width: 128 })
+  }
   doc.moveDown(2.6)
   doc.fontSize(10)
   doc.font(sarabunMedium).text('รวมที่ต้องชำระทั้งสิ้น :', 0, doc.y - 12, { width: 450, align: 'right' })
@@ -905,18 +904,18 @@ export async function generateInvoice(billingCycle: BillingCycle, user: User) {
   // After transfer detail
   doc.moveDown(1)
   doc.fontSize(6).fillColor('#212B36')
-  doc.text('เมื่อท่ำนได้ชำระแล้วกรุณาส่งหลักฐานการชำระ มาที่ acc@movemateth.com พร้อมอ้างอิงเลขที่ใบแจ้งหนี้', 22)
+  doc.text('เมื่อท่านได้ชำระแล้วกรุณาส่งหลักฐานการชำระ มาที่ acc@movemateth.com พร้อมอ้างอิงเลขที่ใบแจ้งหนี้', 22)
   doc.moveDown(1)
   doc.text('*หากต้องการแก้ไขใบแจ้งหนี้และใบเสร็จรับเงิน กรุณาติตต่อ acc@movemateth.com ภายใน 3 วันทำการ')
   doc.moveDown(1)
   doc.text(
-    'หลังจากได้รับเอกสาร มิเช่นนั้นทำงบริษัทฯ จะถือว่ำเอกสำรดังกล่าวถูกต้อง ครบถ้วน สมบูรณ์ เป็นที่เรียบร้อยแล้ว',
+    'หลังจากได้รับเอกสาร มิเช่นนั้นทำงบริษัทฯ จะถือว่าเอกสารดังกล่าวถูกต้อง ครบถ้วน สมบูรณ์ เป็นที่เรียบร้อยแล้ว',
   )
 
   const halfWidth = doc.page.width / 2
 
   // Signatures
-  doc.moveDown(5)
+  doc.moveDown(7)
   doc.fontSize(7).fillColor('#000')
   doc
     .fillColor('#919EAB')

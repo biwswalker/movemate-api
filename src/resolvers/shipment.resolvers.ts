@@ -342,14 +342,15 @@ export default class ShipmentResolver {
 
       let _discountId = null
       if (discountId) {
-        const privilege = await PrivilegeModel.findById(discountId).lean()
-        _discountId = privilege._id
+        const privilege = await PrivilegeModel.findOne({ _id: discountId, usedUser: { $nin: user_id } }).lean()
         if (!privilege) {
           const message = 'ไม่สามารถหาข้อมูลส่วนลดได้ เนื่องจากไม่พบส่วนลดดังกล่าว'
           throw new GraphQLError(message, {
             extensions: { code: 'NOT_FOUND', errors: [{ message }] },
           })
         }
+        await PrivilegeModel.findByIdAndUpdate(privilege._id, { $push: [user_id] })
+        _discountId = privilege._id
       }
 
       // Remark: Add multiple additionals image
@@ -417,52 +418,6 @@ export default class ShipmentResolver {
       // Create shipment id before
       const shipmentId = new Types.ObjectId()
 
-      // Remark: Create billing cycle and billing payment
-      if (isCashPaymentMethod && cashDetail) {
-        const today = new Date()
-        const _month = format(today, 'MM')
-        const _year = toNumber(format(today, 'yyyy')) + 543
-        const _billingNumber = await generateTrackingNumber(`IV${_month}${_year}`, 'invoice')
-
-        const paydate = format(cashDetail.paymentDate, 'ddMMyyyy')
-        const paytime = format(cashDetail.paymentTime, 'HH:mm')
-        const paymentDate = parse(`${paydate}-${paytime}`, 'ddMMyyyy-HH:mm', new Date(), { locale: th })
-        const taxAmount = reduce(_invoice.taxs, (prev, curr) => {
-          return sum([prev, curr.price])
-        }, 0)
-        const _billingCycle = new BillingCycleModel({
-          user: user_id,
-          billingNumber: _billingNumber,
-          issueDate: today,
-          billingStartDate: today,
-          billingEndDate: today,
-          shipments: [shipmentId],
-          subTotalAmount: _invoice.subTotalPrice,
-          taxAmount,
-          totalAmount: _invoice.totalPrice,
-          paymentDueDate: today,
-          billingStatus: EBillingStatus.VERIFY,
-          paymentMethod: EPaymentMethod.CASH,
-          emailSendedTime: today
-        })
-
-        await _billingCycle.save()
-        await BillingCycleModel.processPayment({
-          billingCycleId: _billingCycle._id,
-          paymentNumber: _payment.paymentNumber,
-          paymentAmount: _invoice.totalPrice,
-          paymentDate,
-          imageEvidenceId: cashDetail.imageEvidence as string,
-          bank: cashDetail.bank,
-          bankName: cashDetail.bankName,
-          bankNumber: cashDetail.bankNumber,
-        })
-
-        const billingCycle = await BillingCycleModel.findById(_billingCycle._id).exec()
-        const invoiceFilePath = await generateInvoice(billingCycle, customer)
-        await BillingCycleModel.findByIdAndUpdate(billingCycle._id, { issueInvoiceFilename: invoiceFilePath.filePath })
-      }
-
       const status: TShipingStatus = 'idle'
       const adminAcceptanceStatus: TAdminAcceptanceStatus = isCreditPaymentMethod ? 'reach' : 'pending'
       const driverAcceptanceStatus: TDriverAcceptanceStatus = isCreditPaymentMethod ? 'pending' : 'idle'
@@ -490,6 +445,52 @@ export default class ShipmentResolver {
         // statusLog: [startStatus]
       })
       await shipment.save()
+
+      // Remark: Create billing cycle and billing payment
+      if (isCashPaymentMethod && cashDetail) {
+        const today = new Date()
+        const _month = format(today, 'MM')
+        const _year = toNumber(format(today, 'yyyy')) + 543
+        const _billingNumber = await generateTrackingNumber(`IV${_month}${_year}`, 'invoice')
+
+        const paydate = format(cashDetail.paymentDate, 'ddMMyyyy')
+        const paytime = format(cashDetail.paymentTime, 'HH:mm')
+        const paymentDate = parse(`${paydate}-${paytime}`, 'ddMMyyyy-HH:mm', new Date(), { locale: th })
+        const taxAmount = reduce(_invoice.taxs, (prev, curr) => {
+          return sum([prev, curr.price])
+        }, 0)
+        const _billingCycle = new BillingCycleModel({
+          user: user_id,
+          billingNumber: _billingNumber,
+          issueDate: today,
+          billingStartDate: today,
+          billingEndDate: today,
+          shipments: [shipment._id],
+          subTotalAmount: _invoice.subTotalPrice,
+          taxAmount,
+          totalAmount: _invoice.totalPrice,
+          paymentDueDate: today,
+          billingStatus: EBillingStatus.VERIFY,
+          paymentMethod: EPaymentMethod.CASH,
+          emailSendedTime: today
+        })
+
+        await _billingCycle.save()
+        await BillingCycleModel.processPayment({
+          billingCycleId: _billingCycle._id,
+          paymentNumber: _payment.paymentNumber,
+          paymentAmount: _invoice.totalPrice,
+          paymentDate,
+          imageEvidenceId: cashDetail.imageEvidence as string,
+          bank: cashDetail.bank,
+          bankName: cashDetail.bankName,
+          bankNumber: cashDetail.bankNumber,
+        })
+
+        const billingCycleData = await BillingCycleModel.findById(_billingCycle._id)
+        const invoiceFilePath = await generateInvoice(billingCycleData)
+        await BillingCycleModel.findByIdAndUpdate(billingCycleData._id, { issueInvoiceFilename: invoiceFilePath.fileName })
+      }
 
       const response = await ShipmentModel.findById(shipment._id)
       await response.initialStepDefinition()

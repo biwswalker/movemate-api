@@ -1,9 +1,10 @@
 import { Field, ID, ObjectType } from 'type-graphql'
-import { prop as Property, getModelForClass, plugin } from '@typegoose/typegoose'
+import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { IsEnum } from 'class-validator'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import mongoose from 'mongoose'
 import mongoosePagination from 'mongoose-paginate-v2'
+import { User } from './user.model'
 
 enum EPrivilegeDiscountUnit {
   PERCENTAGE = 'percentage',
@@ -74,6 +75,10 @@ export class Privilege extends TimeStamps {
   @Field({ nullable: true })
   @Property()
   description: string
+
+  @Field(() => [User], { defaultValue: [] })
+  @Property({ ref: () => User, required: true, default: [] })
+  usedUser: Ref<User>[]
 
   @Field()
   @Property({ default: Date.now })

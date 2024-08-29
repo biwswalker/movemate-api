@@ -1,15 +1,16 @@
+import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { GetPrivilegesArgs, PrivilegeInput } from '@inputs/privilege.input'
 import { PaginationArgs } from '@inputs/query.input'
 import PrivilegeModel, { Privilege } from '@models/privilege.model'
-import { PrivilegePaginationPayload } from '@payloads/privilege.payloads'
+import { PrivilegePaginationPayload, PrivilegeUsedPayload } from '@payloads/privilege.payloads'
 import { yupValidationThrow } from '@utils/error.utils'
 import { reformPaginate } from '@utils/pagination.utils'
 import { PrivilegeSchema } from '@validations/privilege.validations'
 import { GraphQLError } from 'graphql'
-import { isArray, isEmpty, omitBy, reduce } from 'lodash'
+import { includes, isArray, isEmpty, map, omitBy, reduce } from 'lodash'
 import { FilterQuery, PaginateOptions } from 'mongoose'
-import { Arg, Args, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
+import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { ValidationError } from 'yup'
 
 @Resolver()
@@ -122,18 +123,23 @@ export default class PrivilegeResolver {
       throw new GraphQLError('ไม่สามารถเรียกข้อมูลส่วนลดได้ โปรดลองอีกครั้ง')
     }
   }
-  @Query(() => [Privilege])
+  @Query(() => [PrivilegeUsedPayload])
   @UseMiddleware(AuthGuard(['admin', 'customer']))
-  async searchPrivilegeByCode(@Arg('code') code: string): Promise<Privilege[]> {
+  async searchPrivilegeByCode(@Arg('code') code: string, @Ctx() ctx: GraphQLContext): Promise<PrivilegeUsedPayload[]> {
+    const user_id = ctx.req.user_id
     try {
-      const privileges = await PrivilegeModel.find({ code: (code || '').toUpperCase(), status: 'active' })
+      const privileges = await PrivilegeModel.find({ code: (code || '').toUpperCase(), status: 'active' }).lean()
       if (!privileges) {
         const message = `ไม่สามารถเรียกข้อมูลส่วนลดได้`
         throw new GraphQLError(message, {
           extensions: { code: 'NOT_FOUND', errors: [{ message }] },
         })
       }
-      return privileges
+      const privilegePayload = map<Privilege, PrivilegeUsedPayload>(privileges, (privilege) => {
+        const used = includes(privilege.usedUser, user_id)
+        return ({ ...privilege, used })
+      })
+      return privilegePayload
     } catch (error) {
       console.log('error: ', error)
       throw new GraphQLError('ไม่สามารถเรียกข้อมูลส่วนลดได้ โปรดลองอีกครั้ง')

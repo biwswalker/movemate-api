@@ -11,7 +11,7 @@ import { VerifyOTPPayload, VerifyPayload } from '@payloads/verify.payloads'
 import { BusinessCustomer } from '@models/customerBusiness.model'
 import { VerifyOTPArgs } from '@inputs/verify.payloads'
 import { get, isEqual } from 'lodash'
-import { requestOTP } from './otp.resolver'
+import { requestOTP } from './otp.resolvers'
 
 @Resolver()
 export default class VerifyAccountResolver {

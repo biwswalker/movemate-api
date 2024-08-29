@@ -1,7 +1,7 @@
-import { checkBillingStatus, generateInvoice, issueBillingCycle, issueEmailToCustomer } from '@models/billingCycle.model'
+import BillingCycleModel, { checkBillingStatus, generateInvoice, issueBillingCycle, issueEmailToCustomer } from '@models/billingCycle.model'
 import cron from 'node-cron'
 
-export default function configureCronjob() {
+export default async function configureCronjob() {
   cron.schedule('0 0 * * *', async () => {
     await issueBillingCycle()
     await checkBillingStatus()
@@ -12,4 +12,7 @@ export default function configureCronjob() {
   }, { timezone: 'Asia/Bangkok' })
 
   console.log('🌽 Cronjob started')
+  // const biili = await BillingCycleModel.findOne({ billingNumber: 'IV082567000007' })
+  // const { fileName } = await generateInvoice(biili)
+  // console.log('fileName: ', fileName)
 }

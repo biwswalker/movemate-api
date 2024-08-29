@@ -8,3 +8,9 @@ export class PrivilegePaginationPayload extends PaginationPayload implements Pag
     @Field(() => [Privilege])
     docs: Privilege[]
 }
+
+@ObjectType()
+export class PrivilegeUsedPayload extends Privilege {
+    @Field()
+    used: boolean
+}

@@ -8,7 +8,7 @@ import FileModel from "@models/file.model";
 import { decryption } from "@utils/encryption";
 import { IndividualDriverDetailInput, IndividualDriverRegisterInput } from "@inputs/driver.input";
 import { IndividualDriverScema } from "@validations/driver.validations";
-import { verifyOTP } from "./otp.resolver";
+import { verifyOTP } from "./otp.resolvers";
 import IndividualDriverModel from "@models/driverIndividual.model";
 import DriverDocumentModel from "@models/driverDocument.model";
 import NotificationModel from "@models/notification.model";
