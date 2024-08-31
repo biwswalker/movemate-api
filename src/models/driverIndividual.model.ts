@@ -4,7 +4,8 @@ import { IsString, Length } from 'class-validator'
 import { VehicleType } from './vehicleType.model'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
 import { DriverDocument } from './driverDocument.model'
-import { get } from 'lodash'
+import { get, reduce, sum } from 'lodash'
+import TransactionModel, { ETransactionStatus, ETransactionType } from './transaction.model'
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()
@@ -94,6 +95,10 @@ export class IndividualDriver {
     @Property({ autopopulate: true, ref: 'VehicleType' })
     serviceVehicleType: Ref<VehicleType>
 
+    @Field({ defaultValue: 0 })
+    @Property({ default: 0 })
+    balance: number;
+
     @Field(() => DriverDocument)
     @Property({ autopopulate: true, ref: 'DriverDocument' })
     documents: Ref<DriverDocument>
@@ -105,6 +110,14 @@ export class IndividualDriver {
         const firstname = get(this, '_doc.firstname', '') || get(this, 'firstname', '')
         const lastname = get(this, '_doc.lastname', '') || get(this, 'lastname', '')
         return `${title || otherTitle} ${firstname} ${lastname}`;
+    }
+
+    async updateBalance(driverId: string) {
+        const transactions = await TransactionModel.find({ status: ETransactionStatus.PENDING, transactionType: ETransactionType.INCOME, driverId }).lean()
+        const currentBalance = reduce(transactions, (prev, curr) => {
+            return sum([prev, curr.amount])
+        }, 0)
+        await IndividualDriverModel.findByIdAndUpdate(this._id, { balance: currentBalance })
     }
 }
 

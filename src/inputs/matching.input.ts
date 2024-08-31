@@ -18,3 +18,18 @@ export class NextShipmentStepInput {
   @Field(() => [FileInput], { nullable: true })
   images?: FileInput[]
 }
+
+@InputType()
+export class SentPODDocumentShipmentStepInput {
+  @Field()
+  shipmentId: string
+
+  @Field(() => [FileInput], { nullable: true })
+  images: FileInput[]
+
+  @Field()
+  provider: string
+
+  @Field()
+  trackingNumber: string
+}

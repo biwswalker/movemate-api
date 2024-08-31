@@ -1,6 +1,6 @@
 import { Field, Float, ID, Int, ObjectType } from 'type-graphql'
 import { prop as Property, getModelForClass, Ref, Severity, plugin } from '@typegoose/typegoose'
-import { User } from './user.model'
+import UserModel, { User } from './user.model'
 import { IsEnum } from 'class-validator'
 import PrivilegeModel, { Privilege } from './privilege.model'
 import { VehicleType } from './vehicleType.model'
@@ -16,7 +16,7 @@ import mongoosePagination from 'mongoose-paginate-v2'
 import { DirectionsResult } from './directionResult.model'
 import { SubtotalCalculationArgs } from '@inputs/booking.input'
 import VehicleCostModel from './vehicleCost.model'
-import lodash, { filter, find, flatten, get, isEqual, last, map, min, range, sum, values } from 'lodash'
+import lodash, { filter, find, flatten, get, head, isEqual, last, map, min, range, reduce, sum, tail, values } from 'lodash'
 import { fNumber } from '@utils/formatNumber'
 import AdditionalServiceCostPricingModel from './additionalServiceCostPricing.model'
 import { SubtotalCalculatedPayload } from '@payloads/booking.payloads'
@@ -34,6 +34,8 @@ import { Refund } from './refund.model'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
 import NotificationModel from './notification.model'
+import TransactionModel, { ETransactionStatus, ETransactionType } from './transaction.model'
+import IndividualDriverModel, { IndividualDriver } from './driverIndividual.model'
 
 Aigle.mixin(lodash, {})
 
@@ -117,6 +119,14 @@ export class ShipmentPODAddress {
   @Field({ nullable: true })
   @Property()
   remark: string
+
+  @Field({ nullable: true })
+  @Property()
+  trackingNumber?: string
+
+  @Field({ nullable: true })
+  @Property()
+  provider?: string
 }
 
 @ObjectType()
@@ -376,9 +386,8 @@ export class Shipment extends TimeStamps {
           } else {
             totalDiscount = 0
           }
-          discountName = `${privilege.name} (${privilege.discount}${
-            privilege.unit === 'currency' ? ' บาท' : privilege.unit === 'percentage' ? '%' : ''
-          })`
+          discountName = `${privilege.name} (${privilege.discount}${privilege.unit === 'currency' ? ' บาท' : privilege.unit === 'percentage' ? '%' : ''
+            })`
         }
       }
 
@@ -411,23 +420,23 @@ export class Shipment extends TimeStamps {
           },
           ...(isRounded
             ? [
-                {
-                  label: `ไป-กลับ ${calculated.roundedPricePercent}% (${distanceReturnKM} กม.)`,
-                  price: calculated.subTotalRoundedPrice,
-                  cost: costCalculation ? calculated.subTotalRoundedCost : 0,
-                },
-              ]
+              {
+                label: `ไป-กลับ ${calculated.roundedPricePercent}% (${distanceReturnKM} กม.)`,
+                price: calculated.subTotalRoundedPrice,
+                cost: costCalculation ? calculated.subTotalRoundedCost : 0,
+              },
+            ]
             : []),
         ],
         additionalServices: [
           ...(dropPoint > 1
             ? [
-                {
-                  label: 'หลายจุดส่ง',
-                  price: calculated.subTotalDropPointPrice,
-                  cost: costCalculation ? calculated.subTotalDropPointCost : 0,
-                },
-              ]
+              {
+                label: 'หลายจุดส่ง',
+                price: calculated.subTotalDropPointPrice,
+                cost: costCalculation ? calculated.subTotalDropPointCost : 0,
+              },
+            ]
             : []),
           ...additionalservices.priceItems,
         ],
@@ -470,19 +479,19 @@ export class Shipment extends TimeStamps {
       },
       ...(isCashMethod
         ? [
-            {
-              insertOne: {
-                document: {
-                  step: EStepDefinition.CASH_VERIFY,
-                  seq: 0,
-                  stepName: EStepDefinitionName.CASH_VERIFY,
-                  customerMessage: 'ยืนยันการชำระเงิน',
-                  driverMessage: '',
-                  stepStatus: EStepStatus.PROGRESSING,
-                },
+          {
+            insertOne: {
+              document: {
+                step: EStepDefinition.CASH_VERIFY,
+                seq: 0,
+                stepName: EStepDefinitionName.CASH_VERIFY,
+                customerMessage: 'ยืนยันการชำระเงิน',
+                driverMessage: '',
+                stepStatus: EStepStatus.PROGRESSING,
               },
             },
-          ]
+          },
+        ]
         : []),
       {
         insertOne: {
@@ -562,34 +571,34 @@ export class Shipment extends TimeStamps {
           ]
         }),
       ),
+      ...(isPODService
+        ? [
+          {
+            insertOne: {
+              document: {
+                step: EStepDefinition.POD,
+                seq: 0,
+                stepName: EStepDefinitionName.POD,
+                customerMessage: 'แนบเอกสารและส่งเอกสาร POD',
+                driverMessage: 'แนบเอกสารและส่งเอกสาร POD',
+                stepStatus: EStepStatus.IDLE,
+              },
+            },
+          },
+        ]
+        : []),
       {
         insertOne: {
           document: {
             step: EStepDefinition.FINISH,
             seq: 0,
             stepName: EStepDefinitionName.FINISH,
-            customerMessage: 'จัดส่งสำเร็จ',
-            driverMessage: 'จัดส่งสำเร็จ',
+            customerMessage: 'ยืนยันการจัดส่งสำเร็จ',
+            driverMessage: 'ยืนยันการจัดส่งสำเร็จ',
             stepStatus: EStepStatus.IDLE,
           },
         },
       },
-      ...(isPODService
-        ? [
-            {
-              insertOne: {
-                document: {
-                  step: EStepDefinition.POD,
-                  seq: 0,
-                  stepName: EStepDefinitionName.POD,
-                  customerMessage: 'แนบเอกสารและส่งเอกสาร POD',
-                  driverMessage: 'แนบเอกสารและส่งเอกสาร POD',
-                  stepStatus: EStepStatus.IDLE,
-                },
-              },
-            },
-          ]
-        : []),
     ]
 
     const reSequenceBulkOperation = map(bulkOperations, ({ insertOne: { document } }, index) => ({
@@ -637,6 +646,49 @@ export class Shipment extends TimeStamps {
     }
   }
 
+  async podSent(images: FileInput[], trackingNumber: string, provider: string): Promise<boolean> {
+    try {
+      const currentStep = find(this.steps, ['seq', this.currentStepSeq])
+      const uploadedFiles = await Aigle.map(images, async (image) => {
+        const fileModel = new FileModel(image)
+        await fileModel.save()
+        const file = await FileModel.findById(fileModel._id)
+        return file
+      })
+      const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', ''))
+      if (stepDefinitionModel.step === EStepDefinition.POD) {
+        await stepDefinitionModel.updateOne({
+          stepStatus: EStepStatus.DONE,
+          images: uploadedFiles,
+          updatedAt: new Date(),
+        })
+        const nextStep = find(this.steps, ['seq', this.currentStepSeq + 1])
+        const nextStepId = get(nextStep, '_id', '')
+        if (nextStepId) {
+          const nextStepDefinitionModel = await StepDefinitionModel.findById(nextStepId)
+          await nextStepDefinitionModel.updateOne({ stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() })
+          const shipmentModel = await ShipmentModel.findById(this._id)
+          await shipmentModel.updateOne({
+            currentStepSeq: nextStepDefinitionModel.seq,
+            podDetail: {
+              ...shipmentModel.podDetail,
+              trackingNumber,
+              provider
+            }
+          })
+        }
+        return true
+      } else {
+        const message = 'ยังไม่ถึงขึ้นตอนการส่ง POD'
+        throw new GraphQLError(message, {
+          extensions: { code: REPONSE_NAME.SHIPMENT_NOT_FINISH, errors: [{ message }] },
+        })
+      }
+    } catch (error) {
+      throw error
+    }
+  }
+
   async finishJob(): Promise<boolean> {
     try {
       const currentStep = find(this.steps, ['seq', this.currentStepSeq])
@@ -644,12 +696,43 @@ export class Shipment extends TimeStamps {
       if (stepDefinitionModel.step === EStepDefinition.FINISH) {
         await stepDefinitionModel.updateOne({
           stepStatus: EStepStatus.DONE,
+          customerMessage: 'ดำเนินการเสร็จสิ้น',
+          driverMessage: 'ดำเนินการเสร็จสิ้น',
           updatedAt: new Date(),
         })
         await ShipmentModel.findByIdAndUpdate(this._id, {
           currentStepSeq: stepDefinitionModel.seq,
           status: EShipingStatus.DELIVERED,
         })
+
+        const pickup = head(this.destinations)
+        const dropoffs = tail(this.destinations)
+        const description = `ค่าขนส่งจาก ${pickup.name} ไปยัง ${reduce(
+          dropoffs,
+          (prev, curr) => (prev ? curr.name : `${prev}, ${curr.name}`),
+          '',
+        )}`
+
+        // Add transaction
+        const amount = get(this, 'payment.invoice.totalCost', 0)
+        const driverId = get(this, 'driver._id', "")
+        const driverTransaction = new TransactionModel({
+          amount,
+          driverId,
+          description: description,
+          shipmentId: this._id,
+          trackingNumber: this.trackingNumber,
+          transactionType: ETransactionType.INCOME,
+          status: ETransactionStatus.PENDING,
+        })
+        await driverTransaction.save()
+
+        // Update balance
+        const driver = await UserModel.findById(driverId).lean()
+        if (driver) {
+          const driverDetail = await IndividualDriverModel.findById(driver.individualDriver)
+          driverDetail.updateBalance(driverId)
+        }
 
         /**
          * Notification
@@ -712,6 +795,7 @@ export class Shipment extends TimeStamps {
           ...shipment,
           status: EShipingStatus.IDLE,
           adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,
+          driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
           steps: [{ ...currentStep, stepStatus: EStepStatus.DONE }],
         },
       })
@@ -719,6 +803,7 @@ export class Shipment extends TimeStamps {
       await ShipmentModel.findByIdAndUpdate(_id, {
         status: EShipingStatus.IDLE,
         adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,
+        driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
         $push: { history: _shipmentUpdateHistory },
       })
 
@@ -752,11 +837,11 @@ export class Shipment extends TimeStamps {
           const isCashVerifyStep = step.step === EStepDefinition.CASH_VERIFY && step.seq === currentStep.seq
           const cashVerifyStepChangeData = isCashVerifyStep
             ? {
-                step: EStepDefinition.REJECTED_PAYMENT,
-                stepName: EStepDefinitionName.REJECTED_PAYMENT,
-                customerMessage: EStepDefinitionName.REJECTED_PAYMENT,
-                driverMessage: EStepDefinitionName.REJECTED_PAYMENT,
-              }
+              step: EStepDefinition.REJECTED_PAYMENT,
+              stepName: EStepDefinitionName.REJECTED_PAYMENT,
+              customerMessage: EStepDefinitionName.REJECTED_PAYMENT,
+              driverMessage: EStepDefinitionName.REJECTED_PAYMENT,
+            }
             : {}
           await StepDefinitionModel.findByIdAndUpdate(step._id, {
             stepStatus: EStepStatus.CANCELLED,

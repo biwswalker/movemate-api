@@ -4,7 +4,7 @@ import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import UserModel from '@models/user.model'
-import { get, last, slice } from 'lodash'
+import { get } from 'lodash'
 import { IndividualDriver } from '@models/driverIndividual.model'
 import { GraphQLError } from 'graphql'
 import { FilterQuery, Types } from 'mongoose'
@@ -12,7 +12,7 @@ import { Ref } from '@typegoose/typegoose'
 import { VehicleType } from '@models/vehicleType.model'
 import { REPONSE_NAME } from 'constants/status'
 import NotificationModel from '@models/notification.model'
-import { ConfirmShipmentDateInput, NextShipmentStepInput } from '@inputs/matching.input'
+import { ConfirmShipmentDateInput, NextShipmentStepInput, SentPODDocumentShipmentStepInput } from '@inputs/matching.input'
 
 // Custom status for driver
 type TShipmentStatus = 'new' | 'progressing' | 'dilivered' | 'cancelled'
@@ -23,35 +23,35 @@ export default class MatchingResolver {
     const statusQuery: FilterQuery<Shipment> =
       status === 'new'
         ? {
-            status: 'idle',
-            driverAcceptanceStatus: 'pending',
-            vehicleId,
-            $or: [
-              { requestedDriver: { $exists: false } }, // ไม่มี requestedDriver
-              { requestedDriver: null }, // requestedDriver เป็น null
-              { requestedDriver: userId }, // requestedDriver ตรงกับ userId
-              { requestedDriver: { $ne: userId } }, // requestedDriver ไม่ตรงกับ userId
-            ],
-          }
+          status: 'idle',
+          driverAcceptanceStatus: 'pending',
+          vehicleId,
+          $or: [
+            { requestedDriver: { $exists: false } }, // ไม่มี requestedDriver
+            { requestedDriver: null }, // requestedDriver เป็น null
+            { requestedDriver: userId }, // requestedDriver ตรงกับ userId
+            { requestedDriver: { $ne: userId } }, // requestedDriver ไม่ตรงกับ userId
+          ],
+        }
         : status === 'progressing' // Status progressing
-        ? {
+          ? {
             status: 'progressing',
             driverAcceptanceStatus: 'accepted',
             driver: new Types.ObjectId(userId),
           }
-        : status === 'cancelled' // Status cancelled
-        ? {
-            driverAcceptanceStatus: 'accepted',
-            driver: new Types.ObjectId(userId),
-            $or: [{ status: 'cancelled' }, { status: 'refund' }],
-          }
-        : status === 'dilivered' // Status complete
-        ? {
-            status: 'dilivered',
-            driverAcceptanceStatus: 'accepted',
-            driver: new Types.ObjectId(userId),
-          }
-        : { _id: 'none' } // Not Included status
+          : status === 'cancelled' // Status cancelled
+            ? {
+              driverAcceptanceStatus: 'accepted',
+              driver: new Types.ObjectId(userId),
+              $or: [{ status: 'cancelled' }, { status: 'refund' }],
+            }
+            : status === 'dilivered' // Status complete
+              ? {
+                status: 'dilivered',
+                driverAcceptanceStatus: 'accepted',
+                driver: new Types.ObjectId(userId),
+              }
+              : { _id: 'none' } // Not Included status
 
     return statusQuery
   }
@@ -79,7 +79,9 @@ export default class MatchingResolver {
 
     const query = this.generateQueery(status, userId, individualDriver.serviceVehicleType)
 
+    console.log('---------query-----', JSON.stringify(query))
     const shipments = await ShipmentModel.find(query).skip(skip).limit(limit).sort({ createdAt: 1 }).exec()
+    console.log('shipments: ', JSON.stringify(shipments))
     return shipments
   }
 
@@ -209,6 +211,24 @@ export default class MatchingResolver {
     }
 
     await shipment.nextStep(data.images || [])
+
+    return true
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(['driver']))
+  async sentPODDocument(@Ctx() ctx: GraphQLContext, @Arg('data') data: SentPODDocumentShipmentStepInput): Promise<boolean> {
+    const userId = ctx.req.user_id
+    if (!userId) {
+      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    const shipment = await ShipmentModel.findById(data.shipmentId)
+    if (!shipment) {
+      const message = 'ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    await shipment.podSent(data.images || [], data.trackingNumber, data.provider)
 
     return true
   }

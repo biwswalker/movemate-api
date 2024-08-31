@@ -349,7 +349,7 @@ export default class ShipmentResolver {
             extensions: { code: 'NOT_FOUND', errors: [{ message }] },
           })
         }
-        await PrivilegeModel.findByIdAndUpdate(privilege._id, { $push: [user_id] })
+        await PrivilegeModel.findByIdAndUpdate(privilege._id, { $push: { usedUser: user_id } })
         _discountId = privilege._id
       }
 

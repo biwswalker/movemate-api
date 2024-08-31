@@ -64,7 +64,7 @@ export class Privilege extends TimeStamps {
   @Property({ default: true })
   isInfinity: boolean
 
-  @Field()
+  @Field({ defaultValue: 0, nullable: true })
   @Property({ default: 0, required: false })
   usedAmout: number
 

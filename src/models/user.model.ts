@@ -222,7 +222,14 @@ export class User extends TimeStamps {
     } else if (userRole === 'driver') {
       if (userType === 'individual') {
         const individualDriver: IndividualDriver | undefined = get(this, '_doc.individualDriver', undefined) || this.individualDriver || undefined
-        return individualDriver ? individualDriver.fullname : ''
+        if (individualDriver) {
+          const title = get(individualDriver, 'title', '')
+          const otherTitle = get(individualDriver, 'otherTitle', '')
+          const firstname = get(individualDriver, 'firstname', '')
+          const lastname = get(individualDriver, 'lastname', '')
+          return `${title === 'อื่นๆ' ? otherTitle : title}${firstname} ${lastname}`;
+        }
+        return ''
       } else if (userType === 'business') {
         return ''
       }

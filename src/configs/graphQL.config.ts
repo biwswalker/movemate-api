@@ -25,6 +25,7 @@ import DriverResolver from '@resolvers/driver.resolvers'
 import MatchingResolver from '@resolvers/matching.resolvers'
 import BillingCycleResolver from '@resolvers/billingCycle.resolvers'
 import BillingPaymentResolver from '@resolvers/billingPayment.resolvers'
+import TransactionResolver from '@resolvers/transaction.resolvers'
 
 export interface GraphQLContext {
   req: Request
@@ -55,6 +56,7 @@ export async function createGraphQLServer(httpServer: http.Server) {
       MatchingResolver,
       BillingCycleResolver,
       BillingPaymentResolver,
+      TransactionResolver,
     ],
     authChecker: ({ context }: { context: GraphQLContext }) => {
       const userId = get(context, 'req.userId', '')

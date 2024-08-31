@@ -8,7 +8,7 @@ import { yupValidationThrow } from '@utils/error.utils'
 import { reformPaginate } from '@utils/pagination.utils'
 import { PrivilegeSchema } from '@validations/privilege.validations'
 import { GraphQLError } from 'graphql'
-import { includes, isArray, isEmpty, map, omitBy, reduce } from 'lodash'
+import { filter, isEmpty, isEqual, map, omitBy } from 'lodash'
 import { FilterQuery, PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { ValidationError } from 'yup'
@@ -136,8 +136,8 @@ export default class PrivilegeResolver {
         })
       }
       const privilegePayload = map<Privilege, PrivilegeUsedPayload>(privileges, (privilege) => {
-        const used = includes(privilege.usedUser, user_id)
-        return ({ ...privilege, used })
+        const filteredUsedUser = filter(privilege.usedUser, (usedUserId) => isEqual(usedUserId?.toString(), user_id))
+        return ({ ...privilege, used: filteredUsedUser.length > 0 })
       })
       return privilegePayload
     } catch (error) {
