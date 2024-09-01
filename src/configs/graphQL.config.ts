@@ -4,6 +4,9 @@ import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHt
 import { Request, Response } from 'express'
 import { get } from 'lodash'
 import http from 'http'
+import { WebSocketServer } from 'ws'
+import { useServer } from 'graphql-ws/lib/use/ws'
+
 import AuthResolver from '@resolvers/auth.resolvers'
 import UserResolver from '@resolvers/user.resolvers'
 import ShipmentResolver from '@resolvers/shipment.resolvers'
@@ -68,6 +71,32 @@ export async function createGraphQLServer(httpServer: http.Server) {
     schema,
     plugins: [ApolloServerPluginDrainHttpServer({ httpServer })],
   })
+
+  const wsServer = new WebSocketServer({ server: httpServer, path: '/graphql' })
+  wsServer.on("connection", (ws) => {
+    console.log("🧑🏻‍💻 New client connected")
+
+    // const authHeader = request.headers['authorization'];
+    // const token = authHeader && authHeader.split(' ')[1];
+
+    // if (!token) {
+    //   socket.close(1008, 'Unauthorized');
+    //   return;
+    // }
+
+    // jwt.verify(token, secretKey, (err, user) => {
+    //   if (err) {
+    //     socket.close(1008, 'Unauthorized');
+    //     return;
+    //   }
+    //   // Save the user in the WebSocket connection context
+    //   socket.user = user;
+    // });
+
+    ws.on("close", () => console.log("Client disconnected"))
+  })
+
+  useServer({ schema }, wsServer);
 
   return server
 }

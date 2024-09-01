@@ -34,6 +34,7 @@
     "graphql": "^16.8.1",
     "graphql-type-json": "^0.3.2",
     "graphql-upload-ts": "^2.1.2",
+    "graphql-ws": "^5.16.0",
     "image-to-base64": "^2.2.0",
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
@@ -57,6 +58,7 @@
     "type-graphql": "^2.0.0-rc.1",
     "type-graphql-filter": "^0.4.0",
     "winston": "^3.13.0",
+    "ws": "^8.18.0",
     "yup": "^1.4.0"
   },
   "devDependencies": {
@@ -71,6 +73,7 @@
     "@types/morgan": "^1.9.9",
     "@types/nodemailer": "^6.4.15",
     "@types/nodemailer-express-handlebars": "^4.0.5",
+    "@types/ws": "^8.5.12",
     "copyfiles": "^2.4.1",
     "google-auth-library": "^9.9.0",
     "nodemon": "^3.1.0",
