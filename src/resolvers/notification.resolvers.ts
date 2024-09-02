@@ -1,4 +1,4 @@
-import { Resolver, Mutation, Ctx, Arg, Args, Query, Int, UseMiddleware } from 'type-graphql'
+import { Resolver, Mutation, Ctx, Arg, Args, Query, Int, UseMiddleware, Subscription } from 'type-graphql'
 import NotificationModel, { Notification } from '@models/notification.model'
 import { LoadmoreArgs } from '@inputs/query.input'
 import { GraphQLContext } from '@configs/graphQL.config'
@@ -8,6 +8,7 @@ import ShipmentModel from '@models/shipment.model'
 import UserModel from '@models/user.model'
 import { sum } from 'lodash'
 import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
+import { NOTFICATIONS } from 'constants/subscripts'
 
 @Resolver()
 export default class NotificationResolver {
@@ -53,8 +54,12 @@ export default class NotificationResolver {
     }
 
 
-    @Query(() => AdminNotificationCountPayload)
-    @UseMiddleware(AuthGuard(["admin"]))
+    // @PubSub() pubSub: PubSubEnginee
+    // await pubSub.publish('SHIPMENT_UPDATED', shipment)
+
+    // @Query(() => AdminNotificationCountPayload)
+    // @UseMiddleware(AuthGuard(["admin"]))
+    @Subscription(() => AdminNotificationCountPayload, { topics: NOTFICATIONS.GET_MENU_BADGE_COUNT })
     async getAdminNotificationCount(@Ctx() ctx: GraphQLContext): Promise<AdminNotificationCountPayload> {
         const individualCustomer = await UserModel.countDocuments({ status: 'pending', userType: 'individual', userRole: 'customer' }).catch(() => 0)
         // TODO : Business including upgrade request

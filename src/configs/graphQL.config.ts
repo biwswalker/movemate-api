@@ -4,9 +4,9 @@ import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHt
 import { Request, Response } from 'express'
 import { get } from 'lodash'
 import http from 'http'
-import { WebSocketServer } from 'ws'
-import { useServer } from 'graphql-ws/lib/use/ws'
-
+import WebSocket from 'ws';
+import { useServer } from 'graphql-ws/lib/use/ws';
+import { PubSub } from 'graphql-subscriptions';
 import AuthResolver from '@resolvers/auth.resolvers'
 import UserResolver from '@resolvers/user.resolvers'
 import ShipmentResolver from '@resolvers/shipment.resolvers'
@@ -35,7 +35,10 @@ export interface GraphQLContext {
   res: Response
 }
 
+
+const pubSub = new PubSub()
 export async function createGraphQLServer(httpServer: http.Server) {
+
   const schema = await buildSchema({
     resolvers: [
       AuthResolver,
@@ -61,42 +64,28 @@ export async function createGraphQLServer(httpServer: http.Server) {
       BillingPaymentResolver,
       TransactionResolver,
     ],
+    pubSub: pubSub as any,
     authChecker: ({ context }: { context: GraphQLContext }) => {
       const userId = get(context, 'req.userId', '')
       return !!userId
     },
   })
 
+  const wsServer = new WebSocket.Server({ server: httpServer, path: '/subscription' })
+
+  wsServer.on("connection", async (socket, request) => {
+    // socket.close(1008, 'รหัสระบุตัวตนไม่สมบูรณ์');
+    console.log("🧑🏻‍💻 New client connected")
+    socket.on("error", (error) => console.log(`🐞 Error disconnected: ${error}`))
+    socket.on("close", (code, error) => console.log(`❌ Client disconnected: ${code} - ${error}`))
+  })
+
+  useServer({ schema }, wsServer);
+
   const server = new ApolloServer<GraphQLContext>({
     schema,
     plugins: [ApolloServerPluginDrainHttpServer({ httpServer })],
   })
-
-  const wsServer = new WebSocketServer({ server: httpServer, path: '/graphql' })
-  wsServer.on("connection", (ws) => {
-    console.log("🧑🏻‍💻 New client connected")
-
-    // const authHeader = request.headers['authorization'];
-    // const token = authHeader && authHeader.split(' ')[1];
-
-    // if (!token) {
-    //   socket.close(1008, 'Unauthorized');
-    //   return;
-    // }
-
-    // jwt.verify(token, secretKey, (err, user) => {
-    //   if (err) {
-    //     socket.close(1008, 'Unauthorized');
-    //     return;
-    //   }
-    //   // Save the user in the WebSocket connection context
-    //   socket.user = user;
-    // });
-
-    ws.on("close", () => console.log("Client disconnected"))
-  })
-
-  useServer({ schema }, wsServer);
 
   return server
 }
