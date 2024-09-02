@@ -7,7 +7,7 @@ import { generateOTP, generateRef } from '@utils/string.utils'
 import { PaginationArgs } from '@inputs/query.input'
 import { GetOTPArgs } from '@inputs/otp.input'
 import { OTPPaginationPayload } from '@payloads/otp.payloads'
-import { PaginateOptions } from 'mongoose'
+import { FilterQuery, PaginateOptions } from 'mongoose'
 import { reformPaginate } from '@utils/pagination.utils'
 
 const DEFUALT_OTP_DURATION = 2
@@ -170,7 +170,11 @@ export default class OTPRequestResolver {
       // Pagination
       const pagination: PaginateOptions = reformPaginate(paginate)
 
-      const otps = (await OTPRequstModel.paginate({ phoneNumber: query.phoneNumber }, pagination)) as OTPPaginationPayload
+      const filterQuery: FilterQuery<OTPRequst> = {
+        phoneNumber: query.phoneNumber
+      }
+
+      const otps = (await OTPRequstModel.paginate(filterQuery, pagination)) as OTPPaginationPayload
       if (!otps) {
         const message = `ไม่พบข้อมูล OTP`
         throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })

@@ -13,7 +13,7 @@ import UserModel, { User } from "@models/user.model";
 import { GetUserArgs } from "@inputs/user.input";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
-import { find, get, includes, isArray, isEmpty, isEqual, map, omit, omitBy, reduce } from "lodash";
+import { find, get, includes, isArray, isEmpty, isEqual, map, omit, omitBy, pick, reduce } from "lodash";
 import { RequireDataBeforePayload, UserPaginationAggregatePayload } from "@payloads/user.payloads";
 import { PaginateOptions } from "mongoose";
 import { PaginationArgs } from "@inputs/query.input";
@@ -115,7 +115,8 @@ export default class UserResolver {
   @UseMiddleware(AuthGuard(["customer", "admin", "driver"]))
   async getUser(@Args() data: GetUserArgs): Promise<User> {
     try {
-      const user = await UserModel.findOne(data);
+      const filter = pick(data, ['_id', 'userNumber', 'userRole', 'userType', 'username', 'status', 'validationStatus', 'registration', 'lastestOTP', 'lastestOTPRef', 'isVerifiedEmail', 'isVerifiedPhoneNumber'])
+      const user = await UserModel.findOne(filter);
       if (!user) {
         const message = `ไม่พบผู้ใช้`;
         throw new GraphQLError(message, {

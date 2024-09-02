@@ -167,7 +167,7 @@ export default class PricingResolver {
 
       await AdditionalServiceCostPricingModel.deleteMany({
         _id: { $nin: serviceIds },
-        vehicleCost: id, // TODO: Recheck again
+        // vehicleCost: id, // TODO: Recheck again
       });
 
       return true;

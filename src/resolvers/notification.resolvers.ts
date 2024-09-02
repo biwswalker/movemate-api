@@ -1,4 +1,4 @@
-import { Resolver, Mutation, Ctx, Arg, Args, Query, Int, UseMiddleware, Subscription } from 'type-graphql'
+import { Resolver, Mutation, Ctx, Arg, Args, Query, Int, UseMiddleware, Subscription, Root } from 'type-graphql'
 import NotificationModel, { Notification } from '@models/notification.model'
 import { LoadmoreArgs } from '@inputs/query.input'
 import { GraphQLContext } from '@configs/graphQL.config'
@@ -6,9 +6,10 @@ import { AuthGuard } from '@guards/auth.guards'
 import { AdminNotificationCountPayload } from '@payloads/notification.payloads'
 import ShipmentModel from '@models/shipment.model'
 import UserModel from '@models/user.model'
-import { sum } from 'lodash'
 import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
-import { NOTFICATIONS } from 'constants/subscripts'
+import pubsub, { NOTFICATIONS } from '@configs/pubsub'
+import { sum } from 'lodash'
+
 
 @Resolver()
 export default class NotificationResolver {
@@ -53,23 +54,15 @@ export default class NotificationResolver {
         return true;
     }
 
+    async getAdminMenuNotificationCount(): Promise<AdminNotificationCountPayload> {
+        const individualCustomer = await UserModel.countDocuments({ status: 'pending', userType: 'individual', userRole: 'customer' }).catch(() => 0);
+        const businessCustomer = await UserModel.countDocuments({ status: 'pending', userType: 'business', userRole: 'customer' }).catch(() => 0);
+        const individualDriver = await UserModel.countDocuments({ status: 'pending', userType: 'individual', userRole: 'driver' }).catch(() => 0);
+        const businessDriver = await UserModel.countDocuments({ status: 'pending', userType: 'business', userRole: 'driver' }).catch(() => 0);
+        const shipment = await ShipmentModel.countDocuments({ $or: [{ status: 'idle' }, { status: 'refund' }] }).catch(() => 0);
+        const financial = await BillingCycleModel.countDocuments({ billingStatus: { $in: [EBillingStatus.VERIFY, EBillingStatus.OVERDUE, EBillingStatus.REFUND] } }).catch(() => 0);
 
-    // @PubSub() pubSub: PubSubEnginee
-    // await pubSub.publish('SHIPMENT_UPDATED', shipment)
-
-    // @Query(() => AdminNotificationCountPayload)
-    // @UseMiddleware(AuthGuard(["admin"]))
-    @Subscription(() => AdminNotificationCountPayload, { topics: NOTFICATIONS.GET_MENU_BADGE_COUNT })
-    async getAdminNotificationCount(@Ctx() ctx: GraphQLContext): Promise<AdminNotificationCountPayload> {
-        const individualCustomer = await UserModel.countDocuments({ status: 'pending', userType: 'individual', userRole: 'customer' }).catch(() => 0)
-        // TODO : Business including upgrade request
-        const businessCustomer = await UserModel.countDocuments({ status: 'pending', userType: 'business', userRole: 'customer' }).catch(() => 0)
-        const individualDriver = await UserModel.countDocuments({ status: 'pending', userType: 'individual', userRole: 'driver' }).catch(() => 0)
-        const businessDriver = await UserModel.countDocuments({ status: 'pending', userType: 'business', userRole: 'driver' }).catch(() => 0)
-        const shipment = await ShipmentModel.countDocuments({ $or: [{ status: 'idle' }, { status: 'refund' }] }).catch(() => 0)
-        const financial = await BillingCycleModel.countDocuments({ billingStatus: { $in: [EBillingStatus.VERIFY, EBillingStatus.OVERDUE, EBillingStatus.REFUND] } }).catch(() => 0)
-
-        return {
+        const payload: AdminNotificationCountPayload = {
             customer: sum([individualCustomer, businessCustomer]),
             individualCustomer,
             businessCustomer,
@@ -78,7 +71,25 @@ export default class NotificationResolver {
             businessDriver,
             shipment,
             financial,
-        }
+        };
+        await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, payload);
+
+        return payload
     }
 
+    @Mutation(() => Boolean)
+    @UseMiddleware(AuthGuard(["admin"]))
+    async triggerAdminMenuNotificationCount(): Promise<boolean> {
+        await this.getAdminMenuNotificationCount()
+        return true
+    }
+
+    /**
+     * 
+     * @returns https://typegraphql.com/docs/subscriptions.html
+     */
+    @Subscription({ topics: NOTFICATIONS.GET_MENU_BADGE_COUNT })
+    getAdminNotificationCount(@Root() payload: AdminNotificationCountPayload): AdminNotificationCountPayload {
+        return payload
+    }
 }

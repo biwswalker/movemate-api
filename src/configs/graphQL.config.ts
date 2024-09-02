@@ -6,7 +6,8 @@ import { get } from 'lodash'
 import http from 'http'
 import WebSocket from 'ws';
 import { useServer } from 'graphql-ws/lib/use/ws';
-import { PubSub } from 'graphql-subscriptions';
+import pubSub from './pubsub'
+
 import AuthResolver from '@resolvers/auth.resolvers'
 import UserResolver from '@resolvers/user.resolvers'
 import ShipmentResolver from '@resolvers/shipment.resolvers'
@@ -35,8 +36,6 @@ export interface GraphQLContext {
   res: Response
 }
 
-
-const pubSub = new PubSub()
 export async function createGraphQLServer(httpServer: http.Server) {
 
   const schema = await buildSchema({
@@ -64,7 +63,7 @@ export async function createGraphQLServer(httpServer: http.Server) {
       BillingPaymentResolver,
       TransactionResolver,
     ],
-    pubSub: pubSub as any,
+    pubSub,
     authChecker: ({ context }: { context: GraphQLContext }) => {
       const userId = get(context, 'req.userId', '')
       return !!userId
@@ -84,7 +83,15 @@ export async function createGraphQLServer(httpServer: http.Server) {
 
   const server = new ApolloServer<GraphQLContext>({
     schema,
-    plugins: [ApolloServerPluginDrainHttpServer({ httpServer })],
+    plugins: [ApolloServerPluginDrainHttpServer({ httpServer }), {
+      async serverWillStart() {
+        return {
+          async drainServer() {
+            wsServer.close();
+          }
+        };
+      }
+    }],
   })
 
   return server

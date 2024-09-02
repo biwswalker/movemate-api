@@ -18,6 +18,7 @@
       "@validations/*": ["validations/*"],
       "@pipelines/*": ["pipelines/*"]
     },
+    "lib": ["ESNext", "ESNext.AsyncIterable"],
     "target": "es6",
     "module": "Node16",
     "outDir": "./dist",
