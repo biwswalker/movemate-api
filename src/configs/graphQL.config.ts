@@ -34,6 +34,7 @@ import TransactionResolver from '@resolvers/transaction.resolvers'
 export interface GraphQLContext {
   req: Request
   res: Response
+  ip: string
 }
 
 export async function createGraphQLServer(httpServer: http.Server) {

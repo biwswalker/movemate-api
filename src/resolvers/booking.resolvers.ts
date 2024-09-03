@@ -11,7 +11,7 @@ import { BusinessCustomer } from '@models/customerBusiness.model'
 import { Types } from 'mongoose'
 import ShipmentModel from '@models/shipment.model'
 import SearchHistoryModel from '@models/searchHistory.model'
-import { getLatestCount } from '@configs/rateLimit'
+import { ELimiterType, getLatestCount } from '@configs/rateLimit'
 
 @Resolver()
 export default class BookingResolver {
@@ -107,11 +107,11 @@ export default class BookingResolver {
     try {
       const calculate = await ShipmentModel.calculate(args)
 
-      const ip = ctx.req.ip
+      const ip = ctx.ip
       const type: TSearchType = 'pricing'
-      const count = await getLatestCount(ip, type)
+      const count = await getLatestCount(ip, ELimiterType.LOCATION)
       const searchHistory = new SearchHistoryModel({
-        ipaddress: ctx.req.ip,
+        ipaddress: ip,
         isCache: false,
         inputRaw: JSON.stringify(args),
         resultRaw: JSON.stringify(calculate),

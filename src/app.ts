@@ -52,6 +52,7 @@ async function server() {
 
   app.engine("hbs", engine({ extname: ".hbs", defaultLayout: false }));
   app.set("view engine", "hbs");
+  app.set('trust proxy', true)
 
   // GrapQL Server
   const server = await createGraphQLServer(httpServer);
@@ -60,7 +61,11 @@ async function server() {
   await server.start();
 
   app.use('/graphql', alllowedCors, express.json({ limit: '10mb' }), expressMiddleware(server, {
-    context: async ({ req, res }) => ({ req, res }),
+    context: async ({ req, res }) => {
+      console.log('x-forwarded-for: ', req.headers['x-forwarded-for'])
+      const clientIp: string = String(req.headers['x-forwarded-for']) || req.socket.remoteAddress || ''
+      return { req, res, ip: clientIp }
+    },
   }))
   app.use("/api/v1", api_v1);
 

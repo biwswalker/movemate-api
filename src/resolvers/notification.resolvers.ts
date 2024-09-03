@@ -10,7 +10,28 @@ import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 import { sum } from 'lodash'
 
+export async function getAdminMenuNotificationCount(): Promise<AdminNotificationCountPayload> {
+    const individualCustomer = await UserModel.countDocuments({ status: 'pending', userType: 'individual', userRole: 'customer' }).catch(() => 0);
+    const businessCustomer = await UserModel.countDocuments({ status: 'pending', userType: 'business', userRole: 'customer' }).catch(() => 0);
+    const individualDriver = await UserModel.countDocuments({ status: 'pending', userType: 'individual', userRole: 'driver' }).catch(() => 0);
+    const businessDriver = await UserModel.countDocuments({ status: 'pending', userType: 'business', userRole: 'driver' }).catch(() => 0);
+    const shipment = await ShipmentModel.countDocuments({ $or: [{ status: 'idle' }, { status: 'refund' }] }).catch(() => 0);
+    const financial = await BillingCycleModel.countDocuments({ billingStatus: { $in: [EBillingStatus.VERIFY, EBillingStatus.OVERDUE, EBillingStatus.REFUND] } }).catch(() => 0);
 
+    const payload: AdminNotificationCountPayload = {
+        customer: sum([individualCustomer, businessCustomer]),
+        individualCustomer,
+        businessCustomer,
+        driver: sum([individualDriver, businessDriver]),
+        individualDriver,
+        businessDriver,
+        shipment,
+        financial,
+    };
+    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, payload);
+
+    return payload
+}
 @Resolver()
 export default class NotificationResolver {
 
@@ -54,33 +75,10 @@ export default class NotificationResolver {
         return true;
     }
 
-    async getAdminMenuNotificationCount(): Promise<AdminNotificationCountPayload> {
-        const individualCustomer = await UserModel.countDocuments({ status: 'pending', userType: 'individual', userRole: 'customer' }).catch(() => 0);
-        const businessCustomer = await UserModel.countDocuments({ status: 'pending', userType: 'business', userRole: 'customer' }).catch(() => 0);
-        const individualDriver = await UserModel.countDocuments({ status: 'pending', userType: 'individual', userRole: 'driver' }).catch(() => 0);
-        const businessDriver = await UserModel.countDocuments({ status: 'pending', userType: 'business', userRole: 'driver' }).catch(() => 0);
-        const shipment = await ShipmentModel.countDocuments({ $or: [{ status: 'idle' }, { status: 'refund' }] }).catch(() => 0);
-        const financial = await BillingCycleModel.countDocuments({ billingStatus: { $in: [EBillingStatus.VERIFY, EBillingStatus.OVERDUE, EBillingStatus.REFUND] } }).catch(() => 0);
-
-        const payload: AdminNotificationCountPayload = {
-            customer: sum([individualCustomer, businessCustomer]),
-            individualCustomer,
-            businessCustomer,
-            driver: sum([individualDriver, businessDriver]),
-            individualDriver,
-            businessDriver,
-            shipment,
-            financial,
-        };
-        await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, payload);
-
-        return payload
-    }
-
     @Mutation(() => Boolean)
     @UseMiddleware(AuthGuard(["admin"]))
     async triggerAdminMenuNotificationCount(): Promise<boolean> {
-        await this.getAdminMenuNotificationCount()
+        await getAdminMenuNotificationCount()
         return true
     }
 

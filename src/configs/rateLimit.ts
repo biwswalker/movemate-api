@@ -2,8 +2,12 @@ import { GraphQLError } from "graphql";
 import { REPONSE_NAME } from "constants/status";
 import redis from "./redis";
 
-async function rateLimiter(ip: string, _type: TSearchType, RATE_LIMIT = 10) {
-    const redisKey = `rate-limit:${ip}`
+export enum ELimiterType {
+    LOCATION = 'location-search'
+}
+
+async function rateLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 10) {
+    const redisKey = `${_type}:${ip}` // Generate Key
 
     const currentCount = await redis.get(redisKey)
     const count = currentCount ? parseInt(currentCount, 10) : 0
@@ -28,8 +32,8 @@ async function rateLimiter(ip: string, _type: TSearchType, RATE_LIMIT = 10) {
     return { count, limit: RATE_LIMIT }
 }
 
-async function getLatestCount(ip: string, _type: TSearchType) {
-    const redisKey = `rate-limit:${ip}`
+async function getLatestCount(ip: string, _type: ELimiterType) {
+    const redisKey = `${_type}:${ip}` // Generate Key
     const currentCount = await redis.get(redisKey)
     const count = currentCount ? parseInt(currentCount, 10) : 0
     return count

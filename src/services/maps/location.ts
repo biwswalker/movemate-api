@@ -14,7 +14,7 @@ import logger from '@configs/logger'
 import { LocationInput } from '@inputs/location.input'
 import SearchHistoryModel, { SearchHistory } from '@models/searchHistory.model'
 import { GraphQLContext } from '@configs/graphQL.config'
-import { rateLimiter, getLatestCount } from '@configs/rateLimit'
+import { rateLimiter, getLatestCount, ELimiterType } from '@configs/rateLimit'
 
 const removePlusCode = (formattedAddress: string) => {
     if (formattedAddress) {
@@ -54,13 +54,13 @@ export async function getAutocomplete(
     // Get cache
     const inputString = JSON.stringify({ query, latitude, longitude, session })
     const userId = ctx.req.user_id
-    const ip = ctx.req.ip
+    const ip = ctx.ip
     const limit = ctx.req.limit
     const cacheType = 'places'
     const key = `${query}:${latitude}:${longitude}`
     const cached = await loadCache(cacheType, key)
     if (cached) {
-        const count = await getLatestCount(ip, cacheType)
+        const count = await getLatestCount(ip, ELimiterType.LOCATION)
         await saveSearchingLog({
             ipaddress: ip,
             isCache: true,
@@ -76,7 +76,7 @@ export async function getAutocomplete(
     }
 
     // Limit check
-    const { count } = await rateLimiter(ip, cacheType, limit)
+    const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit)
 
     const request = {
         input: query,
@@ -127,14 +127,14 @@ export async function getPlaceLocationDetail(ctx: GraphQLContext, placeId: strin
     // Get cache
     const inputString = JSON.stringify({ placeId, session })
     const userId = ctx.req.user_id
-    const ip = ctx.req.ip
+    const ip = ctx.ip
     const limit = ctx.req.limit
     const cacheType = 'place-detail'
     const cached = await loadCache(cacheType, placeId)
     // move this to inside cache when limit
-    const count = await getLatestCount(ip, cacheType)
+    const count = await getLatestCount(ip, ELimiterType.LOCATION)
     if (cached) {
-        const count = await getLatestCount(ip, cacheType)
+        // const count = await getLatestCount(ip, ELimiterType.LOCATION)
         await saveSearchingLog({
             ipaddress: ip,
             isCache: true,
@@ -192,14 +192,14 @@ export async function getPlaceLocationDetail(ctx: GraphQLContext, placeId: strin
 export async function getGeocode(ctx: GraphQLContext, latitude: number, longitude: number, session?: string) {
     // Get cache
     const inputString = JSON.stringify({ latitude, longitude, session })
-    const ip = ctx.req.ip
+    const ip = ctx.ip
     const limit = ctx.req.limit
     const userId = ctx.req.user_id
     const cacheType = 'geocode'
     const key = `${latitude}:${longitude}`
     const cached = await loadCache(cacheType, key)
     if (cached) {
-        const count = await getLatestCount(ip, cacheType)
+        const count = await getLatestCount(ip, ELimiterType.LOCATION)
         await saveSearchingLog({
             ipaddress: ip,
             isCache: true,
@@ -215,7 +215,7 @@ export async function getGeocode(ctx: GraphQLContext, latitude: number, longitud
     }
 
     // Limit check
-    const { count } = await rateLimiter(ip, cacheType, limit)
+    const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit)
 
     const response = await axios.get<google.maps.GeocoderResponse>(GOOGLEAPI_GEOCODE, {
         params: {

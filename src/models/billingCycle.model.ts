@@ -30,6 +30,8 @@ import { IsEnum } from 'class-validator'
 import RefundModel, { Refund } from './refund.model'
 import NotificationModel from './notification.model'
 import { IndividualCustomer } from './customerIndividual.model'
+import pubsub, { NOTFICATIONS } from '@configs/pubsub'
+import { getAdminMenuNotificationCount } from '@resolvers/notification.resolvers'
 
 Aigle.mixin(lodash, {})
 
@@ -328,6 +330,9 @@ export class BillingCycle extends TimeStamps {
         await ShipmentModel.markAsCashVerified(shipment._id, 'approve', userId)
       })
 
+      // Trigger admin notification
+      await getAdminMenuNotificationCount()
+
       // TODO: Recheck again
       // const customerId = get(billingCycle, 'user._id', '')
       // if (customerId) {
@@ -390,6 +395,9 @@ export class BillingCycle extends TimeStamps {
         // Update Shipment model
         await ShipmentModel.markAsCashVerified(shipment._id, 'reject', userId, reason, otherReason)
       })
+
+      // Trigger admin notification
+      await getAdminMenuNotificationCount()
     }
   }
 

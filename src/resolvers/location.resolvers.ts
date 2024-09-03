@@ -1,4 +1,4 @@
-import { Resolver, Query, UseMiddleware, Arg, Args, Ctx } from 'type-graphql'
+import { Resolver, Query, UseMiddleware, Arg, Args, Ctx, Int } from 'type-graphql'
 import { AllowGuard } from '@guards/auth.guards'
 import { getAutocomplete, getGeocode, getPlaceLocationDetail, getRoute } from '@services/maps/location'
 import logger from '@configs/logger'
@@ -10,6 +10,7 @@ import { get } from 'lodash'
 import { Marker } from '@models/marker.model'
 import { GraphQLContext } from '@configs/graphQL.config'
 import { DirectionsResultPayload } from '@payloads/direction.payloads'
+import { ELimiterType, rateLimiter } from '@configs/rateLimit'
 
 const handlePlaceError = (error: any, apiName: string) => {
     if (error instanceof AxiosError) {
@@ -44,6 +45,7 @@ export default class LocationResolver {
     @UseMiddleware(AllowGuard)
     async searchLocations(@Args() { query, latitude = 13.6693446, longitude = 100.6058064 }: SearchLocationsArgs, @Ctx() ctx: GraphQLContext): Promise<LocationAutocomplete[]> {
         // UUIDv4 generate form client
+        console.log('----- search ip -----', ctx.ip)
         const sessionId = ctx.req.headers['x-location-session']
         if (!sessionId || typeof sessionId !== 'string') { throw new GraphQLError('session token are required') }
         try {
@@ -96,4 +98,12 @@ export default class LocationResolver {
             throw new GraphQLError(error.message)
         }
     }
+
+    @Query(() => Int)
+    async getLimiterBeforeGetDirection(@Ctx() ctx: GraphQLContext): Promise<number> {
+        const { count } = await rateLimiter(ctx.ip, ELimiterType.LOCATION, ctx.req.limit)
+        return count
+    }
+
+    // TODO: Subscript / Initial data / public
 }
