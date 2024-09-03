@@ -23,7 +23,7 @@ export default class BookingResolver {
       let isBusinessCreditUser = false
       if (isAuthorized) {
         const user = await UserModel.findById(ctx.req.user_id)
-        if (user.userType === 'business') {
+        if (user && user.userType === 'business') {
           const businessCustomer = user.businessDetail as BusinessCustomer | undefined
           const isCredit = businessCustomer.paymentMethod === 'credit'
           isBusinessCreditUser = isCredit

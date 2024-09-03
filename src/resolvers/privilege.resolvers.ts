@@ -1,5 +1,5 @@
 import { GraphQLContext } from '@configs/graphQL.config'
-import { AuthGuard } from '@guards/auth.guards'
+import { AllowGuard, AuthGuard } from '@guards/auth.guards'
 import { GetPrivilegesArgs, PrivilegeInput } from '@inputs/privilege.input'
 import { PaginationArgs } from '@inputs/query.input'
 import PrivilegeModel, { Privilege } from '@models/privilege.model'
@@ -124,7 +124,7 @@ export default class PrivilegeResolver {
     }
   }
   @Query(() => [PrivilegeUsedPayload])
-  @UseMiddleware(AuthGuard(['admin', 'customer']))
+  @UseMiddleware(AllowGuard)
   async searchPrivilegeByCode(@Arg('code') code: string, @Ctx() ctx: GraphQLContext): Promise<PrivilegeUsedPayload[]> {
     const user_id = ctx.req.user_id
     try {
