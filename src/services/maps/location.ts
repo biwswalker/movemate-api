@@ -59,8 +59,9 @@ export async function getAutocomplete(
     const cacheType = 'places'
     const key = `${query}:${latitude}:${longitude}`
     const cached = await loadCache(cacheType, key)
+    const count = await getLatestCount(ip, ELimiterType.LOCATION)
     if (cached) {
-        const count = await getLatestCount(ip, ELimiterType.LOCATION)
+        // const count = await getLatestCount(ip, ELimiterType.LOCATION)
         await saveSearchingLog({
             ipaddress: ip,
             isCache: true,
@@ -76,8 +77,7 @@ export async function getAutocomplete(
     }
 
     // Limit check
-    const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit)
-
+    // const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit)
     const request = {
         input: query,
         regionCode: 'th',
@@ -131,10 +131,8 @@ export async function getPlaceLocationDetail(ctx: GraphQLContext, placeId: strin
     const limit = ctx.req.limit
     const cacheType = 'place-detail'
     const cached = await loadCache(cacheType, placeId)
-    // move this to inside cache when limit
-    const count = await getLatestCount(ip, ELimiterType.LOCATION)
     if (cached) {
-        // const count = await getLatestCount(ip, ELimiterType.LOCATION)
+        const count = await getLatestCount(ip, ELimiterType.LOCATION)
         await saveSearchingLog({
             ipaddress: ip,
             isCache: true,
@@ -148,7 +146,8 @@ export async function getPlaceLocationDetail(ctx: GraphQLContext, placeId: strin
         logger.info('Cache hit for locationMarker')
         return cached
     }
-    // ------
+    // Limit check
+    const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit)
 
     const params = { languageCode: 'th', regionCode: 'th', fields: '*', ...(session ? { sessionToken: session } : {}) }
     const headers = { 'X-Goog-Api-Key': process.env.GOOGLE_MAP_API_KEY }
@@ -252,7 +251,12 @@ export async function getGeocode(ctx: GraphQLContext, latitude: number, longitud
     return marker
 }
 
-// TODO: Can not using with Client
+/**
+ * @deprecated TODO: Can not using with Client || Rewrite and recheck response, 
+ * @param origin 
+ * @param destinations 
+ * @returns 
+ */
 export async function getRoute(origin: LocationInput, destinations: LocationInput[]) {
     // Get cache
     const cacheType = 'routes'
@@ -293,7 +297,12 @@ export async function getRoute(origin: LocationInput, destinations: LocationInpu
     return data
 }
 
-// Unused
+/**
+ * @deprecated TODO: Can not using with Client || Rewrite and recheck response
+ * @param origin 
+ * @param destinations 
+ * @returns 
+ */
 export async function getRouteCompute(origin: LocationInput, destinations: LocationInput[]) {
     const waypoints = destinations.slice(0, -1)
     const destination = destinations[destinations.length - 1]

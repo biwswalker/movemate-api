@@ -7,20 +7,28 @@ export enum ELimiterType {
   LOCATION = 'location-search',
 }
 
-async function rateLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 10) {
+export async function verifyRequestLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 10) {
   const redisKey = `${_type}:${ip}` // Generate Key
 
   const currentCount = await redis.get(redisKey)
   const count = currentCount ? parseInt(currentCount, 10) : 0
 
+  console.log(currentCount, count, RATE_LIMIT)
   if (count >= RATE_LIMIT) {
     const message = `การค้นหาราคาถูกจำกัดเนื่องจาก ท่านได้ค้นหาราคาเกินจำนวนที่กำหนดและไม่ได้มีการใช้บริการ ท่านจะสามารถใช้งานได้อีกครั้งในวันถัดไป`
     throw new GraphQLError(message, {
       extensions: { code: REPONSE_NAME.SEARCH_LIMIT, errors: [{ message }] },
     })
   }
+}
 
-  await redis.incr(redisKey)
+export async function rateLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 10) {
+  const redisKey = `${_type}:${ip}` // Generate Key
+
+  const currentCount = await redis.get(redisKey)
+  const count = currentCount ? parseInt(currentCount, 10) : 0
+
+  const newCount = await redis.incr(redisKey)
 
   if (!currentCount) {
     const now = new Date()
@@ -31,16 +39,20 @@ async function rateLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 10) {
   }
 
   // TODO: Sent only user
-  await pubsub.publish(LOCATIONS.REQUEST_LIMIT, { count, limit: RATE_LIMIT })
+  await pubsub.publish(LOCATIONS.REQUEST_LIMIT, { count: newCount, limit: RATE_LIMIT === Infinity ? -1 : RATE_LIMIT }) // -1 mean infinity
 
   return { count, limit: RATE_LIMIT }
 }
 
-async function getLatestCount(ip: string, _type: ELimiterType) {
+export async function getLatestCount(ip: string, _type: ELimiterType) {
   const redisKey = `${_type}:${ip}` // Generate Key
   const currentCount = await redis.get(redisKey)
   const count = currentCount ? parseInt(currentCount, 10) : 0
   return count
 }
 
-export { rateLimiter, getLatestCount }
+export async function clearLimiter(ip: string, _type: ELimiterType) {
+  const redisKey = `${_type}:${ip}` // Generate Key
+  redis.set(redisKey, 0)
+}
+

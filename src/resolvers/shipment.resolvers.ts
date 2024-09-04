@@ -29,7 +29,7 @@ import { SHIPMENT_LIST } from '@pipelines/shipment.pipeline'
 import { format, parse } from 'date-fns'
 import { th } from 'date-fns/locale'
 import BillingCycleModel, { EBillingStatus, generateInvoice } from '@models/billingCycle.model'
-import path from 'path'
+import { clearLimiter, ELimiterType } from '@configs/rateLimit'
 
 Aigle.mixin(lodash, {})
 
@@ -494,6 +494,9 @@ export default class ShipmentResolver {
 
       const response = await ShipmentModel.findById(shipment._id)
       await response.initialStepDefinition()
+
+      // Clear redis seach limiter
+      await clearLimiter(ctx.ip, ELimiterType.LOCATION)
 
       // Notification
       const notiTitle = isCashPaymentMethod ? 'การจองของท่านอยู่ระหว่างการยืนยัน' : 'การจองของท่านรอคนขับตอบรับ'

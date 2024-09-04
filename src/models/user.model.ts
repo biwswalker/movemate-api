@@ -29,14 +29,14 @@ export enum EUserType {
 }
 
 export enum EUserStatus {
-  PENDING = "pending",
+  PENDING = "pending", // Need to Verify
   ACTIVE = "active",
   INACTIVE = "inactive",
   BANNED = "banned",
   DENIED = "denied",
 }
 
-enum EUserValidationStatus {
+export enum EUserValidationStatus {
   PENDING = "pending",
   APPROVE = "approve",
   DENIED = "denied",

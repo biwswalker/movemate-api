@@ -62,8 +62,8 @@ async function server() {
 
   app.use('/graphql', alllowedCors, express.json({ limit: '10mb' }), expressMiddleware(server, {
     context: async ({ req, res }) => {
-      console.log('x-forwarded-for: ', req.headers['x-forwarded-for'])
-      const clientIp: string = String(req.headers['x-forwarded-for']) || req.socket.remoteAddress || ''
+      const clientIp: string = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')
+      console.log('x-forwarded-for: ', clientIp)
       return { req, res, ip: clientIp }
     },
   }))

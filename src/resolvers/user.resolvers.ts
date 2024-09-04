@@ -9,7 +9,7 @@ import {
   Mutation,
   InvalidDirectiveError,
 } from "type-graphql";
-import UserModel, { User } from "@models/user.model";
+import UserModel, { EUserStatus, EUserValidationStatus, User } from "@models/user.model";
 import { GetUserArgs } from "@inputs/user.input";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
@@ -506,8 +506,8 @@ export default class UserResolver {
           // Update user
           const newBusinessDetail = user.userType === 'individual' ? {
             upgradeRequest: null,
-            validationStatus: 'pending',
-            status: 'active'
+            validationStatus: EUserValidationStatus.PENDING,
+            status: EUserStatus.ACTIVE
           } : {}
 
           const sentemail = user.userType === 'individual' ? individualDetail.email : businesData.businessEmail

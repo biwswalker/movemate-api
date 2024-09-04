@@ -58,9 +58,9 @@ export class VehicleType extends TimeStamps {
   @Property({ required: true })
   maxCapacity: number;
 
-  @Field(() => Int)
+  @Field(() => Int, { defaultValue: 3, nullable: true })
   @Property({ required: true, default: 3 })
-  maxDroppoint: number;
+  maxDroppoint: number = 3;
 
   @Field(() => File)
   @Property({ autopopulate: true, ref: 'File' })

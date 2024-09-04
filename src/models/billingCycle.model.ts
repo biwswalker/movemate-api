@@ -556,6 +556,10 @@ export async function checkBillingStatus() {
 
   await Aigle.forEach(overdueBillingCycles, async (overdueBill) => {
     await overdueBill.updateOne({ billingStatus: EBillingStatus.OVERDUE })
+    const customer = await UserModel.findById(overdueBill.user)
+    if (customer) {
+      await customer.updateOne({ status: EUserStatus.INACTIVE })
+    }
   })
 
   /**

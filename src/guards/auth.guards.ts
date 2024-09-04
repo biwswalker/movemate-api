@@ -1,7 +1,7 @@
 import { AuthenticationError, MiddlewareFn } from "type-graphql";
 import { verifyAccessToken } from "@utils/auth.utils";
 import { GraphQLContext } from "@configs/graphQL.config";
-import UserModel, { User } from "@models/user.model";
+import UserModel, { EUserType } from "@models/user.model";
 import { NextFunction, Request, Response } from "express";
 import { TokenExpiredError } from "jsonwebtoken";
 import { get, includes } from "lodash";
@@ -36,8 +36,10 @@ export const AuthGuard: (roles?: TUserRole[]) => MiddlewareFn<GraphQLContext> =
           );
         }
 
-        const userType = get(user, 'userType', '')
-        const limit = userType === 'business' ? Infinity : userType === 'individual' ? 20 : 10
+        const limit = user.userType === EUserType.BUSINESS
+          ? Infinity
+          : user.userType === EUserType.INDIVIDUAL
+            ? 20 : 10
         req.user_id = user_id;
         req.user_role = user_role;
         req.limit = limit
@@ -71,8 +73,10 @@ export const AllowGuard: MiddlewareFn<GraphQLContext> = async (
         const user_role = decodedToken.user_role;
         const user = await UserModel.findById(user_id).lean()
 
-        const userType = get(user, 'userType', '')
-        const limit = userType === 'business' ? Infinity : userType === 'individual' ? 20 : 10
+        const limit = user.userType === EUserType.BUSINESS
+          ? Infinity
+          : user.userType === EUserType.INDIVIDUAL
+            ? 20 : 10
         req.user_id = user_id;
         req.user_role = user_role;
         req.limit = limit

@@ -1,5 +1,5 @@
 import { Resolver, Mutation, Arg, Ctx, UseMiddleware } from "type-graphql";
-import UserModel, { User } from "@models/user.model";
+import UserModel, { EUserRole, EUserStatus, EUserType, EUserValidationStatus, User } from "@models/user.model";
 import CustomerIndividualModel from "@models/customerIndividual.model";
 import BusinessCustomerModel from "@models/customerBusiness.model";
 import BusinessCustomerCashPaymentModel from "@models/customerBusinessCashPayment.model";
@@ -99,19 +99,20 @@ export default class RegisterResolver {
       const emailTranspoter = email_sender();
 
       // Exist email
-      const email = isEqual(userType, "individual")
+      // TODO: Refactor
+      const email = isEqual(userType, EUserType.INDIVIDUAL)
         ? get(individualDetail, "email", "")
         : isEqual(userType, "business")
           ? get(businessDetail, "businessEmail", "")
           : "";
       const emailFieldName =
-        userType === "individual" ? "email" : "businessEmail";
+        userType === EUserType.INDIVIDUAL ? "email" : "businessEmail";
       await this.isExistingEmail(email, emailFieldName);
 
       /**
        * Individual Customer Register
        */
-      if (userType === "individual" && individualDetail) {
+      if (userType === EUserType.INDIVIDUAL && individualDetail) {
         const password_decryption = decryption(password)
         const hashedPassword = await bcrypt.hash(password_decryption, 10);
         const userNumber = await generateId("MMIN", userType);
@@ -125,9 +126,9 @@ export default class RegisterResolver {
         await individualCustomer.save();
 
         const user = new UserModel({
-          userRole: "customer",
-          status: 'active',
-          validationStatus: 'pending',
+          userRole: EUserRole.CUSTOMER,
+          status: EUserStatus.ACTIVE,
+          validationStatus: EUserValidationStatus.DENIED,
           userNumber,
           userType,
           username: individualDetail.email,
@@ -200,8 +201,8 @@ export default class RegisterResolver {
           const user = new UserModel({
             userNumber,
             userType,
-            status: 'pending',
-            validationStatus: 'pending',
+            status: EUserStatus.PENDING,
+            validationStatus: EUserValidationStatus.PENDING,
             username: userNumber,
             password: hashedPassword,
             remark,
@@ -350,8 +351,8 @@ export default class RegisterResolver {
             userType,
             username: userNumber,
             password: hashedPassword,
-            status: 'pending',
-            validationStatus: 'pending',
+            status: EUserStatus.PENDING,
+            validationStatus: EUserValidationStatus.PENDING,
             remark,
             registration: platform,
             isVerifiedEmail: false,
