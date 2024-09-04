@@ -38,10 +38,11 @@ export async function rateLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 
     await redis.expire(redisKey, ttl)
   }
 
+  const limit = RATE_LIMIT === Infinity ? -1 : RATE_LIMIT // -1 mean infinity
   // TODO: Sent only user
-  await pubsub.publish(LOCATIONS.REQUEST_LIMIT, { count: newCount, limit: RATE_LIMIT === Infinity ? -1 : RATE_LIMIT }) // -1 mean infinity
+  await pubsub.publish(LOCATIONS.REQUEST_LIMIT, { count: newCount, limit })
 
-  return { count, limit: RATE_LIMIT }
+  return { count, limit }
 }
 
 export async function getLatestCount(ip: string, _type: ELimiterType) {
