@@ -41,7 +41,7 @@ import SettingDriverPoliciesModel from "@models/settingDriverPolicies.model";
 import { VerifyPayload } from "@payloads/verify.payloads";
 import { addMinutes, addSeconds } from "date-fns";
 import { decryption } from "@utils/encryption";
-import NotificationModel from "@models/notification.model";
+import NotificationModel, { ENotificationVarient } from "@models/notification.model";
 import { fDateTime } from "@utils/formatTime";
 import { IndividualDriver } from "@models/driverIndividual.model";
 
@@ -475,7 +475,7 @@ export default class UserResolver {
             });
             await NotificationModel.sendNotification({
               userId: user._id,
-              varient: 'success',
+              varient: ENotificationVarient.SUCCESS,
               title: 'บัญชีของท่านได้รับการอัพเกรดแล้ว',
               message: [`บัญชี ${userNumber} ได้อัพเกรดเป็นรูปแบบ corporate แล้ว ท่านสามารถใช้งานได้ในขณะนี้`],
               infoText: 'ดูโปรไฟล์',
@@ -528,7 +528,7 @@ export default class UserResolver {
           if (user.userType === 'individual') {
             await NotificationModel.sendNotification({
               userId: user._id,
-              varient: 'error',
+              varient: ENotificationVarient.ERROR,
               title: 'การอัพเกรดบัญชีไม่ได้รับการอนุมัติ',
               message: [`บัญชี ${businesData.businessName} ไม่ผ่านพิจารณาการอัพเกรดเป็นรูปแบบ corporate หากมีข้อสงสัยโปรดติดต่อเรา`],
             })
@@ -544,7 +544,7 @@ export default class UserResolver {
           const messages = result === 'approve' ? ['ขอแสดงความยินดีด้วย', 'บัญชีของท่านได้รับการอนุมัติเป็นคนขับของ Movemate หากมีข้อสงสัยโปรดติดต่อเรา'] : [`บัญชี ${individualDriver.fullname} ไม่ผ่านพิจารณาคนขับ Movemvate หากมีข้อสงสัยโปรดติดต่อเรา`]
           await NotificationModel.sendNotification({
             userId: user._id,
-            varient: result === 'approve' ? 'success' : 'error',
+            varient: result === 'approve' ? ENotificationVarient.SUCCESS : ENotificationVarient.ERROR,
             title: title,
             message: messages,
           })
@@ -831,7 +831,7 @@ export default class UserResolver {
         const currentTime = fDateTime(new Date())
         await NotificationModel.sendNotification({
           userId: user._id,
-          varient: 'master',
+          varient: ENotificationVarient.MASTER,
           title: 'เปลี่ยนรหัสผ่านบัญชีสำเร็จ',
           message: [`บัญชีของท่านถูกเปลี่ยนรหัสผ่านเมื่อเวลา ${currentTime} หากมีข้อสงสัยโปรดติดต่อเรา`],
         })

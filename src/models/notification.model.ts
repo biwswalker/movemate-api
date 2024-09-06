@@ -4,12 +4,26 @@ import { Field, ObjectType, ID } from 'type-graphql'
 import UserModel from './user.model'
 import { LoadmoreArgs } from '@inputs/query.input'
 
-enum ENotificationVarient {
+export enum ENotificationVarient {
     INFO = 'info',
     ERROR = 'error',
-    WRANING = 'wraning',
+    WRANING = 'warning',
     SUCCESS = 'success',
     MASTER = 'master'
+}
+
+interface INotification {
+    userId: string
+    varient: ENotificationVarient
+    title: string
+    message: string[]
+    infoText?: string
+    infoLink?: string
+    errorText?: string
+    errorLink?: string
+    masterText?: string
+    masterLink?: string
+    read?: boolean
 }
 
 @ObjectType()
@@ -23,7 +37,7 @@ export class Notification extends TimeStamps {
 
     @Field()
     @Property({ enum: ENotificationVarient, default: ENotificationVarient.INFO })
-    varient: TNotificationVarient
+    varient: ENotificationVarient
 
     @Field()
     @Property({ required: true })

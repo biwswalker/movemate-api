@@ -11,7 +11,7 @@ import { IndividualDriverScema } from "@validations/driver.validations";
 import { verifyOTP } from "./otp.resolvers";
 import IndividualDriverModel from "@models/driverIndividual.model";
 import DriverDocumentModel from "@models/driverDocument.model";
-import NotificationModel from "@models/notification.model";
+import NotificationModel, { ENotificationVarient } from "@models/notification.model";
 import { ValidationError } from "yup";
 import { yupValidationThrow } from "@utils/error.utils";
 import { IndividualDriverDetailVerifyPayload, RegisterPayload } from "@payloads/driver.payloads";
@@ -149,7 +149,7 @@ export default class DriverResolver {
       // Notification
       await NotificationModel.sendNotification({
         userId: user._id,
-        varient: 'master',
+        varient: ENotificationVarient.MASTER,
         title: 'ยินดีต้อนรับเข้าสู่คนขับ Movemate',
         message: [`ยินดีต้อนรับ คุณ ${individualDriverDetail.fullname} เข้าสู่ทีมขับรถของเรา โปรดรอเจ้าหน้าที่ตรวจสอบบัญชีของท่าน`],
       })

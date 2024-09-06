@@ -5,9 +5,9 @@ import UserModel, { EUserRole, EUserStatus, EUserType, User } from './user.model
 import ShipmentModel, { EShipingStatus, Shipment } from './shipment.model'
 import BillingPaymentModel, { BillingPayment, EBillingPaymentStatus } from './billingPayment.model'
 import { BusinessCustomer } from './customerBusiness.model'
-import { BusinessCustomerCreditPayment } from './customerBusinessCreditPayment.model'
-import lodash, { get, isEmpty, reduce, sum, toNumber, toString, slice, forEach, head, tail, uniq } from 'lodash'
-import { addDays, addMonths, format } from 'date-fns'
+import BusinessCustomerCreditPaymentModel, { BusinessCustomerCreditPayment } from './customerBusinessCreditPayment.model'
+import lodash, { get, isEmpty, reduce, sum, toNumber, toString, slice, forEach, head, tail, uniq, includes } from 'lodash'
+import { addDays, addMonths, differenceInDays, format } from 'date-fns'
 import { EPaymentMethod, EPaymentRejectionReason, Payment } from './payment.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
@@ -28,7 +28,7 @@ import PaymentModel, { EPaymentStatus } from './payment.model'
 import UpdateHistoryModel, { UpdateHistory } from './updateHistory.model'
 import { IsEnum } from 'class-validator'
 import RefundModel, { Refund } from './refund.model'
-import NotificationModel from './notification.model'
+import NotificationModel, { ENotificationVarient } from './notification.model'
 import { IndividualCustomer } from './customerIndividual.model'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 import { getAdminMenuNotificationCount } from '@resolvers/notification.resolvers'
@@ -64,7 +64,7 @@ interface MarkAsRefundProps {
 }
 
 @ObjectType()
-class PostalInvoice {
+export class PostalInvoice {
   @Field()
   @Property({ required: true })
   trackingNumber: string
@@ -75,15 +75,11 @@ class PostalInvoice {
 
   @Field()
   @Property({ required: true })
-  sendedDate: Date
-
-  @Field()
-  @Property({ required: true })
-  sendedTime: Date
-
-  @Field()
-  @Property({ required: true })
   createdDateTime: Date
+
+  @Field()
+  @Property({ required: true })
+  updatedBy: string
 }
 
 @plugin(mongooseAutoPopulate)
@@ -182,7 +178,7 @@ export class BillingCycle extends TimeStamps {
   @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
   history: Ref<UpdateHistory>[]
 
-  @Field()
+  @Field({ nullable: true })
   @Property({ required: false })
   issueInvoiceFilename: string
 
@@ -198,6 +194,7 @@ export class BillingCycle extends TimeStamps {
           const billingDate = get(creditPayment, `billedDate.${format(new Date(), 'MMM').toLowerCase()}`, 1)
           const duedateDate = get(creditPayment, `billedRound.${format(new Date(), 'MMM').toLowerCase()}`, 15)
 
+          // change back
           const billedDate = new Date().setDate(billingDate)
           const shipmentStartDeliveredDate = addMonths(billedDate, -1).setHours(0, 0, 0, 0)
           const shipmentEndDeliveredDate = addDays(billedDate, -1).setHours(23, 59, 59, 999)
@@ -206,10 +203,7 @@ export class BillingCycle extends TimeStamps {
             customer: userId,
             status: EShipingStatus.DELIVERED,
             deliveredDate: { $gte: shipmentStartDeliveredDate, $lte: shipmentEndDeliveredDate },
-          }).populate({
-            path: 'payment',
-            match: { paymentMethod: EPaymentMethod.CREDIT },
-          })
+          }).populate({ path: 'payment', match: { paymentMethod: EPaymentMethod.CREDIT } })
 
           const subTotalAmount = reduce(
             shipments,
@@ -224,14 +218,14 @@ export class BillingCycle extends TimeStamps {
             0,
           )
 
-          let taxAmount = 0
           // Remark: WHT calculate, when > 1000
+          let taxAmount = 0
           if (subTotalAmount > 1000) {
             const wht = 1 / 100
             taxAmount = wht * subTotalAmount
           }
 
-          const totalAmount = sum([subTotalAmount, taxAmount])
+          const totalAmount = sum([subTotalAmount, -taxAmount])
 
           const paymentDueDate = new Date(new Date().setDate(duedateDate)).setHours(23, 59, 59, 999)
 
@@ -253,8 +247,6 @@ export class BillingCycle extends TimeStamps {
           })
 
           await billingCycle.save()
-
-          // TODO: Sent email and notification
         }
       }
     }
@@ -453,7 +445,7 @@ export class BillingCycle extends TimeStamps {
        */
       await NotificationModel.sendNotification({
         userId: billingCycle.user as string,
-        varient: 'info',
+        varient: ENotificationVarient.INFO,
         title: 'การจองของท่านดำเนินคืนยอดชำระแล้ว',
         message: [`เราขอแจ้งให้ท่าทราบว่าใบแจ้งหนี้เลขที่ ${billingCycle.billingNumber} ของท่านดำเนินคืนยอดชำระแล้ว`],
         // infoText: 'ดูการจอง',
@@ -512,7 +504,7 @@ export class BillingCycle extends TimeStamps {
        */
       await NotificationModel.sendNotification({
         userId: billingCycle.user as string,
-        varient: 'info',
+        varient: ENotificationVarient.INFO,
         title: 'การจองของท่านไม่ได้รับการคืนยอดชำระ',
         message: [`เราขอแจ้งให้ท่าทราบว่าใบแจ้งหนี้เลขที่ ${billingCycle.billingNumber} ของท่านไม่ถูกดำเนินคืนยอดชำระ`],
         // infoText: 'ดูการจอง',
@@ -529,6 +521,83 @@ export class BillingCycle extends TimeStamps {
 const BillingCycleModel = getModelForClass(BillingCycle)
 
 export default BillingCycleModel
+
+async function getNearbyDuedateBillingCycle(before: number = 1) {
+  const currentday = addDays(new Date(), before)
+  const today = currentday.setHours(0, 0, 0, 0)
+  const oneDaysLater = currentday.setHours(23, 59, 59, 999)
+  const billingCycles = await BillingCycleModel.find({
+    billingStatus: EBillingStatus.CURRENT,
+    paymentDueDate: {
+      $gte: today, // paymentDueDate หลังจากหรือเท่ากับวันนี้
+      $lte: oneDaysLater // และก่อนหรือเท่ากับในอีก 1 วันข้างหน้า
+    }
+  }).lean()
+
+  return billingCycles
+}
+
+export async function notifyNearby3Duedate() {
+  const billingCycles = await getNearbyDuedateBillingCycle(3)
+  await Aigle.forEach(billingCycles, async (billingCycle) => {
+    await NotificationModel.sendNotification({
+      userId: billingCycle.user as string,
+      varient: ENotificationVarient.WRANING,
+      title: 'ใกล้ครบกำหนดชำระ',
+      message: ['อีก 3 วันจะครบกำหนดชำระค่าบริการ กรุณาเตรียมการชำระเงิน'],
+      infoLink: `/main/billing?billing_number=${billingCycle.billingNumber}`,
+      infoText: 'คลิกเพื่อดูรายละเอียด',
+    })
+  })
+}
+
+export async function notifyNearby1Duedate() {
+  const billingCycles = await getNearbyDuedateBillingCycle(1)
+  await Aigle.forEach(billingCycles, async (billingCycle) => {
+    await NotificationModel.sendNotification({
+      userId: billingCycle.user as string,
+      varient: ENotificationVarient.WRANING,
+      title: 'ใกล้ครบกำหนดชำระ',
+      message: ['พรุ่งนี้เป็นวันครบกำหนดชำระค่าบริการ กรุณาเตรียมการชำระเงิน'],
+      infoLink: `/main/billing?billing_number=${billingCycle.billingNumber}`,
+      infoText: 'คลิกเพื่อดูรายละเอียด',
+    })
+  })
+}
+
+export async function notifyDuedate() {
+  const billingCycles = await getNearbyDuedateBillingCycle(0)
+  await Aigle.forEach(billingCycles, async (billingCycle) => {
+    await NotificationModel.sendNotification({
+      userId: billingCycle.user as string,
+      varient: ENotificationVarient.WRANING,
+      title: 'ครบกำหนดชำระ',
+      message: ['ครบกำหนดชำระแล้ว กรุณาชำระเงินภายในวันที่กำหนด'],
+      infoLink: `/main/billing?billing_number=${billingCycle.billingNumber}`,
+      infoText: 'คลิกเพื่อดูรายละเอียด',
+    })
+  })
+}
+
+export async function notifyOverdue() {
+  /**
+   * TODO: sent as customer ID
+   */
+  const overdueBillingCycles = await BillingCycleModel.find({ billingStatus: EBillingStatus.OVERDUE }).lean()
+
+  await Aigle.forEach(overdueBillingCycles, async (billingCycle) => {
+    const today = new Date()
+    const overdate = differenceInDays(today.setHours(0, 0, 0, 0), new Date(billingCycle.paymentDueDate).setHours(0, 0, 0, 0))
+    await NotificationModel.sendNotification({
+      userId: billingCycle.user as string,
+      varient: ENotificationVarient.ERROR,
+      title: `บัญชีของท่านค้างชำระ`,
+      message: [`ขณะนี้บัญชีของท่านค้างชำระ และเลยกำหนดชำระมา ${overdate} วัน`],
+      infoLink: `/main/billing?billing_number=${billingCycle.billingNumber}`,
+      infoText: 'คลิกเพื่อดูรายละเอียด',
+    })
+  })
+}
 
 export async function issueBillingCycle() {
   /**
@@ -551,14 +620,16 @@ export async function checkBillingStatus() {
    */
   const overdueBillingCycles = await BillingCycleModel.find({
     billingStatus: EBillingStatus.CURRENT,
-    paymentDueDate: { $lt: today }, // RECHECK AGAIN
+    paymentDueDate: { $lt: today.setHours(0, 0, 0, 0) },
   })
 
   await Aigle.forEach(overdueBillingCycles, async (overdueBill) => {
     await overdueBill.updateOne({ billingStatus: EBillingStatus.OVERDUE })
     const customer = await UserModel.findById(overdueBill.user)
     if (customer) {
-      await customer.updateOne({ status: EUserStatus.INACTIVE })
+      if (!includes([EUserStatus.INACTIVE, EUserStatus.BANNED], customer.status)) {
+        await customer.updateOne({ status: EUserStatus.INACTIVE })
+      }
     }
   })
 
@@ -567,27 +638,54 @@ export async function checkBillingStatus() {
    */
   const suspendedBillingCycles = await BillingCycleModel.find({
     billingStatus: EBillingStatus.OVERDUE,
-    paymentDueDate: { $lt: addDays(today, -16) },
+    paymentDueDate: { $lt: addDays(today, -16).setHours(0, 0, 0, 0) },
   })
 
+  let bannedCustomer = []
   await Aigle.forEach(suspendedBillingCycles, async (suspendedBill) => {
-    await suspendedBill.updateOne({ billingStatus: EBillingStatus.OVERDUE })
+    // await suspendedBill.updateOne({ billingStatus: EBillingStatus.OVERDUE })
     const customer = await UserModel.findById(suspendedBill.user)
     if (customer) {
-      await customer.updateOne({ status: EUserStatus.BANNED })
+      if (customer.status !== EUserStatus.BANNED) {
+        await NotificationModel.sendNotification({
+          userId: customer._id,
+          varient: ENotificationVarient.ERROR,
+          title: `บัญชีของท่านถูกระงับใช้งาน`,
+          message: [`ขณะนี้บัญชีของท่านถูกระงับการใช้งาน เนื่องจากมียอดค้างชำระ กรุณาติดต่อเจ้าหน้าที่`],
+          infoLink: `/main/billing?billing_number=${suspendedBill.billingNumber}`,
+          infoText: 'คลิกเพื่อดูรายละเอียด',
+        })
+        await customer.updateOne({ status: EUserStatus.BANNED })
+        bannedCustomer = [...bannedCustomer, customer._id]
+      }
     }
   })
+
+  // Notify to admin
+  const bannedCustomerUniq = uniq(bannedCustomer)
+  if (!isEmpty(bannedCustomerUniq)) {
+    const admins = await UserModel.find({ userRole: EUserRole.ADMIN, status: EUserStatus.ACTIVE })
+    await Aigle.forEach(admins, async (admin) => {
+      await NotificationModel.sendNotification({
+        userId: admin._id,
+        varient: ENotificationVarient.WRANING,
+        title: `พบบัญชีค้างชำระ`,
+        message: [`พบบัญชีค้างชำระ และถูกระงับใช้งานจำนวน ${bannedCustomerUniq.length} บัญชี`],
+        infoLink: `/management/customer/business`,
+        infoText: 'คลิกเพื่อดูรายละเอียด',
+      })
+    })
+  }
 }
 
 export async function issueEmailToCustomer() {
   const emailTranspoter = email_sender()
 
-  const billingCycles = await BillingCycleModel.find({
-    issueDate: {
-      $gte: new Date(new Date().setHours(0, 0, 0, 0)), // วันนี้
-      $lt: new Date(new Date().setHours(23, 59, 59, 999)), // วันนี้
-    },
-  })
+  const currentDate = new Date()
+  const startRange = currentDate.setHours(0, 0, 0, 0)
+  const endRange = currentDate.setHours(23, 59, 59, 999)
+
+  const billingCycles = await BillingCycleModel.find({ createdAt: { $gte: startRange, $lt: endRange } })
 
   await Aigle.forEach(billingCycles, async (billingCycle) => {
     const customer = await UserModel.findById(billingCycle.user)
@@ -618,7 +716,30 @@ export async function issueEmailToCustomer() {
           },
         ],
       })
+      await BillingCycleModel.findByIdAndUpdate(billingCycle._id, { emailSendedTime: new Date() })
+      console.log(`[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Billing Cycle has sent for ${emails.join(', ')}`)
     }
+  })
+}
+
+export async function notifyIssueEmailToCustomer() {
+  const currentDate = new Date()
+  const startRange = currentDate.setHours(0, 0, 0, 0)
+  const endRange = currentDate.setHours(23, 59, 59, 999)
+
+  const billingCycles = await BillingCycleModel.find({ createdAt: { $gte: startRange, $lt: endRange } }).lean()
+
+  // console.log('---billingCycles---', billingCycles)
+  await Aigle.forEach(billingCycles, async (billingCycle) => {
+    console.log('billingCycle.user: ', billingCycle.user)
+    await NotificationModel.sendNotification({
+      userId: billingCycle.user as string,
+      varient: ENotificationVarient.MASTER,
+      title: 'ออกใบแจ้งหนี้แล้ว',
+      message: [`ระบบได้ออกใบแจ้งหนี้หมายเลข ${billingCycle.billingNumber} แล้ว`],
+      infoLink: `/main/billing?billing_number=${billingCycle.billingNumber}`,
+      infoText: 'คลิกเพื่อดูรายละเอียด',
+    })
   })
 }
 
@@ -812,6 +933,10 @@ export async function generateInvoice(billingCycle: BillingCycle) {
   let latestHeight = 0
   let rowNumber = 0
 
+  if (isEmpty(shipmentGroup)) {
+    HeaderComponent(1, 1)
+  }
+
   forEach(shipmentGroup, (shipments, index) => {
     if (index !== 0) {
       doc
@@ -969,6 +1094,8 @@ export async function generateInvoice(billingCycle: BillingCycle) {
   doc.end()
 
   await new Promise((resolve) => writeStream.on('finish', resolve))
+
+  await BillingCycleModel.findByIdAndUpdate(billingCycle._id, { issueInvoiceFilename: fileName })
 
   return { fileName, filePath }
 }

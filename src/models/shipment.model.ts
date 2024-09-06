@@ -33,7 +33,7 @@ import UpdateHistoryModel, { UpdateHistory } from './updateHistory.model'
 import { Refund } from './refund.model'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
-import NotificationModel from './notification.model'
+import NotificationModel, { ENotificationVarient } from './notification.model'
 import TransactionModel, { ETransactionStatus, ETransactionType } from './transaction.model'
 import IndividualDriverModel, { IndividualDriver } from './driverIndividual.model'
 
@@ -693,16 +693,18 @@ export class Shipment extends TimeStamps {
     try {
       const currentStep = find(this.steps, ['seq', this.currentStepSeq])
       const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', ''))
+      const currentDate = new Date()
       if (stepDefinitionModel.step === EStepDefinition.FINISH) {
         await stepDefinitionModel.updateOne({
           stepStatus: EStepStatus.DONE,
           customerMessage: 'ดำเนินการเสร็จสิ้น',
           driverMessage: 'ดำเนินการเสร็จสิ้น',
-          updatedAt: new Date(),
+          updatedAt: currentDate,
         })
         await ShipmentModel.findByIdAndUpdate(this._id, {
           currentStepSeq: stepDefinitionModel.seq,
           status: EShipingStatus.DELIVERED,
+          deliveredDate: currentDate
         })
 
         const pickup = head(this.destinations)
@@ -739,7 +741,7 @@ export class Shipment extends TimeStamps {
          */
         await NotificationModel.sendNotification({
           userId: this.customer as string,
-          varient: 'success',
+          varient: ENotificationVarient.SUCCESS,
           title: 'งานขนส่งสำเร็จ',
           message: [
             `เราขอประกาศด้วยความยินดีว่าการขนส่งเลขที่ ${this.trackingNumber} ของท่านได้เสร็จสมบูรณ์!`,
@@ -812,7 +814,7 @@ export class Shipment extends TimeStamps {
        */
       await NotificationModel.sendNotification({
         userId: shipment.customer as string,
-        varient: 'info',
+        varient: ENotificationVarient.INFO,
         title: 'การจองของท่านยืนยันยอดชำระแล้ว',
         message: [
           `เราขอแจ้งให้ท่าทราบว่าการจองรถเลขที่ ${shipment.trackingNumber} ของท่านยืนยันยอดชำระแล้ว`,
@@ -886,7 +888,7 @@ export class Shipment extends TimeStamps {
          */
         await NotificationModel.sendNotification({
           userId: shipment.customer as string,
-          varient: 'error',
+          varient: ENotificationVarient.ERROR,
           title: 'การจองถูกยกเลิก',
           message: [
             `เราเสียใจที่ต้องแจ้งให้ท่านทราบว่าการจองเลขที่ ${shipment.trackingNumber} ของท่านถูกยกเลิกโดยทีมผู้ดูแลระบบของเรา`,

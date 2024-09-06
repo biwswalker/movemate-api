@@ -29,6 +29,10 @@ export class Refund extends TimeStamps {
   @Field()
   @Property({ default: Date.now })
   updatedAt: Date
+
+  @Field()
+  @Property({ required: true })
+  updatedBy: string
 }
 
 const RefundModel = getModelForClass(Refund)

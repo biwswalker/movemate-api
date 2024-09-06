@@ -13,7 +13,6 @@ export async function verifyRequestLimiter(ip: string, _type: ELimiterType, RATE
   const currentCount = await redis.get(redisKey)
   const count = currentCount ? parseInt(currentCount, 10) : 0
 
-  console.log(currentCount, count, RATE_LIMIT)
   if (count >= RATE_LIMIT) {
     const message = `การค้นหาราคาถูกจำกัดเนื่องจาก ท่านได้ค้นหาราคาเกินจำนวนที่กำหนดและไม่ได้มีการใช้บริการ ท่านจะสามารถใช้งานได้อีกครั้งในวันถัดไป`
     throw new GraphQLError(message, {

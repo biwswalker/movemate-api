@@ -11,7 +11,7 @@ import { FilterQuery, Types } from 'mongoose'
 import { Ref } from '@typegoose/typegoose'
 import { VehicleType } from '@models/vehicleType.model'
 import { REPONSE_NAME } from 'constants/status'
-import NotificationModel from '@models/notification.model'
+import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import { ConfirmShipmentDateInput, NextShipmentStepInput, SentPODDocumentShipmentStepInput } from '@inputs/matching.input'
 
 // Custom status for driver
@@ -154,7 +154,7 @@ export default class MatchingResolver {
       if (customerId) {
         await NotificationModel.sendNotification({
           userId: customerId,
-          varient: 'master',
+          varient: ENotificationVarient.MASTER,
           title: `${shipment.trackingNumber} คนขับตอบรับแล้ว`,
           message: [
             `งานขนส่งเลขที่ ${shipment.trackingNumber} ได้รับการตอบรับจากคนขับแล้ว คนขับจะติดต่อหาท่านเพื่อนัดหมาย`,

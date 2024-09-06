@@ -10,7 +10,7 @@ import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
 import { AnyBulkWriteOperation, FilterQuery, PaginateOptions, Types } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
-import lodash, { get, head, isEmpty, map, omitBy, reduce, sum, tail, toNumber, toString, uniq, values } from 'lodash'
+import lodash, { get, head, isEmpty, map, omitBy, reduce, sum, tail, toNumber, values } from 'lodash'
 import AdditionalServiceCostPricingModel from '@models/additionalServiceCostPricing.model'
 import ShipmentDistancePricingModel from '@models/shipmentDistancePricing.model'
 import VehicleCostModel from '@models/vehicleCost.model'
@@ -21,7 +21,7 @@ import FileModel from '@models/file.model'
 import VehicleTypeModel from '@models/vehicleType.model'
 import { DistanceCostPricing } from '@models/distanceCostPricing.model'
 import { email_sender } from '@utils/email.utils'
-import NotificationModel from '@models/notification.model'
+import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import { ShipmentPaginationAggregatePayload, ShipmentPaginationPayload, TotalRecordPayload } from '@payloads/shipment.payloads'
 import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
 import { reformPaginate } from '@utils/pagination.utils'
@@ -30,6 +30,8 @@ import { format, parse } from 'date-fns'
 import { th } from 'date-fns/locale'
 import BillingCycleModel, { EBillingStatus, generateInvoice } from '@models/billingCycle.model'
 import { clearLimiter, ELimiterType } from '@configs/rateLimit'
+import BusinessCustomerCreditPaymentModel from '@models/customerBusinessCreditPayment.model'
+import { REPONSE_NAME } from 'constants/status'
 
 Aigle.mixin(lodash, {})
 
@@ -285,12 +287,42 @@ export default class ShipmentResolver {
         })
       }
 
+      const creditPaymentId = get(customer, 'businessDetail.creditPayment._id', '')
+      const creditPayment = creditPaymentId ? await BusinessCustomerCreditPaymentModel.findById(creditPaymentId) : null
+
       const vehicle = await VehicleTypeModel.findById(data.vehicleId).lean()
       if (!vehicle) {
         const message = 'ไม่สามารถหาข้อมูลประเภทรถ เนื่องจากไม่พบประเภทรถดังกล่าว'
         throw new GraphQLError(message, {
           extensions: { code: 'NOT_FOUND', errors: [{ message }] },
         })
+      }
+
+      const isCashPaymentMethod = paymentMethod === 'cash'
+      const isCreditPaymentMethod = paymentMethod === 'credit'
+
+      // Make calculate pricing and for check credit usage
+      const droppoint = locations.length - 1
+      const _invoice = await ShipmentModel.calculate({
+        vehicleTypeId: data.vehicleId,
+        distanceMeter: data.distance,
+        distanceReturnMeter: data.returnDistance,
+        dropPoint: droppoint,
+        isRounded: data.isRoundedReturn,
+        serviceIds: additionalServices,
+        discountId: discountId,
+        isBusinessCashPayment: customer.userType === 'business' && isCashPaymentMethod
+      }, true)
+
+      // 
+      const newCreditBalance = sum([creditPayment.creditUsage, _invoice.totalPrice])
+      if (isCreditPaymentMethod) {
+        if (newCreditBalance > creditPayment.creditLimit) {
+          const message = `วงเงินของคุณไม่พอ กรุณาติดต่อเจ้าหน้าที่`
+          throw new GraphQLError(message, {
+            extensions: { code: REPONSE_NAME.INSUFFICIENT_FUNDS, errors: [{ message }] },
+          })
+        }
       }
 
       // Prepare email
@@ -369,9 +401,6 @@ export default class ShipmentResolver {
       })
       await _directionResult.save()
 
-      const isCashPaymentMethod = paymentMethod === 'cash'
-      const isCreditPaymentMethod = paymentMethod === 'credit'
-
       // Remark: Cash payment detail
       let cashDetail: CashDetail | null = null
       if (isCashPaymentMethod && cashPaymentDetail) {
@@ -384,24 +413,13 @@ export default class ShipmentResolver {
         }
       }
 
-      // Remark: Payment
-      const droppoint = locations.length - 1
+      // Payment
       const _calculation = await VehicleCostModel.calculatePricing(vehicleCost._id, {
         distance: data.distance / 1000,
         returnedDistance: data.returnDistance / 1000,
         dropPoint: droppoint,
         isRounded: data.isRoundedReturn,
       })
-      const _invoice = await ShipmentModel.calculate({
-        vehicleTypeId: data.vehicleId,
-        distanceMeter: data.distance,
-        distanceReturnMeter: data.returnDistance,
-        dropPoint: droppoint,
-        isRounded: data.isRoundedReturn,
-        serviceIds: additionalServices,
-        discountId: discountId,
-        isBusinessCashPayment: customer.userType === 'business' && isCashPaymentMethod
-      }, true)
       const _paymentNumber = await generateTrackingNumber(isCreditPaymentMethod ? 'MMPAYCE' : 'MMPAYCA', 'payment')
       const _payment = new PaymentModel({
         cashDetail,
@@ -472,7 +490,7 @@ export default class ShipmentResolver {
           paymentDueDate: today,
           billingStatus: EBillingStatus.VERIFY,
           paymentMethod: EPaymentMethod.CASH,
-          emailSendedTime: today
+          // emailSendedTime: today
         })
 
         await _billingCycle.save()
@@ -488,8 +506,18 @@ export default class ShipmentResolver {
         })
 
         const billingCycleData = await BillingCycleModel.findById(_billingCycle._id)
-        const invoiceFilePath = await generateInvoice(billingCycleData)
-        await BillingCycleModel.findByIdAndUpdate(billingCycleData._id, { issueInvoiceFilename: invoiceFilePath.fileName })
+        await generateInvoice(billingCycleData)
+
+      } else if (isCreditPaymentMethod) {
+        if (!creditPayment) {
+          await ShipmentModel.findByIdAndDelete(shipment._id)
+          const message = 'ไม่สามารถจองรถขนส่งได้ เนื่องจากไม่พบการข้อมูลการออกใบแจ้งหนี้'
+          throw new GraphQLError(message, {
+            extensions: { code: 'NOT_FOUND', errors: [{ message }] },
+          })
+        }
+        // Update balance
+        await creditPayment.updateOne({ creditUsage: newCreditBalance })
       }
 
       const response = await ShipmentModel.findById(shipment._id)
@@ -505,7 +533,7 @@ export default class ShipmentResolver {
         : `หมายเลขการจองขนส่ง ${_trackingNumber} เราได้รับการจองรถของท่านเรียบร้อยแล้ว ขณะนี้การจองของท่านอยู่ระหว่างการตอบรับจากคนขับ`
       await NotificationModel.sendNotification({
         userId: customer._id,
-        varient: 'info',
+        varient: ENotificationVarient.INFO,
         title: notiTitle,
         message: [notiMsg],
         infoText: 'ติดตามการขนส่ง',
