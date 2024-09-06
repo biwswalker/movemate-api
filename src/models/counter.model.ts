@@ -28,6 +28,9 @@ export class Couter {
     @Property({ required: true, default: 0 })
     invoice: number
 
+    @Property({ required: true, default: 0 })
+    receipt: number
+
     static async getNextCouter(type: TGenerateIDType): Promise<number> {
         const query_option = { upsert: true, new: true }
         if (type === 'individual') {
@@ -57,6 +60,9 @@ export class Couter {
         } else if (type === 'invoice') {
             const counter = await CouterModel.findOneAndUpdate({}, { $inc: { invoice: 1 } }, query_option)
             return counter.invoice
+        } else if (type === 'receipt') {
+            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { receipt: 1 } }, query_option)
+            return counter.receipt
         }
         return 0
     }

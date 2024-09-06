@@ -1,13 +1,15 @@
 import { Resolver, Mutation, UseMiddleware, Ctx, Args } from 'type-graphql'
 import { AuthGuard } from '@guards/auth.guards'
 import { GraphQLContext } from '@configs/graphQL.config'
-import { ApprovalCashPaymentArgs } from '@inputs/billingPayment.input'
+import { ApprovalCashPaymentArgs, ApproveCreditPaymentArgs } from '@inputs/billingPayment.input'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
 import lodash from 'lodash'
 import Aigle from 'aigle'
 import BillingCycleModel from '@models/billingCycle.model'
 import BillingPaymentModel from '@models/billingPayment.model'
+import FileModel from '@models/file.model'
+import { format, parse } from 'date-fns'
 
 Aigle.mixin(lodash, {});
 
@@ -32,5 +34,30 @@ export default class BillingPaymentResolver {
       return true
     }
     return false
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(['admin']))
+  async approveCreditPayment(@Ctx() ctx: GraphQLContext, @Args() data: ApproveCreditPaymentArgs): Promise<boolean> {
+    const user_id = ctx.req.user_id
+    try {
+      const billingCycleModel = await BillingCycleModel.findById(data.billingCycleId).lean()
+      if (!billingCycleModel) {
+        const message = "ไม่สามารถหาข้อมูลการชำระได้ เนื่องจากไม่พบการชำระดังกล่าว";
+        throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+      }
+
+      const imageEvidenceFile = data.imageEvidence ? new FileModel(data.imageEvidence) : null
+      imageEvidenceFile && await imageEvidenceFile.save()
+
+      const paydate = format(data.paymentDate, 'dd/MM/yyyy')
+      const paytime = format(data.paymentTime, 'HH:mm')
+      const paymentDate = parse(`${paydate} ${paytime}`, 'dd/MM/yyyy HH:mm', new Date())
+      await BillingCycleModel.markAsPaid(data.billingCycleId, user_id, paymentDate.toISOString(), imageEvidenceFile ? imageEvidenceFile._id : '')
+      return true
+    } catch (error) {
+      console.log(error)
+      throw error
+    }
   }
 }

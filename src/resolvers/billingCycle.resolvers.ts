@@ -2,7 +2,7 @@ import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { BillingCycleRefundArgs, GetBillingCycleArgs } from '@inputs/billingCycle.input'
 import { PaginationArgs } from '@inputs/query.input'
-import BillingCycleModel, { BillingCycle, EBillingStatus, PostalInvoice } from '@models/billingCycle.model'
+import BillingCycleModel, { BillingCycle, EBillingStatus, PostalDetail } from '@models/billingCycle.model'
 import FileModel, { File } from '@models/file.model'
 import RefundModel from '@models/refund.model'
 import ShipmentModel from '@models/shipment.model'
@@ -18,6 +18,7 @@ import { get, isEmpty, map, omitBy, toNumber, toString, uniq } from 'lodash'
 import { PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import path from 'path'
+import { BusinessCustomer } from '@models/customerBusiness.model'
 
 @Resolver(BillingCycle)
 export default class BillingCycleResolver {
@@ -171,13 +172,49 @@ export default class BillingCycleResolver {
   ): Promise<boolean> {
     const user_id = ctx.req.user_id
     try {
-      const postalSented: PostalInvoice = {
+      const postalSented: PostalDetail = {
         createdDateTime: new Date(),
         postalProvider,
         trackingNumber,
         updatedBy: user_id
       }
       await BillingCycleModel.findByIdAndUpdate(billingCycleId, { postalInvoice: postalSented })
+      return true
+    } catch (error) {
+      console.log(error)
+      throw error
+    }
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(['admin']))
+  async confirmReceiptSent(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('billingCycleId') billingCycleId: string,
+    @Arg('trackingNumber') trackingNumber: string,
+    @Arg('postalProvider') postalProvider: string,
+  ): Promise<boolean> {
+    const user_id = ctx.req.user_id
+    try {
+      const postalSented: PostalDetail = {
+        createdDateTime: new Date(),
+        postalProvider,
+        trackingNumber,
+        updatedBy: user_id
+      }
+      await BillingCycleModel.findByIdAndUpdate(billingCycleId, { postalReceipt: postalSented })
+      return true
+    } catch (error) {
+      console.log(error)
+      throw error
+    }
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(['admin']))
+  async confirmReceiveWHT(@Ctx() ctx: GraphQLContext, @Arg('billingCycleId') billingCycleId: string): Promise<boolean> {
+    try {
+      await BillingCycleModel.findByIdAndUpdate(billingCycleId, { receivedWHTDocumentTime: new Date() })
       return true
     } catch (error) {
       console.log(error)
@@ -216,6 +253,45 @@ export default class BillingCycleResolver {
           attachments: [{ filename: path.basename(filePath), path: filePath, }],
         })
         await billingCycleModel.updateOne({ emailSendedTime: new Date() })
+        console.log(`[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Billing Cycle has sent for ${emails.join(', ')}`)
+      }
+      return true
+    } catch (error) {
+      console.log(error)
+      throw error
+    }
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(['admin']))
+  async resentReceiptToEmail(@Ctx() ctx: GraphQLContext, @Arg('billingCycleId') billingCycleId: string): Promise<boolean> {
+    try {
+      const emailTranspoter = email_sender()
+      const billingCycleModel = await BillingCycleModel.findById(billingCycleId)
+      const customerModel = await UserModel.findById(billingCycleModel.user)
+      if (customerModel) {
+        const financialEmails = get(customerModel, 'businessDetail.creditPayment.financialContactEmails', [])
+        const emails = uniq([customerModel.email, ...financialEmails])
+        const filePath = path.join(__dirname, '..', '..', 'generated/receipt', billingCycleModel.issueReceiptFilename)
+
+        const businessContactNumber = get(customerModel, 'businessDetail.contactNumber', '')
+        await emailTranspoter.sendMail({
+          from: process.env.NOREPLY_EMAIL,
+          to: emails,
+          subject: `ใบเสร็จรับเงิน Movemate Thailand`,
+          template: 'notify_receipt',
+          context: {
+            business_name: customerModel.fullname,
+            business_contact_number: businessContactNumber,
+            business_email: customerModel.email,
+            customer_type: customerModel.userType === 'individual' ? 'ส่วนบุคคล' : 'บริษัท/องค์กร',
+            financial_email: 'acc@movematethailand.com',
+            contact_number: '02-xxx-xxxx',
+            movemate_link: `https://www.movematethailand.com`,
+          },
+          attachments: [{ filename: path.basename(filePath), path: filePath, }],
+        })
+        await billingCycleModel.updateOne({ emailSendedReceiptTime: new Date() })
         console.log(`[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Billing Cycle has sent for ${emails.join(', ')}`)
       }
       return true

@@ -49,6 +49,7 @@ async function server() {
   app.use(graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }));
   app.use("/source", authenticateTokenAccessImage, express.static("uploads"));
   app.use("/invoice", authenticateTokenAccessImage, express.static("generated/invoice"));
+  app.use("/receipt", authenticateTokenAccessImage, express.static("generated/receipt"));
 
   app.engine("hbs", engine({ extname: ".hbs", defaultLayout: false }));
   app.set("view engine", "hbs");

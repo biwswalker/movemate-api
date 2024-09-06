@@ -1,4 +1,4 @@
-import BillingCycleModel, { checkBillingStatus, generateInvoice, issueBillingCycle, issueEmailToCustomer, notifyDuedate, notifyIssueEmailToCustomer, notifyNearby1Duedate, notifyNearby3Duedate, notifyOverdue } from '@models/billingCycle.model'
+import BillingCycleModel, { checkBillingStatus, issueBillingCycle, issueEmailToCustomer, notifyDuedate, notifyIssueEmailToCustomer, notifyNearby1Duedate, notifyNearby3Duedate, notifyOverdue } from '@models/billingCycle.model'
 import cron from 'node-cron'
 
 export default async function configureCronjob() {

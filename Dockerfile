@@ -14,6 +14,7 @@ WORKDIR /usr/src/movemate-api
 RUN mkdir uploads
 RUN mkdir generated
 RUN mkdir generated/invoice
+RUN mkdir generated/receipt
 
 COPY package.json package-lock.json ./
 COPY --from=builder /usr/src/movemate-api/node_modules /usr/src/movemate-api/node_modules

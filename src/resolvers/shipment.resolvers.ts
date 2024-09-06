@@ -28,10 +28,11 @@ import { reformPaginate } from '@utils/pagination.utils'
 import { SHIPMENT_LIST } from '@pipelines/shipment.pipeline'
 import { format, parse } from 'date-fns'
 import { th } from 'date-fns/locale'
-import BillingCycleModel, { EBillingStatus, generateInvoice } from '@models/billingCycle.model'
+import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
 import { clearLimiter, ELimiterType } from '@configs/rateLimit'
 import BusinessCustomerCreditPaymentModel from '@models/customerBusinessCreditPayment.model'
 import { REPONSE_NAME } from 'constants/status'
+import { generateInvoice } from 'reports/invoice'
 
 Aigle.mixin(lodash, {})
 
@@ -467,9 +468,8 @@ export default class ShipmentResolver {
       // Remark: Create billing cycle and billing payment
       if (isCashPaymentMethod && cashDetail) {
         const today = new Date()
-        const _month = format(today, 'MM')
-        const _year = toNumber(format(today, 'yyyy')) + 543
-        const _billingNumber = await generateTrackingNumber(`IV${_month}${_year}`, 'invoice')
+        const _monthyear = format(today, 'yyMM')
+        const _billingNumber = await generateTrackingNumber(`IV${_monthyear}`, 'invoice')
 
         const paydate = format(cashDetail.paymentDate, 'ddMMyyyy')
         const paytime = format(cashDetail.paymentTime, 'HH:mm')
@@ -503,6 +503,7 @@ export default class ShipmentResolver {
           bank: cashDetail.bank,
           bankName: cashDetail.bankName,
           bankNumber: cashDetail.bankNumber,
+          userId: user_id,
         })
 
         const billingCycleData = await BillingCycleModel.findById(_billingCycle._id)

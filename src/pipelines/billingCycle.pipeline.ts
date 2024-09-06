@@ -119,6 +119,20 @@ export const BILLING_CYCLE_LIST = ({
     },
     {
       $lookup: {
+        from: "billingreceipts",
+        localField: "billingReceipt",
+        foreignField: "_id",
+        as: "billingReceipt",
+      }
+    },
+    {
+      $unwind: {
+        path: "$billingReceipt",
+        preserveNullAndEmptyArrays: true
+      }
+    },
+    {
+      $lookup: {
         from: "shipments",
         localField: "shipments",
         foreignField: "_id",
