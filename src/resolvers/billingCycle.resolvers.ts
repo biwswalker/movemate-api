@@ -1,7 +1,7 @@
 import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { BillingCycleRefundArgs, GetBillingCycleArgs } from '@inputs/billingCycle.input'
-import { PaginationArgs } from '@inputs/query.input'
+import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
 import BillingCycleModel, { BillingCycle, EBillingStatus, PostalDetail } from '@models/billingCycle.model'
 import FileModel, { File } from '@models/file.model'
 import RefundModel from '@models/refund.model'
@@ -11,14 +11,13 @@ import { BillingCyclePaginationAggregatePayload, TotalBillingRecordPayload } fro
 import { BILLING_CYCLE_LIST } from '@pipelines/billingCycle.pipeline'
 import { email_sender } from '@utils/email.utils'
 import { reformPaginate } from '@utils/pagination.utils'
-import { addDays, format } from 'date-fns'
+import { addDays, format, parse, startOfMonth, endOfMonth } from 'date-fns'
 import { th } from 'date-fns/locale'
 import { GraphQLError } from 'graphql'
 import { get, isEmpty, map, omitBy, toNumber, toString, uniq } from 'lodash'
 import { PaginateOptions } from 'mongoose'
-import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
+import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import path from 'path'
-import { BusinessCustomer } from '@models/customerBusiness.model'
 
 @Resolver(BillingCycle)
 export default class BillingCycleResolver {
@@ -87,10 +86,12 @@ export default class BillingCycleResolver {
   }
 
   @Query(() => BillingCycle)
-  @UseMiddleware(AuthGuard(['admin']))
-  async billingCycle(@Arg('billingNumber') billingNumber: string): Promise<BillingCycle> {
+  @UseMiddleware(AuthGuard(['admin', 'customer']))
+  async billingCycle(@Ctx() ctx: GraphQLContext, @Arg('billingNumber') billingNumber: string): Promise<BillingCycle> {
+    const user_id = ctx.req.user_id
+    const user_role = ctx.req.user_role
     try {
-      const billingCycle = await BillingCycleModel.findOne({ billingNumber })
+      const billingCycle = await BillingCycleModel.findOne({ billingNumber, ...(user_role === 'customer' ? { user: user_id } : {}) })
       if (!billingCycle) {
         const message = `ไม่สามารถเรียกข้อมูลใบแจ้งหนี้`
         throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
@@ -321,5 +322,39 @@ export default class BillingCycleResolver {
       console.log(error)
       throw error
     }
+  }
+
+
+  @Query(() => [BillingCycle])
+  @UseMiddleware(AuthGuard(["customer", "admin"]))
+  async monthBilling(@Ctx() ctx: GraphQLContext, @Arg("monthofyear") monthofyear: string, @Args() loadmore: LoadmoreArgs) {
+    const userId = ctx.req.user_id
+    try {
+      if (userId) {
+        const month = parse(monthofyear, 'MM/yyyy', new Date())
+        const startDate = startOfMonth(month)
+        const endDate = endOfMonth(month)
+        console.log('---monthBilling---', startDate, endDate)
+        const billings = await BillingCycleModel.find({ user: userId, issueDate: { $gt: startDate.setHours(0, 0, 0, 0), $lt: endDate.setHours(23, 59, 59, 999) } }).sort({ issueDate: -1, createdAt: -1 }).skip(loadmore.skip).limit(loadmore.limit).exec()
+        return billings
+      }
+      return []
+    } catch (error) {
+      return []
+    }
+  }
+  @Query(() => Int)
+  @UseMiddleware(AuthGuard(["customer", "admin"]))
+  async totalMonthBilling(@Ctx() ctx: GraphQLContext, @Arg("monthofyear") monthofyear: string): Promise<number> {
+    const userId = ctx.req.user_id
+    if (userId) {
+      const month = parse(monthofyear, 'MM/yyyy', new Date())
+      const startDate = startOfMonth(month)
+      const endDate = endOfMonth(month)
+      console.log('---monthBilling---', startDate, endDate)
+      const total = await BillingCycleModel.countDocuments({ user: userId, issueDate: { $gt: startDate.setHours(0, 0, 0, 0), $lt: endDate.setHours(23, 59, 59, 999) } })
+      return total
+    }
+    return 0
   }
 }
