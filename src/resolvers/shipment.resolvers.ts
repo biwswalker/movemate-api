@@ -2,15 +2,15 @@ import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { GetShipmentArgs, ShipmentInput } from '@inputs/shipment.input'
 import PaymentModel, { CashDetail, EPaymentMethod } from '@models/payment.model'
-import ShipmentModel, { Shipment } from '@models/shipment.model'
+import ShipmentModel, { EDriverAcceptanceStatus, EShipingStatus, Shipment } from '@models/shipment.model'
 import ShipmentAdditionalServicePriceModel from '@models/shipmentAdditionalServicePrice.model'
-import UserModel from '@models/user.model'
+import UserModel, { EUserRole, User } from '@models/user.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
 import { AnyBulkWriteOperation, FilterQuery, PaginateOptions, Types } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
-import lodash, { get, head, isEmpty, map, omitBy, reduce, sum, tail, toNumber, values } from 'lodash'
+import lodash, { filter, get, head, isEmpty, map, omitBy, reduce, sum, tail, toNumber, values } from 'lodash'
 import AdditionalServiceCostPricingModel from '@models/additionalServiceCostPricing.model'
 import ShipmentDistancePricingModel from '@models/shipmentDistancePricing.model'
 import VehicleCostModel from '@models/vehicleCost.model'
@@ -33,6 +33,9 @@ import { clearLimiter, ELimiterType } from '@configs/rateLimit'
 import BusinessCustomerCreditPaymentModel from '@models/customerBusinessCreditPayment.model'
 import { REPONSE_NAME } from 'constants/status'
 import { generateInvoice } from 'reports/invoice'
+import { cancelShipmentQueue, FCMShipmentPayload, monitorShipmentQueue, ShipmentPayload } from '@configs/jobQueue'
+import { Job } from 'bull'
+import { Message } from 'firebase-admin/messaging'
 
 Aigle.mixin(lodash, {})
 
@@ -525,7 +528,7 @@ export default class ShipmentResolver {
       await response.initialStepDefinition()
 
       // Clear redis seach limiter
-      await clearLimiter(ctx.ip, ELimiterType.LOCATION)
+      await clearLimiter(ctx.ip, ELimiterType.LOCATION, user_id || '')
 
       // Notification
       const notiTitle = isCashPaymentMethod ? 'การจองของท่านอยู่ระหว่างการยืนยัน' : 'การจองของท่านรอคนขับตอบรับ'
@@ -599,20 +602,101 @@ export default class ShipmentResolver {
       throw error
     }
   }
+
+  async monitorShipmentStatus(shipmentId: string, requestDriverId: string) {
+    const tenMin = 10 * 60 * 1000
+    const oneThousanAndTwentyMin = 120 * 60 * 1000
+    const twoThousanAndFourtyMin = 240 * 60 * 1000
+    if (requestDriverId) {
+      // // เพิ่ม job สำหรับตรวจสอบ shipment ทุกๆ 10 นาที
+      monitorShipmentQueue.add({ shipmentId, driverId: requestDriverId }, { repeat: { every: tenMin } });  // ทำซ้ำทุกๆ 10 นาที
+      monitorShipmentQueue.add({ shipmentId }, { delay: oneThousanAndTwentyMin + tenMin, repeat: { every: tenMin } }); // ทำซ้ำทุกๆ 10 นาที
+      // // เพิ่ม job สำหรับยกเลิก shipment หลังจาก 240 นาที
+      cancelShipmentQueue.add({ shipmentId: shipmentId }, { delay: twoThousanAndFourtyMin + tenMin });
+    } else {
+      // // เพิ่ม job สำหรับตรวจสอบ shipment ทุกๆ 10 นาที
+      monitorShipmentQueue.add({ shipmentId }, { repeat: { every: tenMin } }); // ทำซ้ำทุกๆ 10 นาที
+      // // เพิ่ม job สำหรับยกเลิก shipment หลังจาก 240 นาที
+      cancelShipmentQueue.add({ shipmentId: shipmentId }, { delay: oneThousanAndTwentyMin + tenMin });
+    }
+  }
 }
 
+export const checkShipmentStatus = async (shipmentId: string, requestDriverId: string) => {
+  const oneThousanAndTwentyMin = 120 * 60 * 1000
+  const twoThousanAndFourtyMin = 240 * 60 * 1000
+  const shipment = await ShipmentModel.findById(shipmentId);
+
+  if (shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING) {
+    const currentTime = new Date().getTime();
+    const createdTime = new Date(shipment.createdAt).getTime();
+
+    // ถ้าผ่านไป 120 นาทีแล้วยังไม่มี driver รับงาน
+    if ((currentTime - createdTime) >= oneThousanAndTwentyMin) {
+      const paymentMethod = get(shipment, 'payment.paymentMethod', '')
+      // TODO: Make refund
+      await shipment.updateOne({
+        status: paymentMethod === EPaymentMethod.CREDIT ? EShipingStatus.CANCELLED : EShipingStatus.REFUND,
+        driverAcceptanceStatus: EDriverAcceptanceStatus.UNINTERESTED,
+        rejectedReason: 'uninterested_driver',
+        rejectedDetail: 'ไม่มีคนขับตอบรับงานนี้',
+      });
+      // TODO: Handle refund
+      console.log(`'Shipment' ${shipmentId} is cancelled.`);
+    } else {
+      // ส่ง FCM Notification
+      if (requestDriverId) {
+        const driver = await UserModel.findOne({ _id: shipment.requestedDriver, userRole: EUserRole.DRIVER });
+        if (driver && driver.fcmToken) {
+          await NotificationModel.sendFCMNotification({
+            token: driver.fcmToken,
+            condition: '',
+            topic: '',
+            data: {
+              navigationId: 'home',
+              trackingNumber: shipment.trackingNumber
+            },
+            notification: {
+              title: 'MovemateTH',
+              body: '📦 มีงานขนส่งใหม่สำหรับคุณ',
+            }
+          });
+        }
+
+      } else {
+        const drivers = await UserModel.find({ userRole: EUserRole.DRIVER });
+        const messages = map<User, Message>(filter(drivers, ({ fcmToken }) => !isEmpty(fcmToken)), (driver) => {
+          if (driver.fcmToken) {
+            return {
+              token: driver.fcmToken,
+              topic: '',
+              data: {
+                navigationId: 'home',
+                trackingNumber: shipment.trackingNumber
+              },
+              notification: {
+                title: 'MovemateTH',
+                body: '📦 มีงานขนส่งใหม่สำหรับคุณ',
+              }
+            }
+          }
+          return
+        })
+        await NotificationModel.sendFCMNotification(messages);
+      }
+    }
+  }
+};
 
 
-// DO-NEXT
-// 1. Handle get shipment for driver and favorit
-// 2. Handle get shipment count of pending status for show counting
-// 3. npm install node-cron
-// 4. Setup Cron
-// 5. Handle Notification logic - every 10min / 50min / 120min / 120min
-// 
-// Financial for customer
-// DO-NEXT
-// 1. Get - payment of shipment of user
-// 2. Get sum of month
+// ประมวลผล job monitorShipment แบบ Type-safe
+monitorShipmentQueue.process(async (job: Job<FCMShipmentPayload>) => {
+  const { shipmentId, driverId } = job.data;
+  // await checkShipmentStatus(shipmentId, notifyAllDrivers);
+});
 
-// Workprogress
+// ประมวลผล job cancelShipment แบบ Type-safe
+cancelShipmentQueue.process(async (job: Job<ShipmentPayload>) => {
+  const { shipmentId } = job.data;
+  // await cancelShipmentIfIdle(shipmentId);
+});

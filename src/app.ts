@@ -15,6 +15,7 @@ import http from 'http'
 import "reflect-metadata";
 import { get } from "lodash";
 import configureCronjob from "@configs/cronjob";
+import { initializeFirebase } from "@configs/firebase";
 
 morgan.token('graphql-query', (req: Request) => {
   const operationName = get(req, 'body.operationName', '')
@@ -76,6 +77,7 @@ async function server() {
 
   // Set timezone
   configureCronjob()
+  initializeFirebase()
 }
 
 server();

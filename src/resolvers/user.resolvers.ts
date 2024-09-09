@@ -844,4 +844,47 @@ export default class UserResolver {
       throw error;
     }
   }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(["driver"]))
+  async storeFCM(
+    @Ctx() ctx: GraphQLContext,
+    @Arg("fcmToken") fcmToken: string,
+  ): Promise<boolean> {
+    try {
+      const userId = ctx.req.user_id;
+      if (userId) {
+        if (!fcmToken) {
+          const message =
+            "ข้อมูลไม่ครบ โปรลองอีกครั้ง";
+          throw new GraphQLError(message);
+        }
+
+        const userModel = await UserModel.findById(userId);
+        if (!userModel) {
+          const message =
+            "ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน";
+          throw new GraphQLError(message, {
+            extensions: {
+              code: "NOT_FOUND",
+              errors: [{ message }],
+            },
+          });
+        }
+        await userModel.updateOne({ fcmToken })
+        return true;
+      }
+      const message =
+        "ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน";
+      throw new GraphQLError(message, {
+        extensions: {
+          code: "NOT_FOUND",
+          errors: [{ message }],
+        },
+      });
+    } catch (errors) {
+      console.log("error: ", errors);
+      throw errors;
+    }
+  }
 }

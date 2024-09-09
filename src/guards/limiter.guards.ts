@@ -26,7 +26,7 @@ export const RequestLimiterGuard: MiddlewareFn<GraphQLContext> = async (
     }
   }
 
-  await verifyRequestLimiter(req.ip, ELimiterType.LOCATION, limit)
+  await verifyRequestLimiter(req.ip, ELimiterType.LOCATION, limit, user_id || "")
 
   return next()
 };

@@ -109,7 +109,7 @@ export default class BookingResolver {
 
       const ip = ctx.ip
       const type: TSearchType = 'pricing'
-      const count = await getLatestCount(ip, ELimiterType.LOCATION)
+      const count = await getLatestCount(ip, ELimiterType.LOCATION, ctx.req.user_id || '')
       const searchHistory = new SearchHistoryModel({
         ipaddress: ip,
         isCache: false,

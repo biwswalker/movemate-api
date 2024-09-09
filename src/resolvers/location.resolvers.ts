@@ -107,14 +107,14 @@ export default class LocationResolver {
   @UseMiddleware(AllowGuard)
   @UseMiddleware(RequestLimiterGuard)
   async verifyLimiterBeforeGetDirection(@Ctx() ctx: GraphQLContext): Promise<LocationRequestLimitPayload> {
-    const limitCounts = await rateLimiter(ctx.ip, ELimiterType.LOCATION, ctx.req.limit)
+    const limitCounts = await rateLimiter(ctx.ip, ELimiterType.LOCATION, ctx.req.limit, ctx.req.user_id || '')
     return limitCounts
   }
 
   @Mutation(() => Boolean)
   @UseMiddleware(AllowGuard)
   async initialRequestLimitCountData(@Ctx() ctx: GraphQLContext): Promise<boolean> {
-    const payload = await getLatestCount(ctx.ip, ELimiterType.LOCATION)
+    const payload = await getLatestCount(ctx.ip, ELimiterType.LOCATION, ctx.req.user_id || '')
     let limit = 10
     if (ctx.req.user_id) {
       const userModel = await UserModel.findById(ctx.req.user_id)

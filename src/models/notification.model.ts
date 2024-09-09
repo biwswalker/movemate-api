@@ -3,6 +3,9 @@ import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import { Field, ObjectType, ID } from 'type-graphql'
 import UserModel from './user.model'
 import { LoadmoreArgs } from '@inputs/query.input'
+import admin from '@configs/firebase'
+import { Message } from 'firebase-admin/messaging'
+import { isArray } from 'lodash'
 
 export enum ENotificationVarient {
     INFO = 'info',
@@ -88,7 +91,13 @@ export class Notification extends TimeStamps {
         await notification.save()
         await UserModel.findByIdAndUpdate(data.userId, { $push: { notifications: notification._id } })
     }
-
+    static async sendFCMNotification(data: Message | Message[]): Promise<void> {
+        if (isArray(data)) {
+            await admin.messaging().sendEach(data)
+        } else if (typeof data === 'object') {
+            await admin.messaging().send(data)
+        }
+    }
     static async markNotificationAsRead(_id: string): Promise<void> {
         await NotificationModel.findByIdAndUpdate(_id, { read: true })
     }

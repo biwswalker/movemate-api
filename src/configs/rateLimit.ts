@@ -7,8 +7,8 @@ export enum ELimiterType {
   LOCATION = 'location-search',
 }
 
-export async function verifyRequestLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 10) {
-  const redisKey = `${_type}:${ip}` // Generate Key
+export async function verifyRequestLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 10, userId: string = "") {
+  const redisKey = `${userId}${_type}:${ip}` // Generate Key
 
   const currentCount = await redis.get(redisKey)
   const count = currentCount ? parseInt(currentCount, 10) : 0
@@ -21,8 +21,8 @@ export async function verifyRequestLimiter(ip: string, _type: ELimiterType, RATE
   }
 }
 
-export async function rateLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 10) {
-  const redisKey = `${_type}:${ip}` // Generate Key
+export async function rateLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 10, userId: string = "") {
+  const redisKey = `${userId}${_type}:${ip}` // Generate Key
 
   const currentCount = await redis.get(redisKey)
   const count = currentCount ? parseInt(currentCount, 10) : 0
@@ -44,15 +44,15 @@ export async function rateLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 
   return { count, limit }
 }
 
-export async function getLatestCount(ip: string, _type: ELimiterType) {
-  const redisKey = `${_type}:${ip}` // Generate Key
+export async function getLatestCount(ip: string, _type: ELimiterType, userId: string = "") {
+  const redisKey = `${userId}${_type}:${ip}` // Generate Key
   const currentCount = await redis.get(redisKey)
   const count = currentCount ? parseInt(currentCount, 10) : 0
   return count
 }
 
-export async function clearLimiter(ip: string, _type: ELimiterType) {
-  const redisKey = `${_type}:${ip}` // Generate Key
+export async function clearLimiter(ip: string, _type: ELimiterType, userId: string = "") {
+  const redisKey = `${userId}${_type}:${ip}` // Generate Key
   redis.set(redisKey, 0)
 }
 

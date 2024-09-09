@@ -181,6 +181,10 @@ export class User extends TimeStamps {
   @Property({ ref: () => Notification, default: [] })
   notifications: Ref<Notification>[];
 
+  @Field(() => String, { nullable: true, defaultValue: '' })
+  @Property({ default: '' })
+  fcmToken?: string;
+
   @Field({ nullable: true })
   get fullname(): string {
     const userRole = get(this, '_doc.userRole', '') || this.userRole || ''

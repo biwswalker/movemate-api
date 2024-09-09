@@ -6,3 +6,4 @@ uploads/*
 generated/invoice/*
 generated/receipt/*
 dist
+firebase-services.json

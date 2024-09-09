@@ -59,7 +59,7 @@ export async function getAutocomplete(
     const cacheType = 'places'
     const key = `${query}:${latitude}:${longitude}`
     const cached = await loadCache(cacheType, key)
-    const count = await getLatestCount(ip, ELimiterType.LOCATION)
+    const count = await getLatestCount(ip, ELimiterType.LOCATION, ctx.req.user_id)
     if (cached) {
         // const count = await getLatestCount(ip, ELimiterType.LOCATION)
         await saveSearchingLog({
@@ -132,7 +132,7 @@ export async function getPlaceLocationDetail(ctx: GraphQLContext, placeId: strin
     const cacheType = 'place-detail'
     const cached = await loadCache(cacheType, placeId)
     if (cached) {
-        const count = await getLatestCount(ip, ELimiterType.LOCATION)
+        const count = await getLatestCount(ip, ELimiterType.LOCATION, ctx.req.user_id)
         await saveSearchingLog({
             ipaddress: ip,
             isCache: true,
@@ -147,7 +147,7 @@ export async function getPlaceLocationDetail(ctx: GraphQLContext, placeId: strin
         return cached
     }
     // Limit check
-    const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit)
+    const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit, userId || '')
 
     const params = { languageCode: 'th', regionCode: 'th', fields: '*', ...(session ? { sessionToken: session } : {}) }
     const headers = { 'X-Goog-Api-Key': process.env.GOOGLE_MAP_API_KEY }
@@ -198,7 +198,7 @@ export async function getGeocode(ctx: GraphQLContext, latitude: number, longitud
     const key = `${latitude}:${longitude}`
     const cached = await loadCache(cacheType, key)
     if (cached) {
-        const count = await getLatestCount(ip, ELimiterType.LOCATION)
+        const count = await getLatestCount(ip, ELimiterType.LOCATION, ctx.req.user_id)
         await saveSearchingLog({
             ipaddress: ip,
             isCache: true,
@@ -214,7 +214,7 @@ export async function getGeocode(ctx: GraphQLContext, latitude: number, longitud
     }
 
     // Limit check
-    const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit)
+    const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit, userId || '')
 
     const response = await axios.get<google.maps.GeocoderResponse>(GOOGLEAPI_GEOCODE, {
         params: {

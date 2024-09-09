@@ -55,7 +55,7 @@ export enum EAdminAcceptanceStatus {
   CANCELLED = 'cancelled',
 }
 
-enum EDriverAcceptanceStatus {
+export enum EDriverAcceptanceStatus {
   IDLE = 'idle',
   PENDING = 'pending',
   ACCEPTED = 'accepted',
@@ -185,7 +185,7 @@ export class Shipment extends TimeStamps {
   @Field()
   @IsEnum(EDriverAcceptanceStatus)
   @Property({ enum: EDriverAcceptanceStatus, default: EDriverAcceptanceStatus.IDLE })
-  driverAcceptanceStatus: TDriverAcceptanceStatus
+  driverAcceptanceStatus: EDriverAcceptanceStatus
 
   @Field(() => User)
   @Property({ ref: () => User, required: true, autopopulate: true })
