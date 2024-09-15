@@ -12,46 +12,66 @@ import { Ref } from '@typegoose/typegoose'
 import { VehicleType } from '@models/vehicleType.model'
 import { REPONSE_NAME } from 'constants/status'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
-import { ConfirmShipmentDateInput, NextShipmentStepInput, SentPODDocumentShipmentStepInput } from '@inputs/matching.input'
+import {
+  ConfirmShipmentDateInput,
+  NextShipmentStepInput,
+  SentPODDocumentShipmentStepInput,
+} from '@inputs/matching.input'
+import { removeMonitorShipmentJob } from '@configs/jobQueue'
+import { addDays } from 'date-fns'
 
 // Custom status for driver
 type TShipmentStatus = 'new' | 'progressing' | 'dilivered' | 'cancelled'
 
 @Resolver()
 export default class MatchingResolver {
-  generateQueery(status: TShipmentStatus, userId: string, vehicleId: Ref<VehicleType>) {
+  generateQuery(status: TShipmentStatus, userId: string, vehicleId: Ref<VehicleType>) {
+    const currentDate = new Date()
+    const threeDayAfter = addDays(currentDate, 3)
     const statusQuery: FilterQuery<Shipment> =
       status === 'new'
         ? {
-          status: 'idle',
-          driverAcceptanceStatus: 'pending',
-          vehicleId,
-          $or: [
-            { requestedDriver: { $exists: false } }, // ไม่มี requestedDriver
-            { requestedDriver: null }, // requestedDriver เป็น null
-            { requestedDriver: userId }, // requestedDriver ตรงกับ userId
-            { requestedDriver: { $ne: userId } }, // requestedDriver ไม่ตรงกับ userId
-          ],
-        }
+            status: 'idle',
+            driverAcceptanceStatus: 'pending',
+            vehicleId,
+            $or: [
+              { requestedDriver: { $exists: false } }, // ไม่มี requestedDriver
+              { requestedDriver: null }, // requestedDriver เป็น null
+              { requestedDriver: userId }, // requestedDriver ตรงกับ userId
+              { requestedDriver: { $ne: userId } }, // requestedDriver ไม่ตรงกับ userId
+            ],
+            $nor: [
+              {
+                driver: new Types.ObjectId(userId), // คนขับคนเดิม
+                bookingDateTime: {
+                  $exists: true,
+                  $ne: null,
+                  // งานใหม่ห้ามทับซ้อนกับเวลางานเก่าที่ driver ทำอยู่ + 3 วัน
+                  $gte: currentDate, // งานใหม่ต้องเกิดขึ้นหลังจากปัจจุบัน
+                  $lte: threeDayAfter, // เวลาจบของงานเก่าต้องไม่น้อยกว่า 3 วันนับจากเวลาที่ทำงาน
+                },
+              },
+            ],
+          }
         : status === 'progressing' // Status progressing
-          ? {
+        ? {
             status: 'progressing',
             driverAcceptanceStatus: 'accepted',
             driver: new Types.ObjectId(userId),
           }
-          : status === 'cancelled' // Status cancelled
-            ? {
-              driverAcceptanceStatus: 'accepted',
-              driver: new Types.ObjectId(userId),
-              $or: [{ status: 'cancelled' }, { status: 'refund' }],
-            }
-            : status === 'dilivered' // Status complete
-              ? {
-                status: 'dilivered',
-                driverAcceptanceStatus: 'accepted',
-                driver: new Types.ObjectId(userId),
-              }
-              : { _id: 'none' } // Not Included status
+        : status === 'cancelled' // Status cancelled
+        ? {
+            driverAcceptanceStatus: 'accepted',
+            driver: new Types.ObjectId(userId),
+            $or: [{ status: 'cancelled' }, { status: 'refund' }],
+          }
+        : status === 'dilivered' // Status complete
+        ? {
+            status: 'dilivered',
+            driverAcceptanceStatus: 'accepted',
+            driver: new Types.ObjectId(userId),
+          }
+        : { _id: 'none' } // Not Included status
 
     return statusQuery
   }
@@ -77,7 +97,7 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    const query = this.generateQueery(status, userId, individualDriver.serviceVehicleType)
+    const query = this.generateQuery(status, userId, individualDriver.serviceVehicleType)
 
     console.log('---------query-----', JSON.stringify(query))
     const shipments = await ShipmentModel.find(query).skip(skip).limit(limit).sort({ createdAt: 1 }).exec()
@@ -121,7 +141,7 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    const query = this.generateQueery(status, userId, individualDriver.serviceVehicleType)
+    const query = this.generateQuery(status, userId, individualDriver.serviceVehicleType)
 
     const shipmentCount = await ShipmentModel.countDocuments(query)
     return shipmentCount
@@ -161,6 +181,8 @@ export default class MatchingResolver {
           ],
         })
       }
+
+      await removeMonitorShipmentJob(shipment._id)
 
       return true
     }
@@ -217,7 +239,10 @@ export default class MatchingResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard(['driver']))
-  async sentPODDocument(@Ctx() ctx: GraphQLContext, @Arg('data') data: SentPODDocumentShipmentStepInput): Promise<boolean> {
+  async sentPODDocument(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('data') data: SentPODDocumentShipmentStepInput,
+  ): Promise<boolean> {
     const userId = ctx.req.user_id
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'

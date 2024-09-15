@@ -95,10 +95,11 @@ export default class AdditionalServiceResolver {
         descriptions: descriptionIds,
       });
 
-      await AdditionalServiceDescriptionModel.deleteMany({
-        _id: { $nin: descriptionIds },
-        // additionalService: id, // TODO: Recheck again
-      });
+      // TODO: Recheck
+      // await AdditionalServiceDescriptionModel.deleteMany({
+      //   _id: { $nin: descriptionIds },
+      //   // additionalService: id, // TODO: Recheck again
+      // });
 
       const additionalService = await AdditionalServiceModel.findById(id);
 

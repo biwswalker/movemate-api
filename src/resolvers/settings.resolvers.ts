@@ -12,7 +12,7 @@ import UpdateHistoryModel from "@models/updateHistory.model";
 import { yupValidationThrow } from "@utils/error.utils";
 import { BusinessTypesSchema, FAQsSchema, GeneralSchema, InstructionsSchema } from "@validations/settings.validations";
 import { GraphQLError } from "graphql";
-import { omit } from "lodash";
+import { get, omit } from "lodash";
 import { Types } from "mongoose";
 import { Arg, Ctx, Mutation, Query, Resolver, UseMiddleware } from "type-graphql";
 import { ValidationError } from "yup";
@@ -151,7 +151,8 @@ export default class SettingsResolver {
             const settingCustomerPolicies = await SettingCustomerPoliciesModel.find();
             const settingCustomerPoliciesOldData = settingCustomerPolicies[0]
 
-            const newVersion = settingCustomerPoliciesOldData.version ? settingCustomerPoliciesOldData.version + 1 : 1
+            const version = get(settingCustomerPoliciesOldData, 'version', 0)
+            const newVersion = version + 1
             const _id = settingCustomerPoliciesOldData ? settingCustomerPoliciesOldData._id : new Types.ObjectId()
 
             const updateHistory = new UpdateHistoryModel({
@@ -214,8 +215,9 @@ export default class SettingsResolver {
             const userId = ctx.req.user_id;
             const settingDriverPolicies = await SettingDriverPoliciesModel.find();
             const settingDriverPoliciesOldData = settingDriverPolicies[0]
-
-            const newVersion = settingDriverPoliciesOldData.version ? settingDriverPoliciesOldData.version + 1 : 1
+            
+            const version = get(settingDriverPoliciesOldData, 'version', 0)
+            const newVersion = version + 1
             const _id = settingDriverPoliciesOldData ? settingDriverPoliciesOldData._id : new Types.ObjectId()
 
             const updateHistory = new UpdateHistoryModel({

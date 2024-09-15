@@ -30,6 +30,7 @@ import MatchingResolver from '@resolvers/matching.resolvers'
 import BillingCycleResolver from '@resolvers/billingCycle.resolvers'
 import BillingPaymentResolver from '@resolvers/billingPayment.resolvers'
 import TransactionResolver from '@resolvers/transaction.resolvers'
+import CancellationResolver from '@resolvers/cancellation.resolvers'
 
 export interface GraphQLContext {
   req: Request
@@ -63,6 +64,7 @@ export async function createGraphQLServer(httpServer: http.Server) {
       BillingCycleResolver,
       BillingPaymentResolver,
       TransactionResolver,
+      CancellationResolver,
     ],
     pubSub,
     authChecker: ({ context }: { context: GraphQLContext }) => {

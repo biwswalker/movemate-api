@@ -2,6 +2,7 @@ import { Field, ID, ObjectType } from 'type-graphql'
 import { prop as Property, getModelForClass } from '@typegoose/typegoose'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import { LoadmoreArgs } from '@inputs/query.input'
+import { TransactionPayload } from '@payloads/transaction.payloads'
 
 export enum ETransactionType {
   INCOME = 'income',
@@ -9,9 +10,25 @@ export enum ETransactionType {
 }
 
 export enum ETransactionStatus {
-  PAID = 'paid',
+  COMPLETE = 'complete',
   PENDING = 'pending',
 }
+
+export enum ETransactionOwner {
+  MOVEMATE = 'movemate',
+  DRIVER = 'driver',
+}
+
+export enum ERefType {
+  SHIPMENT = 'shipment',
+  BILLING = 'billing',
+}
+
+/**
+ * TODO: WHT Tax to calculate
+ */
+
+export const MOVEMATE_OWNER_ID = 'movemate-thailand'
 
 @ObjectType()
 export class Transaction extends TimeStamps {
@@ -20,15 +37,19 @@ export class Transaction extends TimeStamps {
 
   @Field()
   @Property({ required: true })
-  driverId: string
+  ownerId: string
+
+  @Field()
+  @Property({ required: true })
+  ownerType: ETransactionOwner
 
   @Field()
   @Property({ required: false })
-  shipmentId: string
+  refId: string
 
   @Field()
   @Property({ required: false })
-  trackingNumber: string
+  refType: ERefType
 
   @Field()
   @Property({ required: true })
@@ -54,9 +75,65 @@ export class Transaction extends TimeStamps {
   @Property({ default: Date.now })
   updatedAt: Date
 
-  static async findByUserId(driverId: string, { skip, limit }: LoadmoreArgs): Promise<Transaction[]> {
-    const transactions = await TransactionModel.find({ driverId }).sort({ createdAt: -1 }).skip(skip).limit(limit).exec()
+  static async findByDriverId(driverId: string, { skip, limit }: LoadmoreArgs): Promise<Transaction[]> {
+    const transactions = await TransactionModel.find({ ownerId: driverId, ownerType: ETransactionOwner.DRIVER })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec()
     return transactions
+  }
+
+  static async calculateTransaction(ownerId: string): Promise<TransactionPayload> {
+    const transactions = await TransactionModel.aggregate([
+      { $match: { ownerId } },
+      { $group: { _id: '$transactionType', totalAmount: { $sum: '$amount' } } },
+    ])
+    const pendingTransactions = await TransactionModel.aggregate([
+      { $match: { ownerId, status: ETransactionStatus.PENDING } },
+      { $group: { totalAmount: { $sum: '$amount' } } },
+    ])
+    const totalPending = pendingTransactions.length > 0 ? pendingTransactions[0]?.totalAmount : 0
+    const totalIncome = transactions.find((t) => t._id === ETransactionType.INCOME)?.totalAmount || 0
+    const totalOutcome = transactions.find((t) => t._id === ETransactionType.OUTCOME)?.totalAmount || 0
+    const totalOverall = totalIncome - totalOutcome
+
+    return {
+      totalPending,
+      totalIncome,
+      totalOutcome,
+      totalOverall,
+    }
+  }
+
+  static async calculateProfit(startDate: Date, endDate: Date): Promise<TransactionPayload> {
+    const transactions = await TransactionModel.aggregate([
+      {
+        $match: {
+          createdAt: {
+            $gte: startDate,
+            $lte: endDate,
+          },
+          ownerType: ETransactionOwner.MOVEMATE,
+          ownerId: MOVEMATE_OWNER_ID,
+        },
+      },
+      {
+        $group: {
+          _id: '$transactionType',
+          totalAmount: { $sum: '$amount' },
+        },
+      },
+    ])
+    const totalIncome = transactions.find((t) => t._id === ETransactionType.INCOME)?.totalAmount || 0
+    const totalOutcome = transactions.find((t) => t._id === ETransactionType.OUTCOME)?.totalAmount || 0
+    const totalOverall = totalIncome - totalOutcome
+
+    return {
+      totalIncome,
+      totalOutcome,
+      totalOverall,
+    }
   }
 }
 

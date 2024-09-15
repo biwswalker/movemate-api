@@ -1,50 +1,56 @@
-import { ObjectType, Field, ID, Int } from "type-graphql";
-import { prop as Property, Ref, getModelForClass, plugin } from "@typegoose/typegoose";
+import { ObjectType, Field, ID, Int } from 'type-graphql'
+import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import autopopulate from 'mongoose-autopopulate'
-import { IsNotEmpty, IsString, IsEnum } from "class-validator";
-import bcrypt from "bcrypt";
+import { IsNotEmpty, IsString, IsEnum } from 'class-validator'
+import bcrypt from 'bcrypt'
 import mongoosePagination from 'mongoose-paginate-v2'
 import aggregatePaginate from 'mongoose-aggregate-paginate-v2'
-import mongoose from "mongoose";
-import { Admin } from "./admin.model";
-import { IndividualCustomer } from "./customerIndividual.model";
-import { BusinessCustomer } from "./customerBusiness.model";
-import { File } from "./file.model"
-import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
-import { decryption } from "@utils/encryption";
-import { find, get, isEmpty } from "lodash";
-import { EXISTING_USERS, GET_CUSTOMER_BY_EMAIL } from "@pipelines/user.pipeline";
-import { Notification } from "./notification.model";
-import { IndividualDriver } from "./driverIndividual.model";
+import mongoose from 'mongoose'
+import { Admin } from './admin.model'
+import { IndividualCustomer } from './customerIndividual.model'
+import { BusinessCustomer } from './customerBusiness.model'
+import { File } from './file.model'
+import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
+import { decryption } from '@utils/encryption'
+import { find, get, isEmpty } from 'lodash'
+import { EXISTING_USERS, GET_CUSTOMER_BY_EMAIL } from '@pipelines/user.pipeline'
+import { Notification } from './notification.model'
+import { IndividualDriver } from './driverIndividual.model'
 
 export enum EUserRole {
   CUSTOMER = 'customer',
   ADMIN = 'admin',
-  DRIVER = 'driver'
+  DRIVER = 'driver',
 }
 
 export enum EUserType {
-  INDIVIDUAL = "individual",
-  BUSINESS = "business",
+  INDIVIDUAL = 'individual',
+  BUSINESS = 'business',
 }
 
 export enum EUserStatus {
-  PENDING = "pending", // Need to Verify
-  ACTIVE = "active",
-  INACTIVE = "inactive",
-  BANNED = "banned",
-  DENIED = "denied",
+  PENDING = 'pending', // Need to Verify
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+  BANNED = 'banned',
+  DENIED = 'denied',
 }
 
 export enum EUserValidationStatus {
-  PENDING = "pending",
-  APPROVE = "approve",
-  DENIED = "denied",
+  PENDING = 'pending',
+  APPROVE = 'approve',
+  DENIED = 'denied',
 }
 
 enum ERegistration {
-  WEB = "web",
-  APP = "app",
+  WEB = 'web',
+  APP = 'app',
+}
+
+export enum EDriverStatus {
+  IDLE = 'idle',
+  SCHEDULE = 'schedule',
+  BUSY = 'busy',
 }
 
 @plugin(autopopulate)
@@ -53,42 +59,42 @@ enum ERegistration {
 @ObjectType()
 export class User extends TimeStamps {
   @Field(() => ID)
-  readonly _id: string;
+  readonly _id: string
 
   @Field()
   @IsString()
   @IsNotEmpty()
   @Property({ required: true })
-  userNumber: string;
+  userNumber: string
 
   @Field()
   @IsEnum(EUserRole)
   @IsNotEmpty()
   @Property({ enum: EUserRole, default: EUserRole.CUSTOMER, required: true })
-  userRole: TUserRole;
+  userRole: TUserRole
 
   @Field()
   @IsEnum(EUserType)
   @IsNotEmpty()
   @Property({ enum: EUserType, default: EUserType.INDIVIDUAL, required: true })
-  userType: TUserType;
+  userType: TUserType
 
   @Field()
   @Property({ required: true, unique: true })
-  username: string;
+  username: string
 
   @Property({ required: true })
-  password: string;
+  password: string
 
   @Field({ nullable: true })
   @Property()
-  remark: string;
+  remark: string
 
   @Field()
   @IsEnum(EUserStatus)
   @IsNotEmpty()
   @Property({ required: true, enum: EUserStatus, default: EUserStatus.ACTIVE })
-  status: TUserStatus;
+  status: TUserStatus
 
   @Field()
   @IsEnum(EUserValidationStatus)
@@ -98,49 +104,49 @@ export class User extends TimeStamps {
     enum: EUserValidationStatus,
     default: EUserValidationStatus.PENDING,
   })
-  validationStatus: TUserValidationStatus;
+  validationStatus: TUserValidationStatus
 
   @Field()
   @IsEnum(ERegistration)
   @IsNotEmpty()
   @Property({ required: true, enum: ERegistration, default: ERegistration.WEB })
-  registration: TRegistration;
+  registration: TRegistration
 
   @Field({ nullable: true })
   @Property()
-  lastestOTP: string;
+  lastestOTP: string
 
   @Field({ nullable: true })
   @Property()
-  lastestOTPRef: string;
+  lastestOTPRef: string
 
   @Field({ nullable: true })
   @Property()
-  lastestOTPTime: Date;
+  lastestOTPTime: Date
 
   @Field()
   @Property()
-  isVerifiedEmail: boolean;
+  isVerifiedEmail: boolean
 
   @Field()
   @Property()
-  isVerifiedPhoneNumber: boolean;
+  isVerifiedPhoneNumber: boolean
 
   @Field((type) => Int, { nullable: true })
   @Property()
-  acceptPolicyVersion: number;
+  acceptPolicyVersion: number
 
   @Field({ nullable: true })
   @Property()
-  acceptPolicyTime: Date;
+  acceptPolicyTime: Date
 
   @Field()
   @Property({ default: Date.now })
-  createdAt: Date;
+  createdAt: Date
 
   @Field()
   @Property({ default: Date.now })
-  updatedAt: Date;
+  updatedAt: Date
 
   @Field(() => Admin, { nullable: true })
   @Property({ autopopulate: true, ref: 'Admin' })
@@ -169,21 +175,25 @@ export class User extends TimeStamps {
   upgradeRequest?: Ref<BusinessCustomer>
 
   @Property({ required: false, default: true })
-  isChangePasswordRequire: boolean;
+  isChangePasswordRequire: boolean
 
   @Property()
-  lastestResetPassword?: Date;
+  lastestResetPassword?: Date
 
   @Property()
-  resetPasswordCode?: string;
+  resetPasswordCode?: string
 
   @Field(() => [Notification], { nullable: true })
   @Property({ ref: () => Notification, default: [] })
-  notifications: Ref<Notification>[];
+  notifications: Ref<Notification>[]
 
   @Field(() => String, { nullable: true, defaultValue: '' })
   @Property({ default: '' })
-  fcmToken?: string;
+  fcmToken?: string
+
+  @Field({ nullable: true })
+  @Property({ default: EDriverStatus.IDLE, required: false })
+  drivingStatus?: EDriverStatus
 
   @Field({ nullable: true })
   get fullname(): string {
@@ -192,7 +202,8 @@ export class User extends TimeStamps {
 
     if (userRole === 'customer') {
       if (userType === 'individual') {
-        const individualDetail: IndividualCustomer | undefined = get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
+        const individualDetail: IndividualCustomer | undefined =
+          get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
         if (individualDetail) {
           const title = get(individualDetail, 'title', '')
           const otherTitle = get(individualDetail, 'otherTitle', '')
@@ -205,13 +216,14 @@ export class User extends TimeStamps {
             { value: 'Mr.', label: 'นาย' },
             { value: 'other', label: 'อื่นๆ' },
           ]
-          const titleName = title !== "other" ? find(INDIVIDUAL_TITLE_NAME_OPTIONS, ['value', title]).label : otherTitle
+          const titleName = title !== 'other' ? find(INDIVIDUAL_TITLE_NAME_OPTIONS, ['value', title]).label : otherTitle
 
-          return `${titleName}${firstname} ${lastname}`;
+          return `${titleName}${firstname} ${lastname}`
         }
         return ''
       } else if (userType === 'business') {
-        const businessDetail: BusinessCustomer | undefined = get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
+        const businessDetail: BusinessCustomer | undefined =
+          get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
         if (businessDetail) {
           const BUSINESS_TITLE_NAME_OPTIONS = [
             { value: 'Co', label: 'บจก.' },
@@ -225,13 +237,14 @@ export class User extends TimeStamps {
       }
     } else if (userRole === 'driver') {
       if (userType === 'individual') {
-        const individualDriver: IndividualDriver | undefined = get(this, '_doc.individualDriver', undefined) || this.individualDriver || undefined
+        const individualDriver: IndividualDriver | undefined =
+          get(this, '_doc.individualDriver', undefined) || this.individualDriver || undefined
         if (individualDriver) {
           const title = get(individualDriver, 'title', '')
           const otherTitle = get(individualDriver, 'otherTitle', '')
           const firstname = get(individualDriver, 'firstname', '')
           const lastname = get(individualDriver, 'lastname', '')
-          return `${title === 'อื่นๆ' ? otherTitle : title}${firstname} ${lastname}`;
+          return `${title === 'อื่นๆ' ? otherTitle : title}${firstname} ${lastname}`
         }
         return ''
       } else if (userType === 'business') {
@@ -245,10 +258,12 @@ export class User extends TimeStamps {
   get email(): string {
     const userType = get(this, '_doc.userType', '') || this.userType || ''
     if (userType === 'individual') {
-      const individualDetail: IndividualCustomer | undefined = get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
+      const individualDetail: IndividualCustomer | undefined =
+        get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
       return individualDetail ? individualDetail.email : ''
     } else if (userType === 'business') {
-      const businessDetail: BusinessCustomer | undefined = get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
+      const businessDetail: BusinessCustomer | undefined =
+        get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
       return businessDetail ? businessDetail.businessEmail : ''
     }
     return ''
@@ -256,11 +271,11 @@ export class User extends TimeStamps {
 
   async validatePassword(password: string): Promise<boolean> {
     const password_decryption = decryption(password)
-    return bcrypt.compare(password_decryption, this.password);
+    return bcrypt.compare(password_decryption, this.password)
   }
 
   static async findByUsername(username: string): Promise<User | null> {
-    return UserModel.findOne({ username });
+    return UserModel.findOne({ username })
   }
 
   static async findCustomerByEmail(email: string): Promise<User | null> {
@@ -277,6 +292,6 @@ export class User extends TimeStamps {
   static aggregatePaginate: mongoose.AggregatePaginateModel<typeof User>['aggregatePaginate']
 }
 
-const UserModel = getModelForClass(User);
+const UserModel = getModelForClass(User)
 
-export default UserModel;
+export default UserModel

@@ -3,7 +3,7 @@ node_modules
 .env
 .DS_Store
 uploads/*
-generated/invoice/*
-generated/receipt/*
+generated/invoice/*.pdf
+generated/receipt/*.pdf
 dist
 firebase-services.json

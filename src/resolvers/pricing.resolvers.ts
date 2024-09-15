@@ -165,10 +165,11 @@ export default class PricingResolver {
         additionalServices: serviceIds,
       });
 
-      await AdditionalServiceCostPricingModel.deleteMany({
-        _id: { $nin: serviceIds },
-        // vehicleCost: id, // TODO: Recheck again
-      });
+      // TODO: Recheck again
+      // await AdditionalServiceCostPricingModel.deleteMany({
+      //   _id: { $nin: serviceIds },
+      //   vehicleCost: id, // TODO: Recheck again
+      // });
 
       return true;
     } catch (errors) {

@@ -4,7 +4,6 @@ import { BillingCycleRefundArgs, GetBillingCycleArgs } from '@inputs/billingCycl
 import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
 import BillingCycleModel, { BillingCycle, EBillingStatus, PostalDetail } from '@models/billingCycle.model'
 import FileModel, { File } from '@models/file.model'
-import RefundModel from '@models/refund.model'
 import ShipmentModel from '@models/shipment.model'
 import UserModel from '@models/user.model'
 import { BillingCyclePaginationAggregatePayload, TotalBillingRecordPayload } from '@payloads/billingCycle.payloads'
@@ -123,13 +122,6 @@ export default class BillingCycleResolver {
     try {
       const imageEvidenceFile = new FileModel(data.imageEvidence)
       await imageEvidenceFile.save()
-      const refunded = new RefundModel({
-        imageEvidence: imageEvidenceFile,
-        paymentDate: data.paymentDate,
-        paymentTime: data.paymentTime,
-        updatedBy: user_id
-      })
-      await refunded.save()
       await BillingCycleModel.markAsRefund(
         {
           billingCycleId: data.billingCycleId,

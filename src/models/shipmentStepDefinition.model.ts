@@ -25,6 +25,7 @@ export enum EStepDefinition {
   POD = 'POD',
   FINISH = 'FINISH',
   REJECTED_PAYMENT = 'REJECTED_PAYMENT',
+  UNINTERESTED_DRIVER = 'UNINTERESTED_DRIVER',
   REFUND = 'REFUND',
 }
 
@@ -40,6 +41,7 @@ export enum EStepDefinitionName {
   FINISH = 'จัดส่งสำเร็จ',
   POD = 'แนบเอกสารและส่งเอกสาร POD',
   REJECTED_PAYMENT = 'ไม่อนุมัติการชำระเงิน',
+  UNINTERESTED_DRIVER = 'ไม่มีคนขับตอบรับงานนี้',
   REFUND = 'ดำเนินการคืนเงิน'
 }
 

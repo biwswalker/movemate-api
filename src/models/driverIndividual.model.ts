@@ -10,115 +10,112 @@ import TransactionModel, { ETransactionStatus, ETransactionType } from './transa
 @plugin(mongooseAutoPopulate)
 @ObjectType()
 export class IndividualDriver {
-    @Field(() => ID)
-    readonly _id: string
+  @Field(() => ID)
+  readonly _id: string
 
-    @Field()
-    @IsString()
-    @Property()
-    title: string;
+  @Field()
+  @IsString()
+  @Property()
+  title: string
 
-    @Field()
-    @IsString()
-    @Property()
-    otherTitle: string;
+  @Field()
+  @IsString()
+  @Property()
+  otherTitle: string
 
-    @Field()
-    @IsString()
-    @Property()
-    firstname: string;
+  @Field()
+  @IsString()
+  @Property()
+  firstname: string
 
-    @Field()
-    @IsString()
-    @Property()
-    lastname: string;
+  @Field()
+  @IsString()
+  @Property()
+  lastname: string
 
-    @Field()
-    @IsString()
-    @Length(13)
-    @Property()
-    taxId: string;
+  @Field()
+  @IsString()
+  @Length(13)
+  @Property()
+  taxId: string
 
-    @Field()
-    @Property()
-    phoneNumber: string;
+  @Field()
+  @Property()
+  phoneNumber: string
 
-    @Field()
-    @Property()
-    lineId: string;
+  @Field()
+  @Property()
+  lineId: string
 
-    @Field()
-    @IsString()
-    @Property()
-    address: string;
+  @Field()
+  @IsString()
+  @Property()
+  address: string
 
-    @Field()
-    @Property()
-    province: string;
+  @Field()
+  @Property()
+  province: string
 
-    @Field()
-    @IsString()
-    @Property()
-    district: string;
+  @Field()
+  @IsString()
+  @Property()
+  district: string
 
-    @Field()
-    @IsString()
-    @Property()
-    subDistrict: string;
+  @Field()
+  @IsString()
+  @Property()
+  subDistrict: string
 
-    @Field()
-    @IsString()
-    @Property()
-    postcode: string;
+  @Field()
+  @IsString()
+  @Property()
+  postcode: string
 
-    @Field()
-    @IsString()
-    @Property()
-    bank: string
+  @Field()
+  @IsString()
+  @Property()
+  bank: string
 
-    @Field()
-    @IsString()
-    @Property()
-    bankBranch: string;
+  @Field()
+  @IsString()
+  @Property()
+  bankBranch: string
 
-    @Field()
-    @IsString()
-    @Property()
-    bankName: string;
+  @Field()
+  @IsString()
+  @Property()
+  bankName: string
 
-    @Field()
-    @IsString()
-    @Property()
-    bankNumber: string;
+  @Field()
+  @IsString()
+  @Property()
+  bankNumber: string
 
-    @Field(() => VehicleType)
-    @Property({ autopopulate: true, ref: 'VehicleType' })
-    serviceVehicleType: Ref<VehicleType>
+  @Field(() => VehicleType)
+  @Property({ autopopulate: true, ref: 'VehicleType' })
+  serviceVehicleType: Ref<VehicleType>
 
-    @Field({ defaultValue: 0 })
-    @Property({ default: 0 })
-    balance: number;
+  @Field({ defaultValue: 0 })
+  @Property({ default: 0 })
+  balance: number
 
-    @Field(() => DriverDocument)
-    @Property({ autopopulate: true, ref: 'DriverDocument' })
-    documents: Ref<DriverDocument>
+  @Field(() => DriverDocument)
+  @Property({ autopopulate: true, ref: 'DriverDocument' })
+  documents: Ref<DriverDocument>
 
-    @Field({ nullable: true })
-    get fullname(): string {
-        const title = get(this, '_doc.title', '') || get(this, 'title', '')
-        const otherTitle = get(this, '_doc.otherTitle', '') || get(this, 'otherTitle', '')
-        const firstname = get(this, '_doc.firstname', '') || get(this, 'firstname', '')
-        const lastname = get(this, '_doc.lastname', '') || get(this, 'lastname', '')
-        return `${title || otherTitle} ${firstname} ${lastname}`;
-    }
+  @Field({ nullable: true })
+  get fullname(): string {
+    const title = get(this, '_doc.title', '') || get(this, 'title', '')
+    const otherTitle = get(this, '_doc.otherTitle', '') || get(this, 'otherTitle', '')
+    const firstname = get(this, '_doc.firstname', '') || get(this, 'firstname', '')
+    const lastname = get(this, '_doc.lastname', '') || get(this, 'lastname', '')
+    return `${title || otherTitle} ${firstname} ${lastname}`
+  }
 
-    async updateBalance(driverId: string) {
-        const transactions = await TransactionModel.find({ status: ETransactionStatus.PENDING, transactionType: ETransactionType.INCOME, driverId }).lean()
-        const currentBalance = reduce(transactions, (prev, curr) => {
-            return sum([prev, curr.amount])
-        }, 0)
-        await IndividualDriverModel.findByIdAndUpdate(this._id, { balance: currentBalance })
-    }
+  async updateBalance() {
+    const transactions = await TransactionModel.calculateTransaction(this._id)
+    await IndividualDriverModel.findByIdAndUpdate(this._id, { balance: transactions.totalPending })
+  }
 }
 
 const IndividualDriverModel = getModelForClass(IndividualDriver)

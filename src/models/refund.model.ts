@@ -1,8 +1,14 @@
-import { Field, ID, ObjectType } from "type-graphql"
+import { Field, ID, ObjectType } from 'type-graphql'
 import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
-import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses"
-import { File } from "./file.model"
-import mongooseAutoPopulate from "mongoose-autopopulate"
+import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
+import { File } from './file.model'
+import mongooseAutoPopulate from 'mongoose-autopopulate'
+
+export enum ERefundStatus {
+  PENDING = 'pending',
+  SUCCESS = 'success',
+  CANCELLED = 'cancelled',
+}
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()
@@ -10,17 +16,25 @@ export class Refund extends TimeStamps {
   @Field(() => ID)
   readonly _id: string
 
-  @Field(() => File)
-  @Property({ ref: () => File, autopopulate: true })
+  @Field(() => File, { nullable: true })
+  @Property({ ref: () => File, autopopulate: true, required: false })
   imageEvidence: Ref<File, string>
 
-  @Field(() => Date)
-  @Property()
+  @Field(() => Date, { nullable: true })
+  @Property({ required: false })
   paymentDate: Date
 
-  @Field(() => Date)
-  @Property()
+  @Field(() => Date, { nullable: true })
+  @Property({ required: false })
   paymentTime: Date
+
+  @Field()
+  @Property({ default: ERefundStatus.PENDING })
+  refundStatus: ERefundStatus
+
+  @Field()
+  @Property()
+  refundAmout: number
 
   @Field()
   @Property({ default: Date.now })
@@ -31,7 +45,7 @@ export class Refund extends TimeStamps {
   updatedAt: Date
 
   @Field()
-  @Property({ required: true })
+  @Property({ default: "" })
   updatedBy: string
 }
 

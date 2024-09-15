@@ -10,7 +10,22 @@ import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
 import { AnyBulkWriteOperation, FilterQuery, PaginateOptions, Types } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
-import lodash, { filter, get, head, isEmpty, map, omitBy, reduce, sum, tail, toNumber, values } from 'lodash'
+import lodash, {
+  filter,
+  find,
+  get,
+  head,
+  isEmpty,
+  isEqual,
+  last,
+  map,
+  omitBy,
+  reduce,
+  sum,
+  tail,
+  toNumber,
+  values,
+} from 'lodash'
 import AdditionalServiceCostPricingModel from '@models/additionalServiceCostPricing.model'
 import ShipmentDistancePricingModel from '@models/shipmentDistancePricing.model'
 import VehicleCostModel from '@models/vehicleCost.model'
@@ -22,7 +37,11 @@ import VehicleTypeModel from '@models/vehicleType.model'
 import { DistanceCostPricing } from '@models/distanceCostPricing.model'
 import { email_sender } from '@utils/email.utils'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
-import { ShipmentPaginationAggregatePayload, ShipmentPaginationPayload, TotalRecordPayload } from '@payloads/shipment.payloads'
+import {
+  ShipmentPaginationAggregatePayload,
+  ShipmentPaginationPayload,
+  TotalRecordPayload,
+} from '@payloads/shipment.payloads'
 import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
 import { reformPaginate } from '@utils/pagination.utils'
 import { SHIPMENT_LIST } from '@pipelines/shipment.pipeline'
@@ -33,9 +52,27 @@ import { clearLimiter, ELimiterType } from '@configs/rateLimit'
 import BusinessCustomerCreditPaymentModel from '@models/customerBusinessCreditPayment.model'
 import { REPONSE_NAME } from 'constants/status'
 import { generateInvoice } from 'reports/invoice'
-import { cancelShipmentQueue, FCMShipmentPayload, monitorShipmentQueue, ShipmentPayload } from '@configs/jobQueue'
+import {
+  cancelShipmentQueue,
+  FCMShipmentPayload,
+  FOUR_HOUR,
+  monitorShipmentQueue,
+  obliterateQueue,
+  removeMonitorShipmentJob,
+  ShipmentPayload,
+  TEN_MIN,
+  TWO_HOUR,
+  updateMonitorQueue,
+} from '@configs/jobQueue'
 import { Job } from 'bull'
 import { Message } from 'firebase-admin/messaging'
+import RefundModel, { ERefundStatus } from '@models/refund.model'
+import StepDefinitionModel, {
+  EStepDefinition,
+  EStepDefinitionName,
+  EStepStatus,
+  StepDefinition,
+} from '@models/shipmentStepDefinition.model'
 
 Aigle.mixin(lodash, {})
 
@@ -59,11 +96,17 @@ export default class ShipmentResolver {
 
   @Query(() => Shipment)
   @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
-  async getShipmentByTracking(@Ctx() ctx: GraphQLContext, @Arg('trackingNumber') trackingNumber: string): Promise<Shipment> {
+  async getShipmentByTracking(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('trackingNumber') trackingNumber: string,
+  ): Promise<Shipment> {
     const user_id = ctx.req.user_id
     const user_role = ctx.req.user_role
     try {
-      const shipment = await ShipmentModel.findOne({ trackingNumber, ...(user_role === 'customer' ? { customer: user_id } : {}) })
+      const shipment = await ShipmentModel.findOne({
+        trackingNumber,
+        ...(user_role === 'customer' ? { customer: user_id } : {}),
+      })
       if (!shipment) {
         const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
         throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
@@ -75,56 +118,76 @@ export default class ShipmentResolver {
     }
   }
 
-  shipmentQuery({ dateRangeStart, dateRangeEnd, trackingNumber, vehicleTypeId, status, startWorkingDate, endWorkingDate }: GetShipmentArgs, user_role: string | undefined, user_id: string | undefined): FilterQuery<typeof Shipment> {
+  shipmentQuery(
+    {
+      dateRangeStart,
+      dateRangeEnd,
+      trackingNumber,
+      vehicleTypeId,
+      status,
+      startWorkingDate,
+      endWorkingDate,
+    }: GetShipmentArgs,
+    user_role: string | undefined,
+    user_id: string | undefined,
+  ): FilterQuery<typeof Shipment> {
     // Status
-    const statusFilterOr = status === 'all'
-      ? ['idle', 'progressing', 'dilivered', 'cancelled', 'refund']
-      : status === 'progress'
+    const statusFilterOr =
+      status === 'all'
+        ? ['idle', 'progressing', 'dilivered', 'cancelled', 'refund']
+        : status === 'progress'
         ? ['idle', 'progressing']
-        : status === 'finish' ? ['dilivered']
-          : status === 'refund'
-            ? ['refund']
-            : []
-
+        : status === 'finish'
+        ? ['dilivered']
+        : status === 'refund'
+        ? ['refund']
+        : []
 
     // Create at
-    const startOfCreated = dateRangeStart ? new Date(new Date(dateRangeStart).setHours(0, 0, 0, 0)) : null;
-    const endOfCreated = dateRangeEnd ? new Date(new Date(dateRangeEnd).setHours(23, 59, 59, 999)) : null;
+    const startOfCreated = dateRangeStart ? new Date(new Date(dateRangeStart).setHours(0, 0, 0, 0)) : null
+    const endOfCreated = dateRangeEnd ? new Date(new Date(dateRangeEnd).setHours(23, 59, 59, 999)) : null
     // Working
-    const startOfWorking = startWorkingDate ? new Date(new Date(startWorkingDate).setHours(0, 0, 0, 0)) : null;
-    const endOfWorking = endWorkingDate ? new Date(new Date(endWorkingDate).setHours(23, 59, 59, 999)) : null;
+    const startOfWorking = startWorkingDate ? new Date(new Date(startWorkingDate).setHours(0, 0, 0, 0)) : null
+    const endOfWorking = endWorkingDate ? new Date(new Date(endWorkingDate).setHours(23, 59, 59, 999)) : null
 
     // Query
     const regex = new RegExp(trackingNumber, 'i')
     const orQuery = [
       ...(trackingNumber
         ? [
-          { trackingNumber: { $regex: regex }, $or: !isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [] },
-          { refId: { $regex: regex }, $or: !isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [] }
-        ]
-        : (!isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [])
-      )
+            {
+              trackingNumber: { $regex: regex },
+              $or: !isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [],
+            },
+            { refId: { $regex: regex }, $or: !isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [] },
+          ]
+        : !isEmpty(statusFilterOr)
+        ? [{ status: { $in: statusFilterOr } }]
+        : []),
     ]
     const filterQuery: FilterQuery<typeof Shipment> = {
       ...(vehicleTypeId ? { vehicleId: vehicleTypeId } : {}),
-      ...(startOfCreated || endOfCreated ? {
-        createdAt: {
-          ...(startOfCreated ? { $gte: startOfCreated } : {}),
-          ...(endOfCreated ? { $lte: endOfCreated } : {}),
-        }
-      } : {}),
-      ...(startOfWorking && endOfWorking ? {
-        bookingDateTime: {
-          ...(startOfWorking ? { $gte: startOfWorking } : {}),
-          ...(endOfWorking ? { $lte: endOfWorking } : {}),
-        }
-      } : {}),
+      ...(startOfCreated || endOfCreated
+        ? {
+            createdAt: {
+              ...(startOfCreated ? { $gte: startOfCreated } : {}),
+              ...(endOfCreated ? { $lte: endOfCreated } : {}),
+            },
+          }
+        : {}),
+      ...(startOfWorking && endOfWorking
+        ? {
+            bookingDateTime: {
+              ...(startOfWorking ? { $gte: startOfWorking } : {}),
+              ...(endOfWorking ? { $lte: endOfWorking } : {}),
+            },
+          }
+        : {}),
       ...(!isEmpty(orQuery) ? { $or: orQuery } : {}),
-      ...(user_role === 'customer' && user_id ? { customer: user_id } : {})
+      ...(user_role === 'customer' && user_id ? { customer: user_id } : {}),
     }
     return filterQuery
   }
-
 
   @Query(() => ShipmentPaginationPayload)
   @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
@@ -138,9 +201,27 @@ export default class ShipmentResolver {
     try {
       const reformSorts: PaginateOptions = reformPaginate(paginate)
       const filterQuery = omitBy(query, isEmpty)
-      console.log('raw: ', JSON.stringify(SHIPMENT_LIST({ startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery }, user_role, user_id)))
-      const aggregate = ShipmentModel.aggregate(SHIPMENT_LIST({ startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery }, user_role, user_id))
-      const shipments = (await ShipmentModel.aggregatePaginate(aggregate, reformSorts)) as ShipmentPaginationAggregatePayload
+      console.log(
+        'raw: ',
+        JSON.stringify(
+          SHIPMENT_LIST(
+            { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery },
+            user_role,
+            user_id,
+          ),
+        ),
+      )
+      const aggregate = ShipmentModel.aggregate(
+        SHIPMENT_LIST(
+          { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery },
+          user_role,
+          user_id,
+        ),
+      )
+      const shipments = (await ShipmentModel.aggregatePaginate(
+        aggregate,
+        reformSorts,
+      )) as ShipmentPaginationAggregatePayload
       if (!shipments) {
         const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
         throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
@@ -153,23 +234,39 @@ export default class ShipmentResolver {
   }
 
   @Query(() => [String])
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard(['admin']))
   async allshipmentIds(
     @Ctx() ctx: GraphQLContext,
-    @Args() { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...query }: GetShipmentArgs): Promise<string[]> {
+    @Args() { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...query }: GetShipmentArgs,
+  ): Promise<string[]> {
     const user_id = ctx.req.user_id
     const user_role = ctx.req.user_role
     try {
       const filterQuery = omitBy(query, isEmpty)
-      console.log('raw: ', JSON.stringify(SHIPMENT_LIST({ startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery }, user_role, user_id)))
-      const shipments = await ShipmentModel.aggregate(SHIPMENT_LIST({ startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery }, user_role, user_id))
+      console.log(
+        'raw: ',
+        JSON.stringify(
+          SHIPMENT_LIST(
+            { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery },
+            user_role,
+            user_id,
+          ),
+        ),
+      )
+      const shipments = await ShipmentModel.aggregate(
+        SHIPMENT_LIST(
+          { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery },
+          user_role,
+          user_id,
+        ),
+      )
       const ids = map(shipments, ({ _id }) => _id)
       console.log('users: ', shipments, ids)
 
-      return ids;
+      return ids
     } catch (error) {
-      console.log(error);
-      throw new GraphQLError("ไม่สามารถเรียกข้อมูลงานขนส่งได้ โปรดลองอีกครั้ง");
+      console.log(error)
+      throw new GraphQLError('ไม่สามารถเรียกข้อมูลงานขนส่งได้ โปรดลองอีกครั้ง')
     }
   }
 
@@ -206,7 +303,7 @@ export default class ShipmentResolver {
   }
 
   @Query(() => Int)
-  @UseMiddleware(AuthGuard(["customer", "admin", "driver"]))
+  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
   async totalShipment(@Ctx() ctx: GraphQLContext, @Args() args: GetShipmentArgs): Promise<number> {
     const user_role = ctx.req.user_role
     const user_id = ctx.req.user_id
@@ -219,9 +316,8 @@ export default class ShipmentResolver {
     return 0
   }
 
-
   @Query(() => [TotalRecordPayload])
-  @UseMiddleware(AuthGuard(["customer", "admin", "driver"]))
+  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
   async statusCount(@Ctx() ctx: GraphQLContext, @Args() args: GetShipmentArgs): Promise<TotalRecordPayload[]> {
     const user_role = ctx.req.user_role
     const user_id = ctx.req.user_id
@@ -243,7 +339,7 @@ export default class ShipmentResolver {
           { label: 'ยกเลิก', key: 'cancelled', count: cancelled },
           { label: 'คืนเงิน', key: 'refund', count: refund },
           { label: 'หมดอายุ', key: 'expire', count: expire },
-        ];
+        ]
       } else {
         const filterQuery = (status: TCriteriaStatus) => this.shipmentQuery({ ...args, status }, user_role, user_id)
 
@@ -307,19 +403,22 @@ export default class ShipmentResolver {
 
       // Make calculate pricing and for check credit usage
       const droppoint = locations.length - 1
-      const _invoice = await ShipmentModel.calculate({
-        vehicleTypeId: data.vehicleId,
-        distanceMeter: data.distance,
-        distanceReturnMeter: data.returnDistance,
-        dropPoint: droppoint,
-        isRounded: data.isRoundedReturn,
-        serviceIds: additionalServices,
-        discountId: discountId,
-        isBusinessCashPayment: customer.userType === 'business' && isCashPaymentMethod
-      }, true)
+      const _invoice = await ShipmentModel.calculate(
+        {
+          vehicleTypeId: data.vehicleId,
+          distanceMeter: data.distance,
+          distanceReturnMeter: data.returnDistance,
+          dropPoint: droppoint,
+          isRounded: data.isRoundedReturn,
+          serviceIds: additionalServices,
+          discountId: discountId,
+          isBusinessCashPayment: customer.userType === 'business' && isCashPaymentMethod,
+        },
+        true,
+      )
 
-      // 
-      const newCreditBalance = sum([creditPayment.creditUsage, _invoice.totalPrice])
+      //
+      const newCreditBalance = sum([creditPayment?.creditUsage || 0, _invoice.totalPrice])
       if (isCreditPaymentMethod) {
         if (newCreditBalance > creditPayment.creditLimit) {
           const message = `วงเงินของคุณไม่พอ กรุณาติดต่อเจ้าหน้าที่`
@@ -477,9 +576,13 @@ export default class ShipmentResolver {
         const paydate = format(cashDetail.paymentDate, 'ddMMyyyy')
         const paytime = format(cashDetail.paymentTime, 'HH:mm')
         const paymentDate = parse(`${paydate}-${paytime}`, 'ddMMyyyy-HH:mm', new Date(), { locale: th })
-        const taxAmount = reduce(_invoice.taxs, (prev, curr) => {
-          return sum([prev, curr.price])
-        }, 0)
+        const taxAmount = reduce(
+          _invoice.taxs,
+          (prev, curr) => {
+            return sum([prev, curr.price])
+          },
+          0,
+        )
         const _billingCycle = new BillingCycleModel({
           user: user_id,
           billingNumber: _billingNumber,
@@ -511,7 +614,6 @@ export default class ShipmentResolver {
 
         const billingCycleData = await BillingCycleModel.findById(_billingCycle._id)
         await generateInvoice(billingCycleData)
-
       } else if (isCreditPaymentMethod) {
         if (!creditPayment) {
           await ShipmentModel.findByIdAndDelete(shipment._id)
@@ -526,6 +628,11 @@ export default class ShipmentResolver {
 
       const response = await ShipmentModel.findById(shipment._id)
       await response.initialStepDefinition()
+
+      if (isCreditPaymentMethod) {
+        // Notification to Driver
+        monitorShipmentStatus(response._id, get(response, 'requestedDriver._id', ''))
+      }
 
       // Clear redis seach limiter
       await clearLimiter(ctx.ip, ELimiterType.LOCATION, user_id || '')
@@ -553,14 +660,14 @@ export default class ShipmentResolver {
         customer.userType === 'individual'
           ? get(customer, 'individualDetail.email', '')
           : customer.userType === 'business'
-            ? get(customer, 'businessDetail.businessEmail', '')
-            : ''
+          ? get(customer, 'businessDetail.businessEmail', '')
+          : ''
       const fullname =
         customer.userType === 'individual'
           ? get(customer, 'individualDetail.fullname', '')
           : customer.userType === 'business'
-            ? get(customer, 'businessDetail.businessName', '')
-            : ''
+          ? get(customer, 'businessDetail.businessName', '')
+          : ''
 
       const originalText = head(response.destinations)?.name || ''
       const destinationsText = reduce(
@@ -582,8 +689,8 @@ export default class ShipmentResolver {
           paymentMethod === 'cash'
             ? 'booking_cash_success'
             : paymentMethod === 'credit'
-              ? 'booking_credit_success'
-              : '',
+            ? 'booking_credit_success'
+            : '',
         context: {
           fullname,
           tracking_number: response.trackingNumber,
@@ -603,100 +710,205 @@ export default class ShipmentResolver {
     }
   }
 
-  async monitorShipmentStatus(shipmentId: string, requestDriverId: string) {
-    const tenMin = 10 * 60 * 1000
-    const oneThousanAndTwentyMin = 120 * 60 * 1000
-    const twoThousanAndFourtyMin = 240 * 60 * 1000
-    if (requestDriverId) {
-      // // เพิ่ม job สำหรับตรวจสอบ shipment ทุกๆ 10 นาที
-      monitorShipmentQueue.add({ shipmentId, driverId: requestDriverId }, { repeat: { every: tenMin } });  // ทำซ้ำทุกๆ 10 นาที
-      monitorShipmentQueue.add({ shipmentId }, { delay: oneThousanAndTwentyMin + tenMin, repeat: { every: tenMin } }); // ทำซ้ำทุกๆ 10 นาที
-      // // เพิ่ม job สำหรับยกเลิก shipment หลังจาก 240 นาที
-      cancelShipmentQueue.add({ shipmentId: shipmentId }, { delay: twoThousanAndFourtyMin + tenMin });
-    } else {
-      // // เพิ่ม job สำหรับตรวจสอบ shipment ทุกๆ 10 นาที
-      monitorShipmentQueue.add({ shipmentId }, { repeat: { every: tenMin } }); // ทำซ้ำทุกๆ 10 นาที
-      // // เพิ่ม job สำหรับยกเลิก shipment หลังจาก 240 นาที
-      cancelShipmentQueue.add({ shipmentId: shipmentId }, { delay: oneThousanAndTwentyMin + tenMin });
+  // @Mutation(() => Boolean)
+  async clearMonitor(): Promise<boolean> {
+    await obliterateQueue()
+    return true
+  }
+}
+
+export async function monitorShipmentStatus(shipmentId: string, driverId: string) {
+  await removeMonitorShipmentJob(shipmentId)
+  if (driverId) {
+    // // เพิ่ม job สำหรับตรวจสอบ shipment ทุกๆ 10 นาที
+    monitorShipmentQueue.add({ shipmentId, driverId }, { jobId: shipmentId })
+    updateMonitorQueue.add({ shipmentId }, { delay: TWO_HOUR })
+    cancelShipmentQueue.add({ shipmentId: shipmentId }, { delay: FOUR_HOUR + TEN_MIN })
+  } else {
+    // // เพิ่ม job สำหรับตรวจสอบ shipment ทุกๆ 10 นาที
+    monitorShipmentQueue.add({ shipmentId, driverId }, { jobId: shipmentId })
+    cancelShipmentQueue.add({ shipmentId: shipmentId }, { delay: FOUR_HOUR + TEN_MIN })
+  }
+}
+
+export const cancelShipmentIfNotInterested = async (shipmentId: string) => {
+  const shipment = await ShipmentModel.findById(shipmentId)
+  const paymentMethod = get(shipment, 'payment.paymentMethod', '')
+
+  if (shipment.driverAcceptanceStatus !== EDriverAcceptanceStatus.PENDING) {
+    return
+  }
+
+  // Make refund if Cash
+  if (isEqual(paymentMethod, EPaymentMethod.CASH)) {
+    const billingCycle = await BillingCycleModel.findOne({
+      shipments: { $in: [shipment._id] },
+      paymentMethod: EPaymentMethod.CASH,
+    }).lean()
+    if (!billingCycle) {
+      const message = 'พบปัญหาทางเทคนิค'
+      throw new GraphQLError(message, {
+        extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] },
+      })
+    }
+    const _refund = new RefundModel({
+      updatedBy: '',
+      refundAmout: 0,
+      refundStatus: ERefundStatus.PENDING,
+    })
+    await _refund.save()
+    await BillingCycleModel.findByIdAndUpdate(billingCycle._id, {
+      billingStatus: EBillingStatus.REFUND,
+      refund: _refund,
+      cancelledDetail: 'ไม่มีคนขับตอบรับงานนี้',
+    })
+
+    const currentStep = find(shipment.steps, ['seq', shipment.currentStepSeq]) as StepDefinition | undefined
+    const lastStep = last(shipment.steps) as StepDefinition
+    if (currentStep) {
+      const deniedSteps = filter(shipment.steps as StepDefinition[], (step) => step.seq >= currentStep.seq)
+      await Aigle.forEach(deniedSteps, async (step) => {
+        const isWaitDriverStep = step.step === EStepDefinition.DRIVER_ACCEPTED && step.seq === currentStep.seq
+        const waitDriverStepChangeData = isWaitDriverStep
+          ? {
+              step: EStepDefinition.UNINTERESTED_DRIVER,
+              stepName: EStepDefinitionName.UNINTERESTED_DRIVER,
+              customerMessage: EStepDefinitionName.UNINTERESTED_DRIVER,
+              driverMessage: EStepDefinitionName.UNINTERESTED_DRIVER,
+            }
+          : {}
+        await StepDefinitionModel.findByIdAndUpdate(step._id, {
+          stepStatus: EStepStatus.CANCELLED,
+          ...waitDriverStepChangeData,
+        })
+      })
+      // Add refund step
+      const newLatestSeq = lastStep.seq + 1
+      const refundStep = new StepDefinitionModel({
+        step: 'REFUND',
+        seq: newLatestSeq,
+        stepName: EStepDefinitionName.REFUND,
+        customerMessage: EStepDefinitionName.REFUND,
+        driverMessage: EStepDefinitionName.REFUND,
+        stepStatus: 'progressing',
+      })
+      await refundStep.save()
+
+      // Update Shipment
+      await shipment.updateOne({
+        status: EShipingStatus.REFUND,
+        driverAcceptanceStatus: EDriverAcceptanceStatus.UNINTERESTED,
+        rejectedReason: 'uninterested_driver',
+        rejectedDetail: 'ไม่มีคนขับตอบรับงานนี้',
+        refund: _refund,
+        currentStepSeq: newLatestSeq,
+        $push: { steps: refundStep._id },
+      })
+    }
+  } else {
+    const currentStep = find(shipment.steps, ['seq', shipment.currentStepSeq]) as StepDefinition | undefined
+    if (currentStep) {
+      // Update Shipment
+      await StepDefinitionModel.findByIdAndUpdate(currentStep._id, {
+        stepStatus: EStepStatus.CANCELLED,
+        step: EStepDefinition.UNINTERESTED_DRIVER,
+        stepName: EStepDefinitionName.UNINTERESTED_DRIVER,
+        customerMessage: EStepDefinitionName.UNINTERESTED_DRIVER,
+        driverMessage: EStepDefinitionName.UNINTERESTED_DRIVER,
+      })
+      await shipment.updateOne({
+        status: EShipingStatus.CANCELLED,
+        driverAcceptanceStatus: EDriverAcceptanceStatus.UNINTERESTED,
+        rejectedReason: 'uninterested_driver',
+        rejectedDetail: 'ไม่มีคนขับตอบรับงานนี้',
+      })
+    }
+  }
+
+  console.log(`Shipment ${shipmentId} is cancelled.`)
+}
+
+export const checkShipmentStatus = async (shipmentId: string): Promise<boolean> => {
+  const shipment = await ShipmentModel.findById(shipmentId)
+  return shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING
+}
+
+export const sendNewShipmentNotification = async (shipmentId: string, requestDriverId: string) => {
+  const shipment = await ShipmentModel.findById(shipmentId)
+
+  if (shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING) {
+    const currentTime = new Date().getTime()
+    const createdTime = new Date(shipment.createdAt).getTime()
+
+    // ถ้าผ่านไป 240 นาทีแล้วยังไม่มี driver รับงาน
+    const coutingdownTime = currentTime - createdTime
+    if (coutingdownTime < FOUR_HOUR) {
+      // ส่ง FCM Notification
+      if (requestDriverId) {
+        const driver = await UserModel.findOne({ _id: shipment.requestedDriver, userRole: EUserRole.DRIVER })
+        if (driver && driver.fcmToken) {
+          await NotificationModel.sendFCMNotification({
+            token: driver.fcmToken,
+            topic: 'New Shipment',
+            data: {
+              navigationId: 'home',
+              trackingNumber: shipment.trackingNumber,
+            },
+            notification: {
+              title: 'MovemateTH',
+              body: '📦 มีงานขนส่งใหม่เฉพาะคุณ',
+            },
+          })
+        }
+      } else {
+        // TODO: Check driver
+        const drivers = await UserModel.find({ userRole: EUserRole.DRIVER })
+        const messages = map<User, Message>(
+          filter(drivers, ({ fcmToken }) => !isEmpty(fcmToken)),
+          (driver) => {
+            if (driver.fcmToken) {
+              return {
+                token: driver.fcmToken,
+                topic: 'New Shipment',
+                data: {
+                  navigationId: 'home',
+                  trackingNumber: shipment.trackingNumber,
+                },
+                notification: {
+                  title: 'MovemateTH',
+                  body: '📦 มีงานขนส่งใหม่',
+                },
+              }
+            }
+            return
+          },
+        )
+        await NotificationModel.sendFCMNotification(messages)
+      }
     }
   }
 }
 
-export const checkShipmentStatus = async (shipmentId: string, requestDriverId: string) => {
-  const oneThousanAndTwentyMin = 120 * 60 * 1000
-  const twoThousanAndFourtyMin = 240 * 60 * 1000
-  const shipment = await ShipmentModel.findById(shipmentId);
-
-  if (shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING) {
-    const currentTime = new Date().getTime();
-    const createdTime = new Date(shipment.createdAt).getTime();
-
-    // ถ้าผ่านไป 120 นาทีแล้วยังไม่มี driver รับงาน
-    if ((currentTime - createdTime) >= oneThousanAndTwentyMin) {
-      const paymentMethod = get(shipment, 'payment.paymentMethod', '')
-      // TODO: Make refund
-      await shipment.updateOne({
-        status: paymentMethod === EPaymentMethod.CREDIT ? EShipingStatus.CANCELLED : EShipingStatus.REFUND,
-        driverAcceptanceStatus: EDriverAcceptanceStatus.UNINTERESTED,
-        rejectedReason: 'uninterested_driver',
-        rejectedDetail: 'ไม่มีคนขับตอบรับงานนี้',
-      });
-      // TODO: Handle refund
-      console.log(`'Shipment' ${shipmentId} is cancelled.`);
-    } else {
-      // ส่ง FCM Notification
-      if (requestDriverId) {
-        const driver = await UserModel.findOne({ _id: shipment.requestedDriver, userRole: EUserRole.DRIVER });
-        if (driver && driver.fcmToken) {
-          await NotificationModel.sendFCMNotification({
-            token: driver.fcmToken,
-            condition: '',
-            topic: '',
-            data: {
-              navigationId: 'home',
-              trackingNumber: shipment.trackingNumber
-            },
-            notification: {
-              title: 'MovemateTH',
-              body: '📦 มีงานขนส่งใหม่สำหรับคุณ',
-            }
-          });
-        }
-
-      } else {
-        const drivers = await UserModel.find({ userRole: EUserRole.DRIVER });
-        const messages = map<User, Message>(filter(drivers, ({ fcmToken }) => !isEmpty(fcmToken)), (driver) => {
-          if (driver.fcmToken) {
-            return {
-              token: driver.fcmToken,
-              topic: '',
-              data: {
-                navigationId: 'home',
-                trackingNumber: shipment.trackingNumber
-              },
-              notification: {
-                title: 'MovemateTH',
-                body: '📦 มีงานขนส่งใหม่สำหรับคุณ',
-              }
-            }
-          }
-          return
-        })
-        await NotificationModel.sendFCMNotification(messages);
-      }
-    }
-  }
-};
-
-
-// ประมวลผล job monitorShipment แบบ Type-safe
 monitorShipmentQueue.process(async (job: Job<FCMShipmentPayload>) => {
-  const { shipmentId, driverId } = job.data;
-  // await checkShipmentStatus(shipmentId, notifyAllDrivers);
-});
+  console.log('monitorShipmentQueue: ', format(new Date(), 'HH:mm:ss'), job.data)
+  const { shipmentId, driverId } = job.data
+  await sendNewShipmentNotification(shipmentId, driverId)
+})
+
+updateMonitorQueue.process(async (job: Job<ShipmentPayload>) => {
+  const { shipmentId } = job.data
+  console.log('updateMonitorQueue: ', format(new Date(), 'HH:mm:ss'), job.data)
+  await removeMonitorShipmentJob(shipmentId)
+  const isContinueus = await checkShipmentStatus(shipmentId)
+  if (isContinueus) monitorShipmentQueue.add({ shipmentId }, { jobId: shipmentId })
+  await job.remove()
+})
 
 // ประมวลผล job cancelShipment แบบ Type-safe
 cancelShipmentQueue.process(async (job: Job<ShipmentPayload>) => {
-  const { shipmentId } = job.data;
-  // await cancelShipmentIfIdle(shipmentId);
-});
+  const { shipmentId } = job.data
+  console.log('cancelShipmentQueue: ', format(new Date(), 'HH:mm:ss'), job.data)
+  await removeMonitorShipmentJob(shipmentId)
+  await cancelShipmentIfNotInterested(shipmentId)
+  await job.remove()
+})

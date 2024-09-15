@@ -10,13 +10,28 @@ import FileModel, { File } from './file.model'
 import { Location } from './location.model'
 import { ShipmentAdditionalServicePrice } from './shipmentAdditionalServicePrice.model'
 import { ShipmentDistancePricing } from './shipmentDistancePricing.model'
-import { Payment } from './payment.model'
+import { EPaymentMethod, Payment } from './payment.model'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
 import mongoosePagination from 'mongoose-paginate-v2'
 import { DirectionsResult } from './directionResult.model'
 import { SubtotalCalculationArgs } from '@inputs/booking.input'
 import VehicleCostModel from './vehicleCost.model'
-import lodash, { filter, find, flatten, get, head, isEqual, last, map, min, range, reduce, sum, tail, values } from 'lodash'
+import lodash, {
+  filter,
+  find,
+  flatten,
+  get,
+  head,
+  isEqual,
+  last,
+  map,
+  min,
+  range,
+  reduce,
+  sum,
+  tail,
+  values,
+} from 'lodash'
 import { fNumber } from '@utils/formatNumber'
 import AdditionalServiceCostPricingModel from './additionalServiceCostPricing.model'
 import { SubtotalCalculatedPayload } from '@payloads/booking.payloads'
@@ -30,12 +45,20 @@ import { FileInput } from '@inputs/file.input'
 import Aigle from 'aigle'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
 import UpdateHistoryModel, { UpdateHistory } from './updateHistory.model'
-import { Refund } from './refund.model'
+import RefundModel, { ERefundStatus, Refund } from './refund.model'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
 import NotificationModel, { ENotificationVarient } from './notification.model'
-import TransactionModel, { ETransactionStatus, ETransactionType } from './transaction.model'
-import IndividualDriverModel, { IndividualDriver } from './driverIndividual.model'
+import TransactionModel, {
+  ERefType,
+  ETransactionOwner,
+  ETransactionStatus,
+  ETransactionType,
+  MOVEMATE_OWNER_ID,
+} from './transaction.model'
+import IndividualDriverModel from './driverIndividual.model'
+import { differenceInMinutes } from 'date-fns'
+import { refundCashBillingCycle } from './billingCycle.model'
 
 Aigle.mixin(lodash, {})
 
@@ -332,6 +355,10 @@ export class Shipment extends TimeStamps {
   @Property({ required: false })
   deliveredDate?: Date
 
+  @Field(() => Date, { nullable: true })
+  @Property({ required: false })
+  cancelledDate?: Date
+
   static paginate: mongoose.PaginateModel<typeof Shipment>['paginate']
   static aggregatePaginate: mongoose.AggregatePaginateModel<typeof Shipment>['aggregatePaginate']
 
@@ -386,8 +413,9 @@ export class Shipment extends TimeStamps {
           } else {
             totalDiscount = 0
           }
-          discountName = `${privilege.name} (${privilege.discount}${privilege.unit === 'currency' ? ' บาท' : privilege.unit === 'percentage' ? '%' : ''
-            })`
+          discountName = `${privilege.name} (${privilege.discount}${
+            privilege.unit === 'currency' ? ' บาท' : privilege.unit === 'percentage' ? '%' : ''
+          })`
         }
       }
 
@@ -420,23 +448,23 @@ export class Shipment extends TimeStamps {
           },
           ...(isRounded
             ? [
-              {
-                label: `ไป-กลับ ${calculated.roundedPricePercent}% (${distanceReturnKM} กม.)`,
-                price: calculated.subTotalRoundedPrice,
-                cost: costCalculation ? calculated.subTotalRoundedCost : 0,
-              },
-            ]
+                {
+                  label: `ไป-กลับ ${calculated.roundedPricePercent}% (${distanceReturnKM} กม.)`,
+                  price: calculated.subTotalRoundedPrice,
+                  cost: costCalculation ? calculated.subTotalRoundedCost : 0,
+                },
+              ]
             : []),
         ],
         additionalServices: [
           ...(dropPoint > 1
             ? [
-              {
-                label: 'หลายจุดส่ง',
-                price: calculated.subTotalDropPointPrice,
-                cost: costCalculation ? calculated.subTotalDropPointCost : 0,
-              },
-            ]
+                {
+                  label: 'หลายจุดส่ง',
+                  price: calculated.subTotalDropPointPrice,
+                  cost: costCalculation ? calculated.subTotalDropPointCost : 0,
+                },
+              ]
             : []),
           ...additionalservices.priceItems,
         ],
@@ -452,7 +480,7 @@ export class Shipment extends TimeStamps {
     }
   }
 
-  async initialStepDefinition(): Promise<boolean> {
+  async initialStepDefinition(isReMatching: boolean = false): Promise<boolean> {
     const shipmentId = get(this, '_doc._id', []) || get(this, '_id', [])
     const destinations = get(this, '_doc.destinations', []) || get(this, 'destinations', [])
     const dropoffLength = destinations.length - 1
@@ -479,19 +507,19 @@ export class Shipment extends TimeStamps {
       },
       ...(isCashMethod
         ? [
-          {
-            insertOne: {
-              document: {
-                step: EStepDefinition.CASH_VERIFY,
-                seq: 0,
-                stepName: EStepDefinitionName.CASH_VERIFY,
-                customerMessage: 'ยืนยันการชำระเงิน',
-                driverMessage: '',
-                stepStatus: EStepStatus.PROGRESSING,
+            {
+              insertOne: {
+                document: {
+                  step: EStepDefinition.CASH_VERIFY,
+                  seq: 0,
+                  stepName: EStepDefinitionName.CASH_VERIFY,
+                  customerMessage: 'ยืนยันการชำระเงิน',
+                  driverMessage: '',
+                  stepStatus: isReMatching ? EStepStatus.PROGRESSING : EStepStatus.DONE,
+                },
               },
             },
-          },
-        ]
+          ]
         : []),
       {
         insertOne: {
@@ -501,7 +529,11 @@ export class Shipment extends TimeStamps {
             stepName: EStepDefinitionName.DRIVER_ACCEPTED,
             customerMessage: 'รอคนขับตอบรับ',
             driverMessage: '',
-            stepStatus: isCashMethod ? EStepStatus.IDLE : EStepStatus.PROGRESSING,
+            stepStatus: isCashMethod
+              ? isReMatching
+                ? EStepStatus.PROGRESSING
+                : EStepStatus.IDLE
+              : EStepStatus.PROGRESSING,
           },
         },
       },
@@ -573,19 +605,19 @@ export class Shipment extends TimeStamps {
       ),
       ...(isPODService
         ? [
-          {
-            insertOne: {
-              document: {
-                step: EStepDefinition.POD,
-                seq: 0,
-                stepName: EStepDefinitionName.POD,
-                customerMessage: 'แนบเอกสารและส่งเอกสาร POD',
-                driverMessage: 'แนบเอกสารและส่งเอกสาร POD',
-                stepStatus: EStepStatus.IDLE,
+            {
+              insertOne: {
+                document: {
+                  step: EStepDefinition.POD,
+                  seq: 0,
+                  stepName: EStepDefinitionName.POD,
+                  customerMessage: 'แนบเอกสารและส่งเอกสาร POD',
+                  driverMessage: 'แนบเอกสารและส่งเอกสาร POD',
+                  stepStatus: EStepStatus.IDLE,
+                },
               },
             },
-          },
-        ]
+          ]
         : []),
       {
         insertOne: {
@@ -612,7 +644,10 @@ export class Shipment extends TimeStamps {
 
     const stepDefinitionResult = await StepDefinitionModel.bulkWrite(reSequenceBulkOperation)
     const _stepDefinitionIds = values(stepDefinitionResult.insertedIds)
-    await ShipmentModel.findByIdAndUpdate(shipmentId, { steps: _stepDefinitionIds, currentStepSeq: 1 })
+    await ShipmentModel.findByIdAndUpdate(shipmentId, {
+      steps: _stepDefinitionIds,
+      currentStepSeq: isReMatching ? (isCashMethod ? 2 : 1) : 1,
+    })
 
     return true
   }
@@ -673,8 +708,8 @@ export class Shipment extends TimeStamps {
             podDetail: {
               ...shipmentModel.podDetail,
               trackingNumber,
-              provider
-            }
+              provider,
+            },
           })
         }
         return true
@@ -704,7 +739,7 @@ export class Shipment extends TimeStamps {
         await ShipmentModel.findByIdAndUpdate(this._id, {
           currentStepSeq: stepDefinitionModel.seq,
           status: EShipingStatus.DELIVERED,
-          deliveredDate: currentDate
+          deliveredDate: currentDate,
         })
 
         const pickup = head(this.destinations)
@@ -715,25 +750,42 @@ export class Shipment extends TimeStamps {
           '',
         )}`
 
-        // Add transaction
-        const amount = get(this, 'payment.invoice.totalCost', 0)
-        const driverId = get(this, 'driver._id', "")
+        /**
+         * TRANSACTIONS
+         */
+        const amountCost = get(this, 'payment.invoice.totalCost', 0)
+        const amountPrice = get(this, 'payment.invoice.totalPrice', 0)
+        const driverId = get(this, 'driver._id', '')
+        // For Driver transaction
         const driverTransaction = new TransactionModel({
-          amount,
-          driverId,
+          amount: amountCost,
+          ownerId: driverId,
+          ownerType: ETransactionOwner.DRIVER,
           description: description,
-          shipmentId: this._id,
-          trackingNumber: this.trackingNumber,
+          refId: this._id,
+          refType: ERefType.SHIPMENT,
           transactionType: ETransactionType.INCOME,
           status: ETransactionStatus.PENDING,
         })
         await driverTransaction.save()
+        // For Movemate transaction
+        const movemateTransaction = new TransactionModel({
+          amount: amountPrice,
+          ownerId: MOVEMATE_OWNER_ID,
+          ownerType: ETransactionOwner.MOVEMATE,
+          description: description,
+          refId: this._id,
+          refType: ERefType.SHIPMENT,
+          transactionType: ETransactionType.INCOME,
+          status: ETransactionStatus.COMPLETE,
+        })
+        await movemateTransaction.save()
 
         // Update balance
         const driver = await UserModel.findById(driverId).lean()
         if (driver) {
           const driverDetail = await IndividualDriverModel.findById(driver.individualDriver)
-          driverDetail.updateBalance(driverId)
+          await driverDetail.updateBalance()
         }
 
         /**
@@ -773,6 +825,7 @@ export class Shipment extends TimeStamps {
     userId: string,
     reason?: string,
     otherReason?: string,
+    refunId?: string,
   ) {
     const shipmentModel = await ShipmentModel.findById(_id)
     const shipment = await ShipmentModel.findById(_id).lean()
@@ -839,11 +892,11 @@ export class Shipment extends TimeStamps {
           const isCashVerifyStep = step.step === EStepDefinition.CASH_VERIFY && step.seq === currentStep.seq
           const cashVerifyStepChangeData = isCashVerifyStep
             ? {
-              step: EStepDefinition.REJECTED_PAYMENT,
-              stepName: EStepDefinitionName.REJECTED_PAYMENT,
-              customerMessage: EStepDefinitionName.REJECTED_PAYMENT,
-              driverMessage: EStepDefinitionName.REJECTED_PAYMENT,
-            }
+                step: EStepDefinition.REJECTED_PAYMENT,
+                stepName: EStepDefinitionName.REJECTED_PAYMENT,
+                customerMessage: EStepDefinitionName.REJECTED_PAYMENT,
+                driverMessage: EStepDefinitionName.REJECTED_PAYMENT,
+              }
             : {}
           await StepDefinitionModel.findByIdAndUpdate(step._id, {
             stepStatus: EStepStatus.CANCELLED,
@@ -870,6 +923,7 @@ export class Shipment extends TimeStamps {
           beforeUpdate: { ...shipment, steps: shipmentModel.steps },
           afterUpdate: {
             ...shipment,
+            refund: refunId,
             status: EShipingStatus.REFUND,
             adminAcceptanceStatus: EAdminAcceptanceStatus.REJECTED,
             steps: [...steps, refundStep],
@@ -878,6 +932,7 @@ export class Shipment extends TimeStamps {
         await _shipmentUpdateHistory.save()
         await ShipmentModel.findByIdAndUpdate(_id, {
           status: EShipingStatus.REFUND,
+          refund: refunId,
           adminAcceptanceStatus: EAdminAcceptanceStatus.REJECTED,
           currentStepSeq: newLatestSeq,
           $push: { history: _shipmentUpdateHistory, steps: refundStep._id },
@@ -904,7 +959,7 @@ export class Shipment extends TimeStamps {
     }
   }
 
-  static async markAsRefund(_id: string, userId: string, refund: Refund) {
+  static async markAsRefund(_id: string, userId: string) {
     const shipmentModel = await ShipmentModel.findById(_id)
     const shipment = await ShipmentModel.findById(_id).lean()
     if (!shipmentModel) {
@@ -924,12 +979,11 @@ export class Shipment extends TimeStamps {
       referenceType: 'Shipment',
       who: userId,
       beforeUpdate: shipment,
-      afterUpdate: { ...shipment, steps: [{ ...currentStep, stepStatus: EStepStatus.DONE }], refund },
+      afterUpdate: { ...shipment, steps: [{ ...currentStep, stepStatus: EStepStatus.DONE }] },
     })
     await _shipmentUpdateHistory.save()
     await ShipmentModel.findByIdAndUpdate(_id, {
       status: EShipingStatus.CANCELLED,
-      refund,
       $push: { history: _shipmentUpdateHistory },
     })
   }

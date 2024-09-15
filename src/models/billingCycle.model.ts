@@ -2,12 +2,14 @@ import { Field, Float, ID, ObjectType } from 'type-graphql'
 import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import UserModel, { EUserRole, EUserStatus, EUserType, User } from './user.model'
-import ShipmentModel, { EShipingStatus, Shipment } from './shipment.model'
+import ShipmentModel, { EDriverAcceptanceStatus, EShipingStatus, Shipment } from './shipment.model'
 import BillingPaymentModel, { BillingPayment, EBillingPaymentStatus } from './billingPayment.model'
 import { BusinessCustomer } from './customerBusiness.model'
-import BusinessCustomerCreditPaymentModel, { BusinessCustomerCreditPayment } from './customerBusinessCreditPayment.model'
-import lodash, { get, isEmpty, reduce, sum, toNumber, toString, uniq, includes } from 'lodash'
-import { addDays, addMonths, differenceInDays, format } from 'date-fns'
+import BusinessCustomerCreditPaymentModel, {
+  BusinessCustomerCreditPayment,
+} from './customerBusinessCreditPayment.model'
+import lodash, { get, isEmpty, reduce, sum, toNumber, toString, uniq, includes, isEqual } from 'lodash'
+import { addDays, addMonths, differenceInDays, differenceInMinutes, format } from 'date-fns'
 import { EPaymentMethod, EPaymentRejectionReason, Payment } from './payment.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
@@ -16,17 +18,27 @@ import { email_sender } from '@utils/email.utils'
 import { th } from 'date-fns/locale'
 import path from 'path'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
-import { AggregatePaginateModel } from 'mongoose'
+import { AggregatePaginateModel, Types } from 'mongoose'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
 import PaymentModel, { EPaymentStatus } from './payment.model'
 import UpdateHistoryModel, { UpdateHistory } from './updateHistory.model'
 import { IsEnum } from 'class-validator'
-import RefundModel, { Refund } from './refund.model'
+import RefundModel, { ERefundStatus, Refund } from './refund.model'
 import NotificationModel, { ENotificationVarient } from './notification.model'
 import { getAdminMenuNotificationCount } from '@resolvers/notification.resolvers'
 import { generateInvoice } from 'reports/invoice'
 import BillingReceiptModel, { BillingReceipt } from './billingReceipt.model'
 import { generateReceipt } from 'reports/receipt'
+import TransactionModel, {
+  ERefType,
+  ETransactionOwner,
+  ETransactionStatus,
+  ETransactionType,
+  MOVEMATE_OWNER_ID,
+} from './transaction.model'
+import { VehicleType } from './vehicleType.model'
+import { GraphQLError } from 'graphql'
+import { REPONSE_NAME } from 'constants/status'
 
 Aigle.mixin(lodash, {})
 
@@ -155,11 +167,11 @@ export class BillingCycle extends TimeStamps {
 
   @Field({ nullable: true })
   @Property({ required: false })
-  emailSendedReceiptTime: Date // TODO: 
+  emailSendedReceiptTime: Date // TODO:
 
   @Field({ nullable: true })
   @Property({ required: false })
-  receivedWHTDocumentTime: Date // TODO: 
+  receivedWHTDocumentTime: Date // TODO:
 
   @Field({ nullable: true })
   @Property({ required: false })
@@ -167,7 +179,7 @@ export class BillingCycle extends TimeStamps {
 
   @Field({ nullable: true })
   @Property({ required: false })
-  postalReceipt: PostalDetail // TODO: 
+  postalReceipt: PostalDetail // TODO:
 
   @Field(() => String, { nullable: true })
   @IsEnum(EPaymentRejectionReason)
@@ -220,7 +232,6 @@ export class BillingCycle extends TimeStamps {
             status: EShipingStatus.DELIVERED,
             deliveredDate: { $gte: shipmentStartDeliveredDate, $lte: shipmentEndDeliveredDate },
           }).populate({ path: 'payment', match: { paymentMethod: EPaymentMethod.CREDIT } })
-
 
           if (isEmpty(shipments)) {
             return // If Empty shipment won't create an billing
@@ -293,7 +304,7 @@ export class BillingCycle extends TimeStamps {
         ...(bank ? { bank } : {}),
         ...(bankName ? { bankName } : {}),
         ...(bankNumber ? { bankNumber } : {}),
-        ...(userId ? { updatedBy: userId } : {})
+        ...(userId ? { updatedBy: userId } : {}),
       })
       await payment.save()
 
@@ -310,9 +321,15 @@ export class BillingCycle extends TimeStamps {
       let _billingPayment = null
       // Billing Payment
       if (billingCycle.billingPayment) {
-        await BillingPaymentModel.findByIdAndUpdate(billingCycle.billingPayment, { status: EBillingPaymentStatus.PAID, updatedBy: userId })
+        await BillingPaymentModel.findByIdAndUpdate(billingCycle.billingPayment, {
+          status: EBillingPaymentStatus.PAID,
+          updatedBy: userId,
+        })
       } else {
-        const _paymentNumber = await generateTrackingNumber(billingCycle.paymentMethod === EPaymentMethod.CREDIT ? 'MMPAYCE' : 'MMPAYCA', 'payment')
+        const _paymentNumber = await generateTrackingNumber(
+          billingCycle.paymentMethod === EPaymentMethod.CREDIT ? 'MMPAYCE' : 'MMPAYCA',
+          'payment',
+        )
         _billingPayment = new BillingPaymentModel({
           paymentNumber: _paymentNumber,
           paymentAmount: billingCycle.totalAmount,
@@ -330,7 +347,7 @@ export class BillingCycle extends TimeStamps {
         paidAmount: billingCycle.totalAmount,
         receiptDate: new Date(),
         receiptNumber: _receiptNumber,
-        updatedBy: userId
+        updatedBy: userId,
       })
       await _billingReceipt.save()
       // Billing Cycle
@@ -339,7 +356,12 @@ export class BillingCycle extends TimeStamps {
         referenceType: 'BillingCycle',
         who: userId,
         beforeUpdate: billingCycle,
-        afterUpdate: { ...billingCycle, billingStatus: EBillingStatus.PAID, billingReceipt: _billingReceipt._id, ...(_billingPayment ? { billingPayment: get(_billingPayment, '_id', '') } : {}), },
+        afterUpdate: {
+          ...billingCycle,
+          billingStatus: EBillingStatus.PAID,
+          billingReceipt: _billingReceipt._id,
+          ...(_billingPayment ? { billingPayment: get(_billingPayment, '_id', '') } : {}),
+        },
       })
       await _billingCycleUpdateHistory.save()
       await BillingCycleModel.findByIdAndUpdate(billingCycleId, {
@@ -386,12 +408,14 @@ export class BillingCycle extends TimeStamps {
           await creditPayment.updateOne({ creditUsage: newCreditBalance })
         }
         // const creditDetail = awa/
-        const billingCycles = await BillingCycleModel.find({ user: customerId, billingStatus: EBillingStatus.OVERDUE }).lean()
+        const billingCycles = await BillingCycleModel.find({
+          user: customerId,
+          billingStatus: EBillingStatus.OVERDUE,
+        }).lean()
         if (isEmpty(billingCycles)) {
           await UserModel.findByIdAndUpdate(customerId, { status: EUserStatus.ACTIVE })
         }
       }
-
 
       // Trigger admin notification
       await getAdminMenuNotificationCount()
@@ -401,7 +425,14 @@ export class BillingCycle extends TimeStamps {
   static async rejectedPayment(billingCycleId: string, userId: string, reason?: string, otherReason?: string) {
     const billingCycle = await BillingCycleModel.findById(billingCycleId).lean()
     if (billingCycle) {
-      await BillingPaymentModel.findByIdAndUpdate(billingCycle.billingPayment, { status: EBillingPaymentStatus.FAILED })
+      const billingPayment = await BillingPaymentModel.findById(billingCycle.billingPayment)
+      await billingPayment.updateOne({ status: EBillingPaymentStatus.FAILED })
+      const _refund = new RefundModel({
+        updatedBy: userId,
+        refundAmout: billingPayment.paymentAmount,
+        refundStatus: ERefundStatus.PENDING,
+      })
+      await _refund.save()
       // Update Biling cycle model
       const _billingCycleUpdateHistory = new UpdateHistoryModel({
         referenceId: billingCycleId,
@@ -410,6 +441,7 @@ export class BillingCycle extends TimeStamps {
         beforeUpdate: billingCycle,
         afterUpdate: {
           ...billingCycle,
+          refund: _refund,
           billingStatus: EBillingStatus.REFUND,
           rejectedReason: reason,
           rejectedDetail: otherReason,
@@ -418,6 +450,7 @@ export class BillingCycle extends TimeStamps {
       await _billingCycleUpdateHistory.save()
       await BillingCycleModel.findByIdAndUpdate(billingCycle._id, {
         billingStatus: EBillingStatus.REFUND,
+        refund: _refund,
         rejectedReason: reason,
         rejectedDetail: otherReason,
         $push: { history: _billingCycleUpdateHistory },
@@ -450,7 +483,7 @@ export class BillingCycle extends TimeStamps {
         })
 
         // Update Shipment model
-        await ShipmentModel.markAsCashVerified(shipment._id, 'reject', userId, reason, otherReason)
+        await ShipmentModel.markAsCashVerified(shipment._id, 'reject', userId, reason, otherReason, _refund._id)
       })
 
       // Trigger admin notification
@@ -461,25 +494,37 @@ export class BillingCycle extends TimeStamps {
   static async markAsRefund(data: MarkAsRefundProps, userId: string) {
     const billingCycle = await BillingCycleModel.findById(data.billingCycleId).lean()
     if (billingCycle) {
-      const _refund = new RefundModel({
+      const refundModel = await RefundModel.findByIdAndUpdate(billingCycle.refund, {
         imageEvidence: data.imageEvidenceId,
         paymentDate: data.paymentDate,
         paymentTime: data.paymentTime,
+        refundStatus: ERefundStatus.SUCCESS,
       })
       const _billingCycleUpdateHistory = new UpdateHistoryModel({
         referenceId: data.billingCycleId,
         referenceType: 'BillingCycle',
         who: userId,
         beforeUpdate: billingCycle,
-        afterUpdate: { ...billingCycle, billingStatus: EBillingStatus.REFUNDED, refund: _refund },
+        afterUpdate: { ...billingCycle, billingStatus: EBillingStatus.REFUNDED },
       })
-      await _refund.save()
       await _billingCycleUpdateHistory.save()
       await BillingCycleModel.findByIdAndUpdate(data.billingCycleId, {
         billingStatus: EBillingStatus.REFUNDED,
-        refund: _refund,
         $push: { history: _billingCycleUpdateHistory },
       })
+
+      // For Movemate transaction
+      const movemateTransaction = new TransactionModel({
+        amount: refundModel.refundAmout,
+        ownerId: MOVEMATE_OWNER_ID,
+        ownerType: ETransactionOwner.MOVEMATE,
+        description: `คืนเงินหมายเลขใบแจ้งหนี้ ${billingCycle.billingNumber}`,
+        refId: billingCycle._id,
+        refType: ERefType.BILLING,
+        transactionType: ETransactionType.OUTCOME,
+        status: ETransactionStatus.COMPLETE,
+      })
+      await movemateTransaction.save()
 
       // Update shipment
       const shipments = billingCycle.shipments
@@ -502,7 +547,7 @@ export class BillingCycle extends TimeStamps {
         })
 
         // Update Shipment model
-        await ShipmentModel.markAsRefund(shipment._id, userId, _refund)
+        await ShipmentModel.markAsRefund(shipment._id, userId)
       })
 
       /**
@@ -526,6 +571,7 @@ export class BillingCycle extends TimeStamps {
   static async markAsNoRefund(billingCycleId: string, userId: string, reason?: string) {
     const billingCycle = await BillingCycleModel.findById(billingCycleId).lean()
     if (billingCycle) {
+      await RefundModel.findByIdAndUpdate(billingCycle.refund, { refundStatus: ERefundStatus.CANCELLED })
       const _billingCycleUpdateHistory = new UpdateHistoryModel({
         referenceId: billingCycleId,
         referenceType: 'BillingCycle',
@@ -581,11 +627,158 @@ export class BillingCycle extends TimeStamps {
        */
     }
   }
+
+  static async customerRefund(shipmentId: string, userId: string, reason: string, reasonDetail: string) {
+    const shipment = await ShipmentModel.findOne({ _id: shipmentId, customer: userId })
+    if (!shipment) {
+      const message = 'ไม่สามารถหาข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่ง'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+
+    const currentDate = new Date()
+    const payment = shipment.payment as Payment
+    const driver = shipment.driver as User
+    const isCashPayment = isEqual(payment.paymentMethod, EPaymentMethod.CASH)
+
+    const isDriverAccepted =
+      isEqual(shipment.driverAcceptanceStatus, EDriverAcceptanceStatus.ACCEPTED) && shipment.driver
+
+    function calculateRefundPrice() {
+      const fullPaymentAmount = get(payment, 'invoice.totalPrice', 0)
+      const fullCostAmount = get(payment, 'invoice.totalCost', 0)
+
+      const vehicle = shipment.vehicleId as VehicleType
+      const typeVehicle = get(vehicle, 'type', '')
+      const differenceTime = differenceInMinutes(currentDate, shipment.bookingDateTime)
+      console.log('differenceTime: ', differenceTime)
+
+      const urgentCancellingTime = isEqual(typeVehicle, '4W') ? 40 : 90
+      const middleCancellingTime = isEqual(typeVehicle, '4W') ? 120 : 180
+      if (differenceTime <= urgentCancellingTime) {
+        // Make refund 0% || คิดค่าใช้จ่าย 100%
+        return {
+          forDriver: fullCostAmount,
+          forCustomer: 0,
+          description: `ผู้ใช้ยกเลิกงานขนส่งก่อนเวลาน้อยกว่า ${urgentCancellingTime} นาที`,
+        }
+      } else if (differenceTime > urgentCancellingTime && differenceTime <= middleCancellingTime) {
+        // Make refund 50% || คิดค่าใช้จ่าย 50%
+        const percentToCalc = 50 / 100
+        return {
+          forDriver: percentToCalc * fullCostAmount,
+          forCustomer: percentToCalc * fullPaymentAmount,
+          description: `ผู้ใช้ยกเลิกงานขนส่งก่อนเวลาน้อยกว่า ${middleCancellingTime} นาที`,
+        }
+      } else {
+        // Make refund 100% || ไม่เสียค่าใช้จ่าย
+        return {
+          forDriver: 0,
+          forCustomer: fullPaymentAmount,
+          description: `ผู้ใช้ยกเลิกงานขนส่ง`,
+        }
+      }
+    }
+
+    /**
+     * TODO:// Recheck refund price
+     * ถ้า refund โดยมีค่าใช้จ่าย 100% จะต้อง handle ยังไง สถานะไป cancelled เลยไหม
+     * -> If _refundPrice > 0
+     * --> ? billing status = EBillingStatus.REFUND, refundStatus = ERefundStatus.PENDING
+     * --> : billing status = EBillingStatus.CANCELLED, refundStatus = ERefundStatus.CANCELLED
+     */
+    const { description, forCustomer, forDriver } = calculateRefundPrice()
+    const _refund = new RefundModel({
+      updatedBy: userId,
+      refundAmout: forCustomer,
+      refundStatus: ERefundStatus.PENDING,
+    })
+    await _refund.save()
+
+    // เพิ่ม transaction income ให้กับ driver
+    if (isDriverAccepted && driver) {
+      const driverTransaction = new TransactionModel({
+        amount: forDriver,
+        ownerId: driver._id,
+        ownerType: ETransactionOwner.DRIVER,
+        description: description,
+        refId: shipment._id,
+        refType: ERefType.SHIPMENT,
+        transactionType: ETransactionType.INCOME,
+        status: ETransactionStatus.PENDING,
+      })
+      await driverTransaction.save()
+    }
+
+    // หากเป็น cash payment ให้เปลี่ยนสถานะ refund billing cycle
+    if (isCashPayment) {
+      await refundCashBillingCycle(shipment._id, _refund._id, reasonDetail)
+    }
+
+    // Update shipment status
+    await ShipmentModel.findByIdAndUpdate(shipment._id, {
+      status: EShipingStatus.REFUND,
+      refund: _refund,
+      cancellationReason: reason,
+      cancellationDetail: reasonDetail,
+      cancelledDate: currentDate,
+    })
+
+    /**
+     * Notification & Email
+     * To Customer
+     * To Driver & FCM to Driver
+     * To Admin
+     *
+     * update system transactions
+     */
+  }
+
+  static async driverRefund(shipmentId: string, userId: string, reason: string, reasonDetail: string) {
+    const currentDate = new Date()
+
+    /**
+     * Notification & Email
+     * To Customer
+     * To Driver & FCM to Driver
+     * To Admin
+     *
+     */
+    
+    const shipmentModel = await ShipmentModel.findByIdAndUpdate(shipmentId, {
+      status: EShipingStatus.IDLE,
+      driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
+      driver: undefined,
+      cancellationDetail: reasonDetail,
+      cancellationReason: reason,
+      cancelledDate: currentDate,
+
+      currentStepSeq: 0,
+      steps: [],
+    })
+    await shipmentModel.initialStepDefinition(true)
+    /**
+     * Add to JOB notification
+     */
+  }
 }
 
 const BillingCycleModel = getModelForClass(BillingCycle)
 
 export default BillingCycleModel
+
+export async function refundCashBillingCycle(shipmentId: string, refundId: string, reason: string) {
+  const billingCycleModel = await BillingCycleModel.findOne({
+    shipments: { $in: [shipmentId] },
+    paymentMethod: EPaymentMethod.CASH,
+  })
+  if (billingCycleModel) {
+    await billingCycleModel.updateOne({
+      billingStatus: EBillingStatus.REFUND,
+      cancelledDetail: reason,
+      refund: refundId,
+    })
+  }
+}
 
 async function getNearbyDuedateBillingCycle(before: number = 1) {
   const currentday = addDays(new Date(), before)
@@ -595,8 +788,8 @@ async function getNearbyDuedateBillingCycle(before: number = 1) {
     billingStatus: EBillingStatus.CURRENT,
     paymentDueDate: {
       $gte: today, // paymentDueDate หลังจากหรือเท่ากับวันนี้
-      $lte: oneDaysLater // และก่อนหรือเท่ากับในอีก 1 วันข้างหน้า
-    }
+      $lte: oneDaysLater, // และก่อนหรือเท่ากับในอีก 1 วันข้างหน้า
+    },
   }).lean()
 
   return billingCycles
@@ -652,7 +845,10 @@ export async function notifyOverdue() {
 
   await Aigle.forEach(overdueBillingCycles, async (billingCycle) => {
     const today = new Date()
-    const overdate = differenceInDays(today.setHours(0, 0, 0, 0), new Date(billingCycle.paymentDueDate).setHours(0, 0, 0, 0))
+    const overdate = differenceInDays(
+      today.setHours(0, 0, 0, 0),
+      new Date(billingCycle.paymentDueDate).setHours(0, 0, 0, 0),
+    )
     await NotificationModel.sendNotification({
       userId: billingCycle.user as string,
       varient: ENotificationVarient.ERROR,

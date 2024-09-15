@@ -2,16 +2,6 @@ import { Field, Float, ID, ObjectType } from "type-graphql"
 import { prop as Property, getModelForClass, plugin } from '@typegoose/typegoose'
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses"
 import mongooseAutoPopulate from "mongoose-autopopulate"
-import lodash from "lodash"
-import Aigle from "aigle"
-
-Aigle.mixin(lodash, {})
-
-export enum EBillingPaymentStatus {
-  PAID = 'paid',
-  PENDING = 'pending',
-  FAILED = 'failed',
-}
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()
