@@ -16,7 +16,7 @@ RUN mkdir generated
 RUN mkdir generated/invoice
 RUN mkdir generated/receipt
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json firebase-services.json ./
 COPY --from=builder /usr/src/movemate-api/node_modules /usr/src/movemate-api/node_modules
 COPY --from=builder /usr/src/movemate-api/dist /usr/src/movemate-api/dist
 
