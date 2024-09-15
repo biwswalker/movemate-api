@@ -54,13 +54,17 @@ import { REPONSE_NAME } from 'constants/status'
 import { generateInvoice } from 'reports/invoice'
 import {
   cancelShipmentQueue,
+  DEFAULT_LIMIT,
   FCMShipmentPayload,
-  FOUR_HOUR,
+  FIVE_MIN,
+  TWO_HALF_HOUR,
   monitorShipmentQueue,
   obliterateQueue,
   removeMonitorShipmentJob,
   ShipmentPayload,
+  ShipmentResumePayload,
   TEN_MIN,
+  TWENTY_MIN,
   TWO_HOUR,
   updateMonitorQueue,
 } from '@configs/jobQueue'
@@ -720,14 +724,15 @@ export default class ShipmentResolver {
 export async function monitorShipmentStatus(shipmentId: string, driverId: string) {
   await removeMonitorShipmentJob(shipmentId)
   if (driverId) {
-    // // เพิ่ม job สำหรับตรวจสอบ shipment ทุกๆ 10 นาที
-    monitorShipmentQueue.add({ shipmentId, driverId }, { jobId: shipmentId })
-    updateMonitorQueue.add({ shipmentId }, { delay: TWO_HOUR })
-    cancelShipmentQueue.add({ shipmentId: shipmentId }, { delay: FOUR_HOUR + TEN_MIN })
+    // Favorite Driver
+    monitorShipmentQueue.add({ shipmentId, driverId }, { jobId: shipmentId, repeat: { limit: 3, every: TEN_MIN } })
+    updateMonitorQueue.add({ shipmentId, every: TEN_MIN, limit: DEFAULT_LIMIT }, { delay: TWENTY_MIN })
+    updateMonitorQueue.add({ shipmentId, every: FIVE_MIN, limit: 6 }, { delay: TWENTY_MIN + TWO_HOUR })
+    cancelShipmentQueue.add({ shipmentId: shipmentId }, { delay: TWENTY_MIN + TWO_HALF_HOUR + FIVE_MIN })
   } else {
-    // // เพิ่ม job สำหรับตรวจสอบ shipment ทุกๆ 10 นาที
-    monitorShipmentQueue.add({ shipmentId, driverId }, { jobId: shipmentId })
-    cancelShipmentQueue.add({ shipmentId: shipmentId }, { delay: FOUR_HOUR + TEN_MIN })
+    monitorShipmentQueue.add({ shipmentId }, { jobId: shipmentId })
+    updateMonitorQueue.add({ shipmentId, every: FIVE_MIN, limit: 6 }, { delay: TWO_HOUR })
+    cancelShipmentQueue.add({ shipmentId: shipmentId }, { delay: TWO_HALF_HOUR + FIVE_MIN })
   }
 }
 
@@ -805,6 +810,8 @@ export const cancelShipmentIfNotInterested = async (shipmentId: string) => {
         $push: { steps: refundStep._id },
       })
     }
+
+    // TODO: Sent notification to cash customer
   } else {
     const currentStep = find(shipment.steps, ['seq', shipment.currentStepSeq]) as StepDefinition | undefined
     if (currentStep) {
@@ -822,6 +829,8 @@ export const cancelShipmentIfNotInterested = async (shipmentId: string) => {
         rejectedReason: 'uninterested_driver',
         rejectedDetail: 'ไม่มีคนขับตอบรับงานนี้',
       })
+
+      // TODO: Sent notification to credit customer
     }
   }
 
@@ -842,7 +851,7 @@ export const sendNewShipmentNotification = async (shipmentId: string, requestDri
 
     // ถ้าผ่านไป 240 นาทีแล้วยังไม่มี driver รับงาน
     const coutingdownTime = currentTime - createdTime
-    if (coutingdownTime < FOUR_HOUR) {
+    if (coutingdownTime < TWO_HALF_HOUR + TWENTY_MIN) {
       // ส่ง FCM Notification
       if (requestDriverId) {
         const driver = await UserModel.findOne({ _id: shipment.requestedDriver, userRole: EUserRole.DRIVER })
@@ -895,12 +904,16 @@ monitorShipmentQueue.process(async (job: Job<FCMShipmentPayload>) => {
   await sendNewShipmentNotification(shipmentId, driverId)
 })
 
-updateMonitorQueue.process(async (job: Job<ShipmentPayload>) => {
-  const { shipmentId } = job.data
+updateMonitorQueue.process(async (job: Job<ShipmentResumePayload>) => {
+  const { shipmentId, every, limit } = job.data
   console.log('updateMonitorQueue: ', format(new Date(), 'HH:mm:ss'), job.data)
   await removeMonitorShipmentJob(shipmentId)
   const isContinueus = await checkShipmentStatus(shipmentId)
-  if (isContinueus) monitorShipmentQueue.add({ shipmentId }, { jobId: shipmentId })
+  if (isContinueus) {
+    // Resume notification
+    // TODO: Send notification to user
+    monitorShipmentQueue.add({ shipmentId }, { jobId: shipmentId, repeat: { every, limit } })
+  }
   await job.remove()
 })
 

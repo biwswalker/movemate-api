@@ -80,6 +80,10 @@ export class Privilege extends TimeStamps {
   @Property({ ref: () => User, required: true, default: [] })
   usedUser: Ref<User>[]
 
+  @Field({ nullable: true, defaultValue: false })
+  @Property({ default: false })
+  defaultShow?: boolean
+
   @Field()
   @Property({ default: Date.now })
   createdAt: Date

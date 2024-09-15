@@ -1,12 +1,20 @@
 import Bull from 'bull'
 
-export const TEN_MIN = 0.1 * 60 * 1000
-export const TWO_HOUR = 1.2 * 60 * 1000
-export const FOUR_HOUR = 2.4 * 60 * 1000
-const DEFAULT_LIMIT = 12
+export const FIVE_MIN = 5 * 60 * 1000
+export const TEN_MIN = 10 * 60 * 1000
+export const TWENTY_MIN = 20 * 60 * 1000
+export const TWO_HOUR = 120 * 60 * 1000
+export const TWO_HALF_HOUR = 150 * 60 * 1000
+export const DEFAULT_LIMIT = 12
 
 export interface ShipmentPayload {
   shipmentId: string
+}
+
+export interface ShipmentResumePayload {
+  shipmentId: string
+  every: number
+  limit: number
 }
 
 export interface FCMShipmentPayload extends ShipmentPayload {
@@ -19,7 +27,7 @@ export const monitorShipmentQueue = new Bull<FCMShipmentPayload>('monitorShipmen
 })
 
 // สร้าง queue สำหรับ update job
-export const updateMonitorQueue = new Bull<ShipmentPayload>('updateMonitor')
+export const updateMonitorQueue = new Bull<ShipmentResumePayload>('updateMonitor')
 
 // สร้าง queue สำหรับ cancel shipment
 export const cancelShipmentQueue = new Bull<ShipmentPayload>('cancelShipment')

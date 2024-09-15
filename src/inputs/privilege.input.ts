@@ -37,25 +37,28 @@ export class PrivilegeInput {
 
   @Field()
   description: string
+
+  @Field({ nullable: true, defaultValue: false })
+  defaultShow: boolean
 }
 
 @ArgsType()
 export class GetPrivilegesArgs {
   @Field({ nullable: true })
-  _id?: string;
+  _id?: string
 
   @Field({ nullable: true })
-  status?: TPrivilegeStatus;
+  status?: TPrivilegeStatus
 
   @Field({ nullable: true })
-  name?: string;
+  name?: string
 
   @Field({ nullable: true })
-  code?: string;
+  code?: string
 
   @Field({ nullable: true })
-  startDate?: Date;
+  startDate?: Date
 
   @Field({ nullable: true })
-  endDate?: Date;
+  endDate?: Date
 }

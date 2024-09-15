@@ -5,11 +5,12 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "ts-node --files ./src/app.ts",
-    "build": "rimraf dist && tsc && tsc-alias && copyfiles *.handlebars -u 2 src/templates/*.handlebars dist/templates/",
+    "build": "rimraf dist && npm run ts.check && tsc && tsc-alias && npm run copy-file",
     "ts.check": "tsc --project tsconfig.json",
     "dev": "nodemon",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "docker:build": "sudo docker build -t movemate-api ."
+    "docker:build": "sudo docker build -t movemate-api .",
+    "copy-file": "copyfiles *.handlebars -u 2 src/templates/*.handlebars dist/templates/ && copyfiles -u 2 src/assets/fonts/** src/assets/images/** dist/assets/"
   },
   "keywords": [],
   "author": "biwswalker",
