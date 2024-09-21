@@ -73,7 +73,7 @@ export class SettingInstruction extends TimeStamps {
             if (hasChanged) {
                 const updateHistory = new UpdateHistoryModel({
                     referenceId: newId.toString(),
-                    referenceType: "SettingFAQ",
+                    referenceType: "SettingInstruction",
                     who: userId,
                     beforeUpdate: beforeUpdatePick,
                     afterUpdate: afterUpdatePick,

@@ -2,7 +2,7 @@ import { GraphQLContext } from "@configs/graphQL.config";
 import CouterModel from "@models/counter.model";
 // import { format } from "date-fns";
 // import { toZonedTime } from "date-fns-tz";
-import { get, padStart } from "lodash";
+import { padStart } from "lodash";
 
 export function generateRandomNumberPattern(pattern = 'MM##########'): string {
     let trackingNumber: string = '';

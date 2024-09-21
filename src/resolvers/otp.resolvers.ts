@@ -9,6 +9,7 @@ import { GetOTPArgs } from '@inputs/otp.input'
 import { OTPPaginationPayload } from '@payloads/otp.payloads'
 import { FilterQuery, PaginateOptions } from 'mongoose'
 import { reformPaginate } from '@utils/pagination.utils'
+import { sendSMS } from '@services/sms/thaibulk'
 
 const DEFUALT_OTP_DURATION = 2
 const DEFUALT_OTP_EXPIRE = 20
@@ -17,35 +18,39 @@ export async function requestOTP(phoneNumber: string, action: string) {
   try {
     const VERIFY_PHONE = /^(0[689]{1})+([0-9]{8})+$/
     if (!VERIFY_PHONE.test(phoneNumber)) {
-      const message = "ไม่สามารถส่ง OTP ได้เนื่องจากหมายเลขโทรศัพไม่ถูกต้อง";
+      const message = 'ไม่สามารถส่ง OTP ได้เนื่องจากหมายเลขโทรศัพไม่ถูกต้อง'
       throw new GraphQLError(message, {
         extensions: {
-          code: "UNABLE_SEND_OTP",
+          code: 'UNABLE_SEND_OTP',
           errors: [{ message }],
         },
-      });
+      })
     }
 
     const otpRequestData = await OTPRequstModel.findOne({ phoneNumber }).sort({ createdAt: -1 }).lean()
     if (otpRequestData) {
       const endTime = addMinutes(new Date(otpRequestData.sentDateTime), DEFUALT_OTP_DURATION)
       if (Date.now() < endTime.getTime()) {
-        const message =
-          "ไม่สามารถส่ง OTP ได้ในขนะนี้ กรุณาลองใหม่";
+        const message = 'ไม่สามารถส่ง OTP ได้ในขนะนี้ กรุณาลองใหม่'
         throw new GraphQLError(message, {
           extensions: {
-            code: "UNABLE_SEND_OTP",
+            code: 'UNABLE_SEND_OTP',
             errors: [{ message }],
           },
-        });
+        })
       }
     }
 
     const ref = generateRef()
     const otp = generateOTP()
 
-    const verifyLast = `${otp} คือ รหัสยืนยันเบอร์ติดต่อ MovemateTH ของคุณ (Ref:${ref})`
-    // [WIP] await Request OTP with OTP api
+    const verifyLast = `${otp} คือ รหัสยืนยันเบอร์ติดต่อ Movemate Thailand ของคุณ (Ref:${ref})`
+
+    // Request to thai bulk sms
+    await sendSMS({
+      message: verifyLast,
+      msisdn: phoneNumber,
+    })
 
     const currentDate = new Date()
     const countdown = addMinutes(currentDate, DEFUALT_OTP_DURATION)
@@ -64,7 +69,8 @@ export async function requestOTP(phoneNumber: string, action: string) {
     const otpRequestResult = await OTPRequstModel.findById(requestModel._id)
     return otpRequestResult
   } catch (error) {
-    throw error;
+    console.log('error: ', error)
+    throw error
   }
 }
 
@@ -72,56 +78,56 @@ export async function verifyOTP(phoneNumber: string, otp: string, ref: string) {
   try {
     const VERIFY_PHONE = /^(0[689]{1})+([0-9]{8})+$/
     if (!VERIFY_PHONE.test(phoneNumber)) {
-      const message = "ไม่สามารถตรวจสอบ OTP ได้เนื่องจากหมายเลขโทรศัพไม่ถูกต้อง";
+      const message = 'ไม่สามารถตรวจสอบ OTP ได้เนื่องจากหมายเลขโทรศัพไม่ถูกต้อง'
       throw new GraphQLError(message, {
         extensions: {
-          code: "UNABLE_VERIFY_OTP",
+          code: 'UNABLE_VERIFY_OTP',
           errors: [{ message }],
         },
-      });
+      })
     }
     const phoneNumberData = await OTPRequstModel.findOne({ phoneNumber, ref }).sort({ createdAt: -1 }).lean()
     if (!phoneNumberData) {
-      const message = "ไม่สามารถตรวจสอบ OTP ได้เนื่องจากไม่พบข้อมูล";
+      const message = 'ไม่สามารถตรวจสอบ OTP ได้เนื่องจากไม่พบข้อมูล'
       throw new GraphQLError(message, {
         extensions: {
-          code: "UNABLE_VERIFY_OTP",
+          code: 'UNABLE_VERIFY_OTP',
           errors: [{ message }],
         },
-      });
+      })
     }
 
     const currentDate = new Date()
     if (currentDate.getTime() > new Date().getTime()) {
-      const message = "หมดเวลา กรุณาดำเนินการอีกครั้ง";
+      const message = 'หมดเวลา กรุณาดำเนินการอีกครั้ง'
       throw new GraphQLError(message, {
         extensions: {
-          code: "FAILED_VERIFY_OTP",
+          code: 'FAILED_VERIFY_OTP',
           errors: [{ message }],
         },
-      });
+      })
     }
 
     if (phoneNumberData.otp !== otp) {
-      const message = "OTP ไม่ถูกต้อง";
+      const message = 'OTP ไม่ถูกต้อง'
       throw new GraphQLError(message, {
         extensions: {
-          code: "FAILED_VERIFY_OTP",
+          code: 'FAILED_VERIFY_OTP',
           errors: [{ message }],
         },
-      });
+      })
     }
 
     return true
   } catch (error) {
-    throw error;
+    throw error
   }
 }
 
 @Resolver()
 export default class OTPRequestResolver {
   @Mutation(() => OTPRequst)
-  async otpRequest(@Arg("phoneNumber") phoneNumber: string, @Arg("action") action: string): Promise<OTPRequst> {
+  async otpRequest(@Arg('phoneNumber') phoneNumber: string, @Arg('action') action: string): Promise<OTPRequst> {
     try {
       const requetedOTP = await requestOTP(phoneNumber, action)
       return requetedOTP
@@ -131,13 +137,17 @@ export default class OTPRequestResolver {
   }
 
   @Mutation(() => Boolean)
-  async verifyOTP(@Arg("phoneNumber") phoneNumber: string, @Arg("ref") ref: string, @Arg("otp") otp: string): Promise<boolean> {
+  async verifyOTP(
+    @Arg('phoneNumber') phoneNumber: string,
+    @Arg('ref') ref: string,
+    @Arg('otp') otp: string,
+  ): Promise<boolean> {
     return await verifyOTP(phoneNumber, otp, ref)
   }
 
   @Query(() => OTPRequst)
-  @UseMiddleware(AuthGuard(["admin"]))
-  async getLatestOtp(@Arg("phoneNumber") phoneNumber: string): Promise<OTPRequst> {
+  @UseMiddleware(AuthGuard(['admin']))
+  async getLatestOtp(@Arg('phoneNumber') phoneNumber: string): Promise<OTPRequst> {
     try {
       const otps = await OTPRequstModel.findOne({ phoneNumber }).sort({ createdAt: -1 })
       if (!otps) {
@@ -152,26 +162,23 @@ export default class OTPRequestResolver {
 
   @Query(() => OTPPaginationPayload)
   @UseMiddleware(AuthGuard(['admin']))
-  async getOtps(
-    @Args() query: GetOTPArgs,
-    @Args() paginate: PaginationArgs,
-  ): Promise<OTPPaginationPayload> {
+  async getOtps(@Args() query: GetOTPArgs, @Args() paginate: PaginationArgs): Promise<OTPPaginationPayload> {
     try {
       const VERIFY_PHONE = /^(0[689]{1})+([0-9]{8})+$/
       if (!VERIFY_PHONE.test(query.phoneNumber)) {
-        const message = "หมายเลขโทรศัพท์ไม่ถูกต้อง";
+        const message = 'หมายเลขโทรศัพท์ไม่ถูกต้อง'
         throw new GraphQLError(message, {
           extensions: {
-            code: "BAD_REQUEST",
+            code: 'BAD_REQUEST',
             errors: [{ message }],
           },
-        });
+        })
       }
       // Pagination
       const pagination: PaginateOptions = reformPaginate(paginate)
 
       const filterQuery: FilterQuery<OTPRequst> = {
-        phoneNumber: query.phoneNumber
+        phoneNumber: query.phoneNumber,
       }
 
       const otps = (await OTPRequstModel.paginate(filterQuery, pagination)) as OTPPaginationPayload

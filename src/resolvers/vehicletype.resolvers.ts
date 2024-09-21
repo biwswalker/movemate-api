@@ -112,7 +112,7 @@ export default class VehicleTypeResolver {
         }
     }
     @Query(() => VehicleType)
-    @UseMiddleware(AuthGuard(["customer", "driver"]))
+    // @UseMiddleware(AuthGuard(["customer", "driver"]))
     async getVehicleTypeById(@Arg("id") id: string): Promise<VehicleType> {
         try {
             const vehicleType = await VehicleTypeModel.findById(id)

@@ -257,13 +257,14 @@ export default class SettingsResolver {
     async getDriverPoliciesInfo(): Promise<SettingDriverPolicies> {
         try {
             const settingDriverPolicies = await SettingDriverPoliciesModel.find();
-            if (!settingDriverPolicies) {
+            const policy = get(settingDriverPolicies, '0', undefined)
+            if (!policy) {
                 const message = `ไม่สามารถเรียกข้อมูลข้อกำหนดการให้บริการและนโยบายความเป็นส่วนตัวได้`;
                 throw new GraphQLError(message, {
                     extensions: { code: "NOT_FOUND", errors: [{ message }] },
                 });
             }
-            return settingDriverPolicies[0];
+            return policy
         } catch (error) {
             console.log('error: ', error)
             throw new GraphQLError("ไม่สามารถเรียกข้อมูลข้อกำหนดการให้บริการและนโยบายความเป็นส่วนตัวได้ โปรดลองอีกครั้ง");

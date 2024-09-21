@@ -1,33 +1,33 @@
-import express from "express";
-import dotenv from "dotenv";
-import { engine } from "express-handlebars";
-import { Request } from "express";
-import { expressMiddleware } from '@apollo/server/express4';
-import { connectToMongoDB } from "@configs/mongodb.config";
-import { createGraphQLServer } from "@configs/graphQL.config";
-import { authenticateTokenAccessImage } from "@guards/auth.guards";
-import { graphqlUploadExpress } from "graphql-upload-ts";
-import api_v1 from "@apis/v1";
-import bodyParser from "body-parser";
+import express from 'express'
+import dotenv from 'dotenv'
+import { engine } from 'express-handlebars'
+import { Request } from 'express'
+import { expressMiddleware } from '@apollo/server/express4'
+import { connectToMongoDB } from '@configs/mongodb.config'
+import { createGraphQLServer } from '@configs/graphQL.config'
+import { authenticateTokenAccessImage } from '@guards/auth.guards'
+import { graphqlUploadExpress } from 'graphql-upload-ts'
+import api_v1 from '@apis/v1'
+import bodyParser from 'body-parser'
 import morgan from 'morgan'
-import cors from "cors";
+import cors from 'cors'
 import http from 'http'
-import "reflect-metadata";
-import { get } from "lodash";
-import configureCronjob from "@configs/cronjob";
-import { initializeFirebase } from "@configs/firebase";
+import 'reflect-metadata'
+import { get } from 'lodash'
+import configureCronjob from '@configs/cronjob'
+import { initializeFirebase } from '@configs/firebase'
 
 morgan.token('graphql-query', (req: Request) => {
   const operationName = get(req, 'body.operationName', '')
   const variables = get(req, 'body.variables', {})
   return `${operationName} ${JSON.stringify(variables)}`
-});
+})
 
-dotenv.config();
-const MaxUploadFileSize = 2 * 1024 * 1024;
+dotenv.config()
+const MaxUploadFileSize = 2 * 1024 * 1024
 
 async function server() {
-  const app = express();
+  const app = express()
   const httpServer = http.createServer(app)
 
   // const environment = process.env.NODE_ENV
@@ -35,49 +35,56 @@ async function server() {
     maxAge: 600,
     credentials: true,
     methods: ['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS'],
-    origin: [
-      'https://movematethailand.com',
-      'https://www.movematethailand.com',
-      'https://admin.movematethailand.com',
-      'http://localhost:3000',
-      'http://localhost:3001',
-    ],
+    origin: '*',
+    // [
+    //   'https://movematethailand.com',
+    //   'https://www.movematethailand.com',
+    //   'https://admin.movematethailand.com',
+    //   'http://localhost:3000',
+    //   'http://localhost:3001',
+    // ],
   })
-  app.use(alllowedCors);
-  app.use(express.json({ limit: '10mb' }));
+  app.use(alllowedCors)
+  app.use(express.json({ limit: '10mb' }))
   app.use(morgan(':method :url :graphql-query'))
-  app.use(bodyParser.urlencoded({ extended: false }));
-  app.use(graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }));
-  app.use("/source", authenticateTokenAccessImage, express.static("uploads"));
-  app.use("/invoice", authenticateTokenAccessImage, express.static("generated/invoice"));
-  app.use("/receipt", authenticateTokenAccessImage, express.static("generated/receipt"));
+  app.use(bodyParser.urlencoded({ extended: false }))
+  // app.use(graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }))
+  app.use('/source', authenticateTokenAccessImage, express.static('uploads'))
+  app.use('/invoice', authenticateTokenAccessImage, express.static('generated/invoice'))
+  app.use('/receipt', authenticateTokenAccessImage, express.static('generated/receipt'))
 
-  app.engine("hbs", engine({ extname: ".hbs", defaultLayout: false }));
-  app.set("view engine", "hbs");
+  app.engine('hbs', engine({ extname: '.hbs', defaultLayout: false }))
+  app.set('view engine', 'hbs')
   app.set('trust proxy', true)
 
   // GrapQL Server
-  const server = await createGraphQLServer(httpServer);
+  const server = await createGraphQLServer(httpServer)
 
-  await connectToMongoDB();
-  await server.start();
+  await connectToMongoDB()
+  await server.start()
 
-  app.use('/graphql', alllowedCors, express.json({ limit: '10mb' }), expressMiddleware(server, {
-    context: async ({ req, res }) => {
-      const clientIp: string = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')
-      console.log('x-forwarded-for: ', clientIp)
-      return { req, res, ip: clientIp }
-    },
-  }))
-  app.use("/api/v1", api_v1);
+  app.use(
+    '/graphql',
+    alllowedCors,
+    express.json({ limit: '10mb' }),
+    graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }),
+    expressMiddleware(server, {
+      context: async ({ req, res }) => {
+        const clientIp: string = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')
+        console.log('x-forwarded-for: ', clientIp)
+        return { req, res, ip: clientIp }
+      },
+    }),
+  )
+  app.use('/api/v1', api_v1)
 
-  const PORT = process.env.API_PORT || 5000;
-  await new Promise<void>((resolve) => httpServer.listen({ port: PORT }, resolve));
-  console.log(`🚀 Server ready at :`, httpServer.address());
+  const PORT = process.env.API_PORT || 5000
+  await new Promise<void>((resolve) => httpServer.listen({ port: PORT }, resolve))
+  console.log(`🚀 Server ready at :`, httpServer.address())
 
   // Set timezone
   configureCronjob()
   initializeFirebase()
 }
 
-server();
+server()
