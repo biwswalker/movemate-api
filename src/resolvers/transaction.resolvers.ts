@@ -5,7 +5,7 @@ import TransactionModel, { Transaction } from '@models/transaction.model'
 import { TransactionPayload } from '@payloads/transaction.payloads'
 import { REPONSE_NAME } from 'constants/status'
 import { GraphQLError } from 'graphql'
-import { Args, Ctx, Query, Resolver, UseMiddleware } from 'type-graphql'
+import { Args, Ctx, Int, Query, Resolver, UseMiddleware } from 'type-graphql'
 
 @Resolver(Transaction)
 export default class TransactionResolver {
@@ -21,7 +21,7 @@ export default class TransactionResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    const transactions = await TransactionModel.find({ ownerId: userId })
+    const transactions = await TransactionModel.find({ ownerId: userId, ownerType: 'driver' })
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: 1 })
@@ -41,5 +41,17 @@ export default class TransactionResolver {
     const transactions = await TransactionModel.calculateTransaction(userId)
 
     return transactions
+  }
+
+  @Query(() => Int)
+  @UseMiddleware(AuthGuard(['driver']))
+  async totalTransaction(@Ctx() ctx: GraphQLContext): Promise<number> {
+    const userId = ctx.req.user_id
+    if (!userId) {
+      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    const count = await TransactionModel.countDocuments({ ownerId: userId, ownerType: 'driver' })
+    return count
   }
 }

@@ -1,4 +1,6 @@
 import Bull from 'bull'
+import { TemplateOptions } from 'nodemailer-express-handlebars'
+import Mail from 'nodemailer/lib/mailer'
 
 export const FIVE_MIN = 5 * 60 * 1000
 export const TEN_MIN = 10 * 60 * 1000
@@ -27,15 +29,19 @@ export const monitorShipmentQueue = new Bull<FCMShipmentPayload>('monitorShipmen
 })
 
 // สร้าง queue สำหรับ update job
+export const rejectedFavoritDriverQueue = new Bull<ShipmentResumePayload>('rejectedFavoritDriver')
 export const updateMonitorQueue = new Bull<ShipmentResumePayload>('updateMonitor')
-
-// สร้าง queue สำหรับ cancel shipment
 export const cancelShipmentQueue = new Bull<ShipmentPayload>('cancelShipment')
+
+// สร้าง queue สำหรับ email job
+export const emailSenderQueue = new Bull<Mail.Options & TemplateOptions>('emailSender')
+// 
 
 // Remove all job queue
 export async function obliterateQueue() {
   try {
     await monitorShipmentQueue.obliterate({ force: true })
+    await rejectedFavoritDriverQueue.obliterate({ force: true })
     await updateMonitorQueue.obliterate({ force: true })
     await cancelShipmentQueue.obliterate({ force: true })
 

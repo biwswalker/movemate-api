@@ -14,7 +14,7 @@ import { EPaymentMethod, EPaymentRejectionReason, Payment } from './payment.mode
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { GET_CUSTOMER_WITH_TODAY_BILLED_DATE } from '@pipelines/user.pipeline'
-import { email_sender } from '@utils/email.utils'
+import addEmailQueue from '@utils/email.utils'
 import { th } from 'date-fns/locale'
 import path from 'path'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
@@ -940,8 +940,6 @@ export async function checkBillingStatus() {
 }
 
 export async function issueEmailToCustomer() {
-  const emailTranspoter = email_sender()
-
   const currentDate = new Date()
   const startRange = currentDate.setHours(0, 0, 0, 0)
   const endRange = currentDate.setHours(23, 59, 59, 999)
@@ -957,7 +955,7 @@ export async function issueEmailToCustomer() {
       const year_number = toNumber(format(new Date(), 'yyyy', { locale: th }))
       const year_text = toString(year_number + 543)
       const invoiceFilePath = await generateInvoice(billingCycle)
-      await emailTranspoter.sendMail({
+      await addEmailQueue({
         from: process.env.NOREPLY_EMAIL,
         to: emails,
         subject: `[Auto Email] Movemate Thailand ใบแจ้งหนี้ค่าบริการ ${billingCycle.billingNumber}`,

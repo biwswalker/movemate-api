@@ -1,56 +1,56 @@
-import { Resolver, Mutation, Arg, Ctx } from "type-graphql";
-import UserModel, { User } from "@models/user.model";
-import bcrypt from "bcrypt";
-import { GraphQLContext } from "@configs/graphQL.config";
-import { isEmpty } from "lodash";
-import { generateId } from "@utils/string.utils";
-import FileModel from "@models/file.model";
-import { decryption } from "@utils/encryption";
-import { IndividualDriverDetailInput, IndividualDriverRegisterInput } from "@inputs/driver.input";
-import { IndividualDriverScema } from "@validations/driver.validations";
-import { verifyOTP } from "./otp.resolvers";
-import IndividualDriverModel from "@models/driverIndividual.model";
-import DriverDocumentModel from "@models/driverDocument.model";
-import NotificationModel, { ENotificationVarient } from "@models/notification.model";
-import { ValidationError } from "yup";
-import { yupValidationThrow } from "@utils/error.utils";
-import { IndividualDriverDetailVerifyPayload, RegisterPayload } from "@payloads/driver.payloads";
+import { Resolver, Mutation, Arg, Ctx } from 'type-graphql'
+import UserModel, { EDriverStatus, User } from '@models/user.model'
+import bcrypt from 'bcrypt'
+import { GraphQLContext } from '@configs/graphQL.config'
+import { isEmpty } from 'lodash'
+import { generateId } from '@utils/string.utils'
+import FileModel from '@models/file.model'
+import { decryption } from '@utils/encryption'
+import { IndividualDriverDetailInput, IndividualDriverRegisterInput } from '@inputs/driver.input'
+import { IndividualDriverScema } from '@validations/driver.validations'
+import { verifyOTP } from './otp.resolvers'
+import IndividualDriverModel from '@models/driverIndividual.model'
+import DriverDocumentModel from '@models/driverDocument.model'
+import NotificationModel, { ENotificationVarient } from '@models/notification.model'
+import { ValidationError } from 'yup'
+import { yupValidationThrow } from '@utils/error.utils'
+import { IndividualDriverDetailVerifyPayload, RegisterPayload } from '@payloads/driver.payloads'
+import { GraphQLError } from 'graphql'
 
 @Resolver(User)
 export default class DriverResolver {
-
   @Mutation(() => IndividualDriverDetailVerifyPayload)
   async verifyIndiividualDriverData(
-    @Arg("data") data: IndividualDriverDetailInput,
-    @Ctx() ctx: GraphQLContext
+    @Arg('data') data: IndividualDriverDetailInput,
+    @Ctx() ctx: GraphQLContext,
   ): Promise<IndividualDriverDetailVerifyPayload> {
     try {
-      const platform = ctx.req.headers["platform"];
+      const platform = ctx.req.headers['platform']
       if (isEmpty(platform)) {
-        throw new Error("Bad Request: Platform is require");
+        throw new Error('Bad Request: Platform is require')
       }
       await IndividualDriverScema.validate(data, { abortEarly: false })
       return data
     } catch (error) {
-      console.log("error: ", error);
+      console.log('error: ', error)
       if (error instanceof ValidationError) {
-        throw yupValidationThrow(error);
+        throw yupValidationThrow(error)
       }
-      throw error;
+      throw error
     }
   }
 
   @Mutation(() => RegisterPayload)
   async individualDriverRegister(
-    @Arg("data") data: IndividualDriverRegisterInput,
-    @Ctx() ctx: GraphQLContext
+    @Arg('data') data: IndividualDriverRegisterInput,
+    @Ctx() ctx: GraphQLContext,
   ): Promise<RegisterPayload> {
-    const { detail, documents, otp } = data;
+    const { detail, documents, otp } = data
     try {
       // Check if the user already exists
-      const platform = ctx.req.headers["platform"];
+      const platform = ctx.req.headers['platform']
       if (isEmpty(platform)) {
-        throw new Error("Bad Request: Platform is require");
+        throw new Error('Bad Request: Platform is require')
       }
 
       await IndividualDriverScema.validate(detail, { abortEarly: false })
@@ -63,24 +63,32 @@ export default class DriverResolver {
       const backOfVehicle = documents.backOfVehicle ? new FileModel({ ...documents.backOfVehicle }) : null
       const leftOfVehicle = documents.leftOfVehicle ? new FileModel({ ...documents.leftOfVehicle }) : null
       const rigthOfVehicle = documents.rigthOfVehicle ? new FileModel({ ...documents.rigthOfVehicle }) : null
-      const copyVehicleRegistration = documents.copyVehicleRegistration ? new FileModel({ ...documents.copyVehicleRegistration }) : null
+      const copyVehicleRegistration = documents.copyVehicleRegistration
+        ? new FileModel({ ...documents.copyVehicleRegistration })
+        : null
       const copyIDCard = documents.copyIDCard ? new FileModel({ ...documents.copyIDCard }) : null
-      const copyDrivingLicense = documents.copyDrivingLicense ? new FileModel({ ...documents.copyDrivingLicense }) : null
+      const copyDrivingLicense = documents.copyDrivingLicense
+        ? new FileModel({ ...documents.copyDrivingLicense })
+        : null
       const copyBookBank = documents.copyBookBank ? new FileModel({ ...documents.copyBookBank }) : null
-      const copyHouseRegistration = documents.copyHouseRegistration ? new FileModel({ ...documents.copyHouseRegistration }) : null
+      const copyHouseRegistration = documents.copyHouseRegistration
+        ? new FileModel({ ...documents.copyHouseRegistration })
+        : null
       const insurancePolicy = documents.insurancePolicy ? new FileModel({ ...documents.insurancePolicy }) : null
-      const criminalRecordCheckCert = documents.criminalRecordCheckCert ? new FileModel({ ...documents.criminalRecordCheckCert }) : null
-      frontOfVehicle && await frontOfVehicle.save()
-      backOfVehicle && await backOfVehicle.save()
-      leftOfVehicle && await leftOfVehicle.save()
-      rigthOfVehicle && await rigthOfVehicle.save()
-      copyVehicleRegistration && await copyVehicleRegistration.save()
-      copyIDCard && await copyIDCard.save()
-      copyDrivingLicense && await copyDrivingLicense.save()
-      copyBookBank && await copyBookBank.save()
-      copyHouseRegistration && await copyHouseRegistration.save()
-      insurancePolicy && await insurancePolicy.save()
-      criminalRecordCheckCert && await criminalRecordCheckCert.save()
+      const criminalRecordCheckCert = documents.criminalRecordCheckCert
+        ? new FileModel({ ...documents.criminalRecordCheckCert })
+        : null
+      frontOfVehicle && (await frontOfVehicle.save())
+      backOfVehicle && (await backOfVehicle.save())
+      leftOfVehicle && (await leftOfVehicle.save())
+      rigthOfVehicle && (await rigthOfVehicle.save())
+      copyVehicleRegistration && (await copyVehicleRegistration.save())
+      copyIDCard && (await copyIDCard.save())
+      copyDrivingLicense && (await copyDrivingLicense.save())
+      copyBookBank && (await copyBookBank.save())
+      copyHouseRegistration && (await copyHouseRegistration.save())
+      insurancePolicy && (await insurancePolicy.save())
+      criminalRecordCheckCert && (await criminalRecordCheckCert.save())
       const driverDetail = new DriverDocumentModel({
         frontOfVehicle,
         backOfVehicle,
@@ -115,14 +123,14 @@ export default class DriverResolver {
         bankName: detail.bankName,
         bankNumber: detail.bankNumber,
         serviceVehicleType: detail.serviceVehicleType,
-        documents: driverDetail
+        documents: driverDetail,
       })
       await individualDriverDetail.save()
 
       // 4. User
       const password_decryption = decryption(detail.password)
-      const hashedPassword = await bcrypt.hash(password_decryption, 10);
-      const userNumber = await generateId("MMDI", 'driver');
+      const hashedPassword = await bcrypt.hash(password_decryption, 10)
+      const userNumber = await generateId('MMDI', 'driver')
 
       const currentDate = new Date()
       const user = new UserModel({
@@ -143,7 +151,8 @@ export default class DriverResolver {
 
         individualDriver: individualDriverDetail,
         isChangePasswordRequire: false,
-      });
+        drivingStatus: EDriverStatus.IDLE,
+      })
       await user.save()
 
       // Notification
@@ -151,19 +160,52 @@ export default class DriverResolver {
         userId: user._id,
         varient: ENotificationVarient.MASTER,
         title: 'ยินดีต้อนรับเข้าสู่คนขับ Movemate',
-        message: [`ยินดีต้อนรับ คุณ ${individualDriverDetail.fullname} เข้าสู่ทีมขับรถของเรา โปรดรอเจ้าหน้าที่ตรวจสอบบัญชีของท่าน`],
+        message: [
+          `ยินดีต้อนรับ คุณ ${individualDriverDetail.fullname} เข้าสู่ทีมขับรถของเรา โปรดรอเจ้าหน้าที่ตรวจสอบบัญชีของท่าน`,
+        ],
       })
 
       return {
         phoneNumber: detail.phoneNumber,
-        driverType: detail.driverType
-      };
-    } catch (error) {
-      console.log("error: ", error);
-      if (error instanceof ValidationError) {
-        throw yupValidationThrow(error);
+        driverType: detail.driverType,
       }
-      throw error;
+    } catch (error) {
+      console.log('error: ', error)
+      if (error instanceof ValidationError) {
+        throw yupValidationThrow(error)
+      }
+      throw error
+    }
+  }
+
+  @Mutation(() => Boolean)
+  async changeDrivingStatus(@Ctx() ctx: GraphQLContext, @Arg('status') status: string): Promise<boolean> {
+    try {
+      const userId = ctx.req.user_id
+      if (userId) {
+        const userModel = await UserModel.findById(userId)
+        if (!userModel) {
+          const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
+          throw new GraphQLError(message, {
+            extensions: {
+              code: 'NOT_FOUND',
+              errors: [{ message }],
+            },
+          })
+        }
+        await userModel.updateOne({ drivingStatus: status })
+        return true
+      }
+      const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน'
+      throw new GraphQLError(message, {
+        extensions: {
+          code: 'NOT_FOUND',
+          errors: [{ message }],
+        },
+      })
+    } catch (errors) {
+      console.log('error: ', errors)
+      throw errors
     }
   }
 }

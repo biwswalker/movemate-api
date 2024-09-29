@@ -49,8 +49,8 @@ enum ERegistration {
 
 export enum EDriverStatus {
   IDLE = 'idle',
-  SCHEDULE = 'schedule',
   BUSY = 'busy',
+  WORKING = 'working',
 }
 
 @plugin(autopopulate)

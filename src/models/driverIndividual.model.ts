@@ -114,6 +114,7 @@ export class IndividualDriver {
 
   async updateBalance() {
     const transactions = await TransactionModel.calculateTransaction(this._id)
+    console.log('New user balance: ', transactions.totalPending)
     await IndividualDriverModel.findByIdAndUpdate(this._id, { balance: transactions.totalPending })
   }
 }

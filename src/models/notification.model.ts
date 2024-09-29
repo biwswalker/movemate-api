@@ -7,105 +7,124 @@ import admin from '@configs/firebase'
 import { Message } from 'firebase-admin/messaging'
 import { isArray } from 'lodash'
 
+export enum ENavigationType {
+  SHIPMENT = "shipment",
+  FINANCE = "finance",
+}
+
 export enum ENotificationVarient {
-    INFO = 'info',
-    ERROR = 'error',
-    WRANING = 'warning',
-    SUCCESS = 'success',
-    MASTER = 'master'
+  INFO = 'info',
+  ERROR = 'error',
+  WRANING = 'warning',
+  SUCCESS = 'success',
+  MASTER = 'master',
 }
 
 interface INotification {
-    userId: string
-    varient: ENotificationVarient
-    title: string
-    message: string[]
-    infoText?: string
-    infoLink?: string
-    errorText?: string
-    errorLink?: string
-    masterText?: string
-    masterLink?: string
-    read?: boolean
+  userId: string
+  varient: ENotificationVarient
+  title: string
+  message: string[]
+  infoText?: string
+  infoLink?: string
+  errorText?: string
+  errorLink?: string
+  masterText?: string
+  masterLink?: string
+  read?: boolean
 }
 
 @ObjectType()
 export class Notification extends TimeStamps {
-    @Field(() => ID)
-    readonly _id: string
+  @Field(() => ID)
+  readonly _id: string
 
-    @Field(() => ID)
-    @Property({ required: true })
-    userId: string
+  @Field(() => ID)
+  @Property({ required: true })
+  userId: string
 
-    @Field()
-    @Property({ enum: ENotificationVarient, default: ENotificationVarient.INFO })
-    varient: ENotificationVarient
+  @Field()
+  @Property({ enum: ENotificationVarient, default: ENotificationVarient.INFO })
+  varient: ENotificationVarient
 
-    @Field()
-    @Property({ required: true })
-    title: string
+  @Field()
+  @Property({ required: true })
+  title: string
 
-    @Field(() => [String])
-    @Property({ required: true, allowMixed: Severity.ALLOW })
-    message: string[]
+  @Field(() => [String])
+  @Property({ required: true, allowMixed: Severity.ALLOW })
+  message: string[]
 
-    @Field({ nullable: true })
-    @Property()
-    infoText: string
+  @Field({ nullable: true })
+  @Property()
+  infoText: string
 
-    @Field({ nullable: true })
-    @Property()
-    infoLink: string
+  @Field({ nullable: true })
+  @Property()
+  infoLink: string
 
-    @Field({ nullable: true })
-    @Property()
-    errorText: string
+  @Field({ nullable: true })
+  @Property()
+  errorText: string
 
-    @Field({ nullable: true })
-    @Property()
-    errorLink: string
+  @Field({ nullable: true })
+  @Property()
+  errorLink: string
 
-    @Field({ nullable: true })
-    @Property()
-    masterText: string
+  @Field({ nullable: true })
+  @Property()
+  masterText: string
 
-    @Field({ nullable: true })
-    @Property()
-    masterLink: string
+  @Field({ nullable: true })
+  @Property()
+  masterLink: string
 
-    @Field()
-    @Property({ default: false })
-    read: boolean
+  @Field()
+  @Property({ default: false })
+  read: boolean
 
-    @Field()
-    @Property({ default: Date.now })
-    createdAt: Date
+  @Field()
+  @Property({ default: Date.now })
+  createdAt: Date
 
-    @Field()
-    @Property({ default: Date.now })
-    updatedAt: Date
+  @Field()
+  @Property({ default: Date.now })
+  updatedAt: Date
 
-    static async sendNotification(data: INotification): Promise<void> {
-        const notification = new NotificationModel({ ...data, read: false })
-        await notification.save()
-        await UserModel.findByIdAndUpdate(data.userId, { $push: { notifications: notification._id } })
+  static async sendNotification(data: INotification): Promise<void> {
+    const notification = new NotificationModel({ ...data, read: false })
+    await notification.save()
+    await UserModel.findByIdAndUpdate(data.userId, { $push: { notifications: notification._id } })
+  }
+  static async sendFCMNotification(data: Message | Message[]): Promise<void> {
+    if (isArray(data)) {
+      await admin.messaging().sendEach(data)
+    } else if (typeof data === 'object') {
+      await admin
+        .messaging()
+        .send(data)
+        .then(res => {
+            console.log('response: ', res)
+            return res
+        })
+        .catch((error) => {
+          console.log(JSON.stringify(error))
+          throw error
+        })
     }
-    static async sendFCMNotification(data: Message | Message[]): Promise<void> {
-        if (isArray(data)) {
-            await admin.messaging().sendEach(data)
-        } else if (typeof data === 'object') {
-            await admin.messaging().send(data)
-        }
-    }
-    static async markNotificationAsRead(_id: string): Promise<void> {
-        await NotificationModel.findByIdAndUpdate(_id, { read: true })
-    }
+  }
+  static async markNotificationAsRead(_id: string): Promise<void> {
+    await NotificationModel.findByIdAndUpdate(_id, { read: true })
+  }
 
-    static async findByUserId(userId: string, { skip, limit }: LoadmoreArgs): Promise<Notification[]> {
-        const notifications = await NotificationModel.find({ userId }).sort({ createdAt: -1 }).skip(skip).limit(limit).exec()
-        return notifications
-    }
+  static async findByUserId(userId: string, { skip, limit }: LoadmoreArgs): Promise<Notification[]> {
+    const notifications = await NotificationModel.find({ userId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec()
+    return notifications
+  }
 }
 
 const NotificationModel = getModelForClass(Notification)

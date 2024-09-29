@@ -4,8 +4,8 @@ import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHt
 import { Request, Response } from 'express'
 import { get } from 'lodash'
 import http from 'http'
-import WebSocket from 'ws';
-import { useServer } from 'graphql-ws/lib/use/ws';
+import WebSocket from 'ws'
+import { useServer } from 'graphql-ws/lib/use/ws'
 import pubSub from './pubsub'
 
 import AuthResolver from '@resolvers/auth.resolvers'
@@ -31,15 +31,21 @@ import BillingCycleResolver from '@resolvers/billingCycle.resolvers'
 import BillingPaymentResolver from '@resolvers/billingPayment.resolvers'
 import TransactionResolver from '@resolvers/transaction.resolvers'
 import CancellationResolver from '@resolvers/cancellation.resolvers'
+import { verifyAccessToken } from '@utils/auth.utils'
 
 export interface GraphQLContext {
   req: Request
   res: Response
   ip: string
+  pubsub: typeof pubSub
+}
+
+export interface AuthContext {
+  user_id: string
+  user_role: string
 }
 
 export async function createGraphQLServer(httpServer: http.Server) {
-
   const schema = await buildSchema({
     resolvers: [
       AuthResolver,
@@ -66,35 +72,56 @@ export async function createGraphQLServer(httpServer: http.Server) {
       TransactionResolver,
       CancellationResolver,
     ],
-    pubSub,
+    pubSub: pubSub,
     authChecker: ({ context }: { context: GraphQLContext }) => {
-      const userId = get(context, 'req.userId', '')
+      const userId = get(context, 'req.user_id', '')
       return !!userId
     },
   })
 
   const wsServer = new WebSocket.Server({ server: httpServer, path: '/subscription' })
 
-  wsServer.on("connection", async (socket, request) => {
+  wsServer.on('connection', async (socket, request) => {
     // socket.close(1008, 'รหัสระบุตัวตนไม่สมบูรณ์');
-    console.log("🧑🏻‍💻 New client connected")
-    socket.on("error", (error) => console.log(`🐞 Error disconnected: ${error}`))
-    socket.on("close", (code, error) => console.log(`❌ Client disconnected: ${code} - ${error}`))
+    console.log('🧑🏻‍💻 New client connected')
+    socket.on('error', (error) => console.log(`🐞 Error disconnected: ${error}`))
+    socket.on('close', (code, error) => console.log(`❌ Client disconnected: ${code} - ${error}`))
   })
 
-  useServer({ schema }, wsServer);
+  useServer(
+    {
+      schema,
+      context: async (ctx, msg, args) => {
+        const authorization = String(get(ctx, 'connectionParams.authorization', '') || '')
+        const token = authorization.split(' ')[1]
+        if (token) {
+          const decodedToken = verifyAccessToken(token)
+          if (decodedToken) {
+            const user_id = decodedToken.user_id
+            const user_role = decodedToken.user_role
+            return { user_id, user_role }
+          }
+        }
+        return {}
+      },
+    },
+    wsServer,
+  )
 
   const server = new ApolloServer<GraphQLContext>({
     schema,
-    plugins: [ApolloServerPluginDrainHttpServer({ httpServer }), {
-      async serverWillStart() {
-        return {
-          async drainServer() {
-            wsServer.close();
+    plugins: [
+      ApolloServerPluginDrainHttpServer({ httpServer }),
+      {
+        async serverWillStart() {
+          return {
+            async drainServer() {
+              wsServer.close()
+            },
           }
-        };
-      }
-    }],
+        },
+      },
+    ],
   })
 
   return server

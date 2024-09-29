@@ -28,7 +28,7 @@ import CustomerIndividualModel, { IndividualCustomer } from "@models/customerInd
 import FileModel from "@models/file.model";
 import BusinessCustomerModel, { BusinessCustomer } from "@models/customerBusiness.model";
 import BusinessCustomerCreditPaymentModel from "@models/customerBusinessCreditPayment.model";
-import { email_sender } from "@utils/email.utils";
+import addEmailQueue from '@utils/email.utils'
 import { generateId, generateOTP, generateRandomNumberPattern, getCurrentHost } from "@utils/string.utils";
 import bcrypt from "bcrypt";
 import { GET_USERS } from "@pipelines/user.pipeline";
@@ -432,8 +432,6 @@ export default class UserResolver {
           throw new InvalidDirectiveError('ไม่พบข้อมูลธุระกิจ')
         }
 
-        // Prepare email sender
-        const emailTranspoter = email_sender();
         const status = result === 'approve' ? 'active' : 'denied'
         // Title name
         const BUSINESS_TITLE_NAME_OPTIONS = [
@@ -460,7 +458,7 @@ export default class UserResolver {
             }
             await user.updateOne({ status, validationStatus: result, password: hashedPassword, ...newBusinessDetail })
             const movemate_link = `https://www.movematethailand.com`
-            await emailTranspoter.sendMail({
+            await addEmailQueue({
               from: process.env.NOREPLY_EMAIL,
               to: businesData.businessEmail,
               subject: "บัญชี Movemate ของท่านได้รับการอนุมัติ",
@@ -487,7 +485,7 @@ export default class UserResolver {
             const host = getCurrentHost(ctx)
             const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
             const movemate_link = `https://www.movematethailand.com`
-            await emailTranspoter.sendMail({
+            await addEmailQueue({
               from: process.env.NOREPLY_EMAIL,
               to: businesData.businessEmail,
               subject: "บัญชี Movemate ของท่านได้รับการอนุมัติ",
@@ -513,7 +511,7 @@ export default class UserResolver {
           const sentemail = user.userType === 'individual' ? individualDetail.email : businesData.businessEmail
 
           await user.updateOne({ status, validationStatus: result, ...newBusinessDetail })
-          await emailTranspoter.sendMail({
+          await addEmailQueue({
             from: process.env.NOREPLY_EMAIL,
             to: sentemail,
             subject: "บัญชี Movemate ของท่านไม่ได้รับการอนุมัติ",
@@ -752,7 +750,6 @@ export default class UserResolver {
           throw new GraphQLError(message, { extensions: { code: "NOT_FOUND", errors: [{ message }] } });
         }
 
-        const emailTranspoter = email_sender();
         const code = generateOTP()
 
         const currentDate = new Date()
@@ -761,7 +758,7 @@ export default class UserResolver {
 
         await UserModel.findByIdAndUpdate(user._id, { resetPasswordCode: code, lastestResetPassword: reset_time })
         const movemate_link = `https://www.movematethailand.com`
-        await emailTranspoter.sendMail({
+        await addEmailQueue({
           from: process.env.NOREPLY_EMAIL,
           to: email,
           subject: "ยืนยันตัวตนคุณ",
@@ -807,8 +804,7 @@ export default class UserResolver {
           },
         });
       }
-      // Prepare Email
-      const emailTranspoter = email_sender();
+      
       // TODO: Verify time range
 
       // Verify code
@@ -820,7 +816,7 @@ export default class UserResolver {
         await UserModel.findByIdAndUpdate(user._id, { password: hashedPassword, resetPasswordCode: null })
         // Email sender
         const movemate_link = `https://www.movematethailand.com`
-        await emailTranspoter.sendMail({
+        await addEmailQueue({
           from: process.env.NOREPLY_EMAIL,
           to: data.email,
           subject: "เปลี่ยนรหัสผ่านบัญชีสำเร็จ",
@@ -872,6 +868,43 @@ export default class UserResolver {
           });
         }
         await userModel.updateOne({ fcmToken })
+        return true;
+      }
+      const message =
+        "ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน";
+      throw new GraphQLError(message, {
+        extensions: {
+          code: "NOT_FOUND",
+          errors: [{ message }],
+        },
+      });
+    } catch (errors) {
+      console.log("error: ", errors);
+      throw errors;
+    }
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(["driver"]))
+  async removeFCM(
+    @Ctx() ctx: GraphQLContext,
+  ): Promise<boolean> {
+    try {
+      const userId = ctx.req.user_id;
+      console.log('ctx: ', ctx)
+      if (userId) {
+        const userModel = await UserModel.findById(userId);
+        if (!userModel) {
+          const message =
+            "ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน";
+          throw new GraphQLError(message, {
+            extensions: {
+              code: "NOT_FOUND",
+              errors: [{ message }],
+            },
+          });
+        }
+        await userModel.updateOne({ fcmToken: '' })
         return true;
       }
       const message =

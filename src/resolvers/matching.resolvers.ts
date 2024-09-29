@@ -1,11 +1,11 @@
-import { Resolver, Ctx, Args, Query, UseMiddleware, Arg, Int, Mutation } from 'type-graphql'
+import { Resolver, Ctx, Args, Query, UseMiddleware, Arg, Int, Mutation, Subscription, Root } from 'type-graphql'
 import { LoadmoreArgs } from '@inputs/query.input'
-import { GraphQLContext } from '@configs/graphQL.config'
+import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
-import UserModel from '@models/user.model'
-import { get } from 'lodash'
-import { IndividualDriver } from '@models/driverIndividual.model'
+import UserModel, { EDriverStatus } from '@models/user.model'
+import { get, isEqual } from 'lodash'
+import IndividualDriverModel, { IndividualDriver } from '@models/driverIndividual.model'
 import { GraphQLError } from 'graphql'
 import { FilterQuery, Types } from 'mongoose'
 import { Ref } from '@typegoose/typegoose'
@@ -19,6 +19,8 @@ import {
 } from '@inputs/matching.input'
 import { removeMonitorShipmentJob } from '@configs/jobQueue'
 import { addDays } from 'date-fns'
+import pubsub, { SHIPMENTS } from '@configs/pubsub'
+import { Repeater } from '@graphql-yoga/subscription'
 
 // Custom status for driver
 type TShipmentStatus = 'new' | 'progressing' | 'dilivered' | 'cancelled'
@@ -43,13 +45,13 @@ export default class MatchingResolver {
             $nor: [
               {
                 driver: new Types.ObjectId(userId), // คนขับคนเดิม
-                bookingDateTime: {
-                  $exists: true,
-                  $ne: null,
-                  // งานใหม่ห้ามทับซ้อนกับเวลางานเก่าที่ driver ทำอยู่ + 3 วัน
-                  $gte: currentDate, // งานใหม่ต้องเกิดขึ้นหลังจากปัจจุบัน
-                  $lte: threeDayAfter, // เวลาจบของงานเก่าต้องไม่น้อยกว่า 3 วันนับจากเวลาที่ทำงาน
-                },
+                // bookingDateTime: {
+                //   $exists: true,
+                //   $ne: null,
+                //   // งานใหม่ห้ามทับซ้อนกับเวลางานเก่าที่ driver ทำอยู่ + 3 วัน
+                //   $gte: currentDate, // งานใหม่ต้องเกิดขึ้นหลังจากปัจจุบัน
+                //   $lte: threeDayAfter, // เวลาจบของงานเก่าต้องไม่น้อยกว่า 3 วันนับจากเวลาที่ทำงาน
+                // },
               },
             ],
           }
@@ -76,6 +78,46 @@ export default class MatchingResolver {
     return statusQuery
   }
 
+  @Subscription(() => [Shipment], {
+    topics: SHIPMENTS.GET_MATCHING_SHIPMENT,
+    subscribe: async ({ context }) => {
+      console.log('ListenAvailableShipment Subscribe: ', context)
+      const repeater = new Repeater(async (push, stop) => {
+        const shipments = await ShipmentModel.getNewAllAvailableShipmentForDriver(context.user_id)
+        push(shipments)
+        await stop
+      })
+      return Repeater.merge([repeater, pubsub.subscribe(SHIPMENTS.GET_MATCHING_SHIPMENT)])
+    },
+    filter: async ({ payload, args, context }) => {
+      console.log('ListenAvailableShipment Filter: ')
+    },
+  } as any)
+  async listenAvailableShipment(@Root() payload: Shipment[], @Ctx() ctx: AuthContext): Promise<Shipment[]> {
+    console.log('ListenAvailableShipment:', ctx.user_id)
+    const user = await UserModel.findById(ctx.user_id).lean()
+    if (user?.drivingStatus !== EDriverStatus.IDLE) return []
+    const individualDriver = await IndividualDriverModel.findById(user.individualDriver).lean()
+    const userPayload = payload.filter((item) => {
+      const vehicleId = get(item, 'vehicleId._id', '')
+      const isMatchedService = isEqual(vehicleId, individualDriver.serviceVehicleType)
+      console.log('isMatchedService: ', isMatchedService, vehicleId, individualDriver.serviceVehicleType)
+      return isMatchedService
+    })
+    return userPayload
+  }
+
+  /**
+   * Remove this
+   * @returns
+   */
+  @Query(() => Boolean)
+  async trigNewAvailableShipment(): Promise<boolean> {
+    const shipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
+    pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, shipments)
+    return true
+  }
+
   @Query(() => [Shipment])
   @UseMiddleware(AuthGuard(['driver']))
   async getAvailableShipment(
@@ -99,9 +141,9 @@ export default class MatchingResolver {
 
     const query = this.generateQuery(status, userId, individualDriver.serviceVehicleType)
 
-    console.log('---------query-----', JSON.stringify(query))
+    console.log('-----getAvailableShipment query-----', JSON.stringify(query))
     const shipments = await ShipmentModel.find(query).skip(skip).limit(limit).sort({ createdAt: 1 }).exec()
-    console.log('shipments: ', JSON.stringify(shipments))
+
     return shipments
   }
 
@@ -168,6 +210,7 @@ export default class MatchingResolver {
         driverAcceptanceStatus: 'accepted',
         driver: userId,
       })
+      await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.WORKING })
 
       // Notification
       const customerId = get(shipment, 'customer._id', '')
@@ -273,6 +316,26 @@ export default class MatchingResolver {
     }
 
     await shipment.finishJob()
+    await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.IDLE })
+    return true
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(['driver']))
+  async markAsCancelled(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
+    const userId = ctx.req.user_id
+    if (!userId) {
+      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    const shipment = await ShipmentModel.findById(shipmentId)
+    if (!shipment) {
+      const message = 'ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+
+    // await shipment.cancelledJobByDriver()
+    await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.IDLE })
     return true
   }
 }

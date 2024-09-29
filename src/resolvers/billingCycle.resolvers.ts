@@ -8,7 +8,7 @@ import ShipmentModel from '@models/shipment.model'
 import UserModel from '@models/user.model'
 import { BillingCyclePaginationAggregatePayload, TotalBillingRecordPayload } from '@payloads/billingCycle.payloads'
 import { BILLING_CYCLE_LIST } from '@pipelines/billingCycle.pipeline'
-import { email_sender } from '@utils/email.utils'
+import addEmailQueue from '@utils/email.utils'
 import { reformPaginate } from '@utils/pagination.utils'
 import { addDays, format, parse, startOfMonth, endOfMonth } from 'date-fns'
 import { th } from 'date-fns/locale'
@@ -219,7 +219,6 @@ export default class BillingCycleResolver {
   @UseMiddleware(AuthGuard(['admin']))
   async resentInvoiceToEmail(@Ctx() ctx: GraphQLContext, @Arg('billingCycleId') billingCycleId: string): Promise<boolean> {
     try {
-      const emailTranspoter = email_sender()
       const billingCycleModel = await BillingCycleModel.findById(billingCycleId)
       const customerModel = await UserModel.findById(billingCycleModel.user)
       if (customerModel) {
@@ -230,7 +229,7 @@ export default class BillingCycleResolver {
         const year_text = toString(year_number + 543)
         const filePath = path.join(__dirname, '..', '..', 'generated/invoice', billingCycleModel.issueInvoiceFilename)
 
-        await emailTranspoter.sendMail({
+        await addEmailQueue({
           from: process.env.NOREPLY_EMAIL,
           to: emails,
           subject: `[Auto Email] Movemate Thailand ใบแจ้งหนี้ค่าบริการ ${billingCycleModel.billingNumber}`,
@@ -259,7 +258,6 @@ export default class BillingCycleResolver {
   @UseMiddleware(AuthGuard(['admin']))
   async resentReceiptToEmail(@Ctx() ctx: GraphQLContext, @Arg('billingCycleId') billingCycleId: string): Promise<boolean> {
     try {
-      const emailTranspoter = email_sender()
       const billingCycleModel = await BillingCycleModel.findById(billingCycleId)
       const customerModel = await UserModel.findById(billingCycleModel.user)
       if (customerModel) {
@@ -268,7 +266,7 @@ export default class BillingCycleResolver {
         const filePath = path.join(__dirname, '..', '..', 'generated/receipt', billingCycleModel.issueReceiptFilename)
 
         const businessContactNumber = get(customerModel, 'businessDetail.contactNumber', '')
-        await emailTranspoter.sendMail({
+        await addEmailQueue({
           from: process.env.NOREPLY_EMAIL,
           to: emails,
           subject: `ใบเสร็จรับเงิน Movemate Thailand`,

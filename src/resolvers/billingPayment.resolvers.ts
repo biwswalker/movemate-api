@@ -18,7 +18,8 @@ import TransactionModel, {
   MOVEMATE_OWNER_ID,
 } from '@models/transaction.model'
 import { monitorShipmentStatus } from './shipment.resolvers'
-import { Shipment } from '@models/shipment.model'
+import ShipmentModel, { Shipment } from '@models/shipment.model'
+import pubsub, { SHIPMENTS } from '@configs/pubsub'
 
 Aigle.mixin(lodash, {})
 
@@ -52,6 +53,8 @@ export default class BillingPaymentResolver {
       const shipment = head(billingCycleModel.shipments) as Shipment
       if (shipment) {
         monitorShipmentStatus(shipment._id, get(shipment, 'requestedDriver._id', ''))
+        const newShipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
+        await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
       }
       return true
     } else if (args.result === 'reject') {

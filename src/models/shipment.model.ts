@@ -1,11 +1,11 @@
 import { Field, Float, ID, Int, ObjectType } from 'type-graphql'
 import { prop as Property, getModelForClass, Ref, Severity, plugin } from '@typegoose/typegoose'
-import UserModel, { User } from './user.model'
+import UserModel, { EDriverStatus, User } from './user.model'
 import { IsEnum } from 'class-validator'
 import PrivilegeModel, { Privilege } from './privilege.model'
 import { VehicleType } from './vehicleType.model'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
-import mongoose, { Schema } from 'mongoose'
+import mongoose, { Schema, Types } from 'mongoose'
 import FileModel, { File } from './file.model'
 import { Location } from './location.model'
 import { ShipmentAdditionalServicePrice } from './shipmentAdditionalServicePrice.model'
@@ -56,7 +56,7 @@ import TransactionModel, {
   ETransactionType,
   MOVEMATE_OWNER_ID,
 } from './transaction.model'
-import IndividualDriverModel from './driverIndividual.model'
+import IndividualDriverModel, { IndividualDriver } from './driverIndividual.model'
 import { differenceInMinutes } from 'date-fns'
 import { refundCashBillingCycle } from './billingCycle.model'
 
@@ -1015,6 +1015,42 @@ export class Shipment extends TimeStamps {
       status: EShipingStatus.CANCELLED,
       $push: { history: _shipmentUpdateHistory },
     })
+  }
+
+  static async getNewAllAvailableShipmentForDriver(driverId?: string) {
+    let vehicleId = null
+    if (driverId) {
+      const user = await UserModel.findById(driverId).lean()
+      if (user) {
+        if (user?.drivingStatus !== EDriverStatus.IDLE) return []
+        const individualDriver = await IndividualDriverModel.findById(user.individualDriver).lean()
+        if (individualDriver.serviceVehicleType) {
+          vehicleId = individualDriver.serviceVehicleType
+        }
+      }
+    }
+    const query = {
+      status: 'idle',
+      driverAcceptanceStatus: 'pending',
+      ...(vehicleId ? { vehicleId } : {}),
+      $or: [
+        { requestedDriver: { $exists: false } }, // ไม่มี requestedDriver
+        { requestedDriver: null }, // requestedDriver เป็น null
+        ...(driverId
+          ? [
+              { requestedDriver: driverId }, // requestedDriver ตรงกับ userId
+              { requestedDriver: { $ne: driverId } }, // requestedDriver ไม่ตรงกับ userId
+            ]
+          : []),
+      ],
+      ...(driverId ? { $nor: [{ driver: new Types.ObjectId(driverId) }] } : {}),
+    }
+
+    const shipments = await ShipmentModel.find(query).exec()
+    if (!shipments) {
+      return []
+    }
+    return shipments
   }
 }
 

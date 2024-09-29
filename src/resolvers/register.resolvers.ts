@@ -10,7 +10,7 @@ import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
 import { get, isEmpty, isEqual, omit } from "lodash";
 import { generateId, generateRandomNumberPattern, getCurrentHost } from "@utils/string.utils";
-import { email_sender } from "@utils/email.utils";
+import addEmailQueue from '@utils/email.utils'
 import { GraphQLError } from "graphql";
 import FileModel from "@models/file.model";
 import { CutomerBusinessInput, CutomerIndividualInput } from "@inputs/customer.input";
@@ -95,9 +95,6 @@ export default class RegisterResolver {
         throw new Error("Bad Request: Platform is require");
       }
 
-      // Prepare email sender
-      const emailTranspoter = email_sender();
-
       // Exist email
       // TODO: Refactor
       const email = isEqual(userType, EUserType.INDIVIDUAL)
@@ -150,7 +147,7 @@ export default class RegisterResolver {
         const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
         const movemate_link = `https://www.movematethailand.com`
         // Email sender
-        await emailTranspoter.sendMail({
+        await addEmailQueue({
           from: process.env.NOREPLY_EMAIL,
           to: individualDetail.email,
           subject: "ยืนยันการสมัครสมาชิก Movemate!",
@@ -217,7 +214,7 @@ export default class RegisterResolver {
           await user.save();
 
           // Email sender
-          await emailTranspoter.sendMail({
+          await addEmailQueue({
             from: process.env.NOREPLY_EMAIL,
             to: businessDetail.businessEmail,
             subject: "การลงทะเบียนรอการอนุมัติ",
@@ -365,7 +362,7 @@ export default class RegisterResolver {
           await user.save();
 
           // Email sender
-          await emailTranspoter.sendMail({
+          await addEmailQueue({
             from: process.env.NOREPLY_EMAIL,
             to: businessDetail.businessEmail,
             subject: "การลงทะเบียนรอการอนุมัติ",
@@ -399,9 +396,6 @@ export default class RegisterResolver {
       if (isEmpty(platform)) {
         throw new Error("Bad Request: Platform is require");
       }
-
-      // Prepare email sender
-      const emailTranspoter = email_sender();
 
       const rawPassword =
         generateRandomNumberPattern("MMPWD########").toLowerCase();
@@ -444,7 +438,7 @@ export default class RegisterResolver {
       const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
       const movemate_link = `https://www.movematethailand.com`
       // Email sender
-      await emailTranspoter.sendMail({
+      await addEmailQueue({
         from: process.env.NOREPLY_EMAIL,
         to: email,
         subject: "ยืนยันการสมัครสมาชิก Movemate!",
@@ -482,9 +476,6 @@ export default class RegisterResolver {
       if (isEmpty(platform)) {
         throw new Error("Bad Request: Platform is require");
       }
-
-      // Prepare email sender
-      const emailTranspoter = email_sender();
 
       const rawPassword =
         generateRandomNumberPattern("MMPWD########").toLowerCase();
@@ -576,7 +567,7 @@ export default class RegisterResolver {
       const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
       const movemate_link = `https://www.movematethailand.com`
       // Email sender
-      await emailTranspoter.sendMail({
+      await addEmailQueue({
         from: process.env.NOREPLY_EMAIL,
         to: customer.businessEmail,
         subject: "ยืนยันการสมัครสมาชิก Movemate!",

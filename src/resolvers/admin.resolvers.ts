@@ -10,7 +10,7 @@ import bcrypt from "bcrypt";
 import { AuthGuard } from "@guards/auth.guards";
 import { GraphQLContext } from "@configs/graphQL.config";
 import { generateId, getCurrentHost } from "@utils/string.utils";
-import { email_sender } from "@utils/email.utils";
+import addEmailQueue from '@utils/email.utils'
 import { GraphQLError } from 'graphql'
 import AdminModel from "@models/admin.model";
 import { AddAdminInput } from "@inputs/admin.input";
@@ -26,8 +26,6 @@ export default class AdminResolver {
     ): Promise<User> {
         const { email, status } = data;
         try {
-            // Prepare email sender
-            const emailTranspoter = email_sender()
             // Exist email
             if (email) {
                 const isExistingEmail = await AdminModel.findOne({ email })
@@ -79,7 +77,7 @@ export default class AdminResolver {
             const activate_link = `${host}/api/v1/activate/admin/${user.userNumber}`
             const movemate_link = `https://www.movematethailand.com`
             // Email sender
-            await emailTranspoter.sendMail({
+            await addEmailQueue({
                 from: process.env.NOREPLY_EMAIL,
                 to: email,
                 subject: 'ยืนยันการเข้าร่วม Movemate!',

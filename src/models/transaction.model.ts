@@ -91,7 +91,7 @@ export class Transaction extends TimeStamps {
     ])
     const pendingTransactions = await TransactionModel.aggregate([
       { $match: { ownerId, status: ETransactionStatus.PENDING } },
-      { $group: { totalAmount: { $sum: '$amount' } } },
+      { $group: { _id: '$transactionType', totalAmount: { $sum: '$amount' } } },
     ])
     const totalPending = pendingTransactions.length > 0 ? pendingTransactions[0]?.totalAmount : 0
     const totalIncome = transactions.find((t) => t._id === ETransactionType.INCOME)?.totalAmount || 0

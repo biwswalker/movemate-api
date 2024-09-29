@@ -14,7 +14,7 @@ import { ChangePasswordSchema } from '@validations/customer.validations'
 import { ValidationError } from 'yup'
 import { yupValidationThrow } from '@utils/error.utils'
 import bcrypt from "bcrypt";
-import { email_sender } from '@utils/email.utils'
+import addEmailQueue from '@utils/email.utils'
 
 @Resolver()
 export default class AuthResolver {
@@ -129,9 +129,6 @@ export default class AuthResolver {
                     });
                 }
 
-                // Prepare Email
-                const emailTranspoter = email_sender();
-
                 const password_decryption = decryption(data.password || '')
                 const confirm_password_decryption = decryption(data.confirmPassword)
                 await ChangePasswordSchema.validate({ password: password_decryption, confirmPassword: confirm_password_decryption }, { abortEarly: false })
@@ -142,7 +139,7 @@ export default class AuthResolver {
                 const email = userModel.userType === 'individual' ? get(userModel, 'individualDetail.email', '') : get(userModel, 'businessDetail.businessEmail', '')
                 const movemate_link = `https://www.movematethailand.com`
 
-                await emailTranspoter.sendMail({
+                await addEmailQueue({
                     from: process.env.NOREPLY_EMAIL,
                     to: email,
                     subject: "เปลี่ยนรหัสผ่านบัญชีสำเร็จ",

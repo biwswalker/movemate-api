@@ -4,7 +4,7 @@ import { GraphQLContext } from '@configs/graphQL.config'
 import UserModel from '@models/user.model'
 import { GraphQLError } from 'graphql'
 import { IndividualCustomer } from '@models/customerIndividual.model'
-import { email_sender } from '@utils/email.utils'
+import addEmailQueue from '@utils/email.utils'
 import { getCurrentHost } from '@utils/string.utils'
 import { addMinutes } from 'date-fns'
 import { VerifyOTPPayload, VerifyPayload } from '@payloads/verify.payloads'
@@ -34,7 +34,6 @@ export default class VerifyAccountResolver {
                 });
             }
 
-            const emailTranspoter = email_sender();
             const host = getCurrentHost(ctx)
             const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
             const movemate_link = `https://www.movematethailand.com`
@@ -62,7 +61,7 @@ export default class VerifyAccountResolver {
                 });
             }
 
-            await emailTranspoter.sendMail({
+            await addEmailQueue({
                 from: process.env.NOREPLY_EMAIL,
                 to: email,
                 subject: "ยืนยันอีเมล Movemate!",

@@ -35,8 +35,8 @@ import { FileInput } from '@inputs/file.input'
 import FileModel from '@models/file.model'
 import VehicleTypeModel from '@models/vehicleType.model'
 import { DistanceCostPricing } from '@models/distanceCostPricing.model'
-import { email_sender } from '@utils/email.utils'
-import NotificationModel, { ENotificationVarient } from '@models/notification.model'
+import addEmailQueue from '@utils/email.utils'
+import NotificationModel, { ENavigationType, ENotificationVarient } from '@models/notification.model'
 import {
   ShipmentPaginationAggregatePayload,
   ShipmentPaginationPayload,
@@ -67,6 +67,7 @@ import {
   TWENTY_MIN,
   TWO_HOUR,
   updateMonitorQueue,
+  rejectedFavoritDriverQueue,
 } from '@configs/jobQueue'
 import { Job } from 'bull'
 import { Message } from 'firebase-admin/messaging'
@@ -77,6 +78,8 @@ import StepDefinitionModel, {
   EStepStatus,
   StepDefinition,
 } from '@models/shipmentStepDefinition.model'
+import { decryption } from '@utils/encryption'
+import pubsub, { SHIPMENTS } from '@configs/pubsub'
 
 Aigle.mixin(lodash, {})
 
@@ -432,9 +435,6 @@ export default class ShipmentResolver {
         }
       }
 
-      // Prepare email
-      const emailTranspoter = email_sender()
-
       // favoriteDriverId
 
       // Duplicate additional service cost for invoice data
@@ -628,6 +628,8 @@ export default class ShipmentResolver {
         }
         // Update balance
         await creditPayment.updateOne({ creditUsage: newCreditBalance })
+        const newShipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
+        await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
       }
 
       const response = await ShipmentModel.findById(shipment._id)
@@ -685,7 +687,7 @@ export default class ShipmentResolver {
         '',
       )
 
-      await emailTranspoter.sendMail({
+      await addEmailQueue({
         from: process.env.NOREPLY_EMAIL,
         to: email,
         subject: 'Movemate Thailand ได้รับการจองรถของคุณแล้ว',
@@ -726,7 +728,8 @@ export async function monitorShipmentStatus(shipmentId: string, driverId: string
   if (driverId) {
     // Favorite Driver
     monitorShipmentQueue.add({ shipmentId, driverId }, { jobId: shipmentId, repeat: { limit: 3, every: TEN_MIN } })
-    updateMonitorQueue.add({ shipmentId, every: TEN_MIN, limit: DEFAULT_LIMIT }, { delay: TWENTY_MIN })
+    rejectedFavoritDriverQueue.add({ shipmentId, every: TEN_MIN, limit: DEFAULT_LIMIT }, { delay: TWENTY_MIN })
+    // Update request driver to uninterest
     updateMonitorQueue.add({ shipmentId, every: FIVE_MIN, limit: 6 }, { delay: TWENTY_MIN + TWO_HOUR })
     cancelShipmentQueue.add({ shipmentId: shipmentId }, { delay: TWENTY_MIN + TWO_HALF_HOUR + FIVE_MIN })
   } else {
@@ -837,6 +840,12 @@ export const cancelShipmentIfNotInterested = async (shipmentId: string) => {
   console.log(`Shipment ${shipmentId} is cancelled.`)
 }
 
+export const autoRejectedFavoritDriver = async (shipmentId: string): Promise<boolean> => {
+  const shipment = await ShipmentModel.findById(shipmentId)
+  await shipment.updateOne({ requestedDriverAccepted: false })
+  return true
+}
+
 export const checkShipmentStatus = async (shipmentId: string): Promise<boolean> => {
   const shipment = await ShipmentModel.findById(shipmentId)
   return shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING
@@ -856,11 +865,11 @@ export const sendNewShipmentNotification = async (shipmentId: string, requestDri
       if (requestDriverId) {
         const driver = await UserModel.findOne({ _id: shipment.requestedDriver, userRole: EUserRole.DRIVER })
         if (driver && driver.fcmToken) {
+          const token = decryption(driver.fcmToken)
           await NotificationModel.sendFCMNotification({
-            token: driver.fcmToken,
-            topic: 'New Shipment',
+            token,
             data: {
-              navigationId: 'home',
+              navigation: ENavigationType.SHIPMENT,
               trackingNumber: shipment.trackingNumber,
             },
             notification: {
@@ -876,11 +885,11 @@ export const sendNewShipmentNotification = async (shipmentId: string, requestDri
           filter(drivers, ({ fcmToken }) => !isEmpty(fcmToken)),
           (driver) => {
             if (driver.fcmToken) {
+              const token = decryption(driver.fcmToken)
               return {
-                token: driver.fcmToken,
-                topic: 'New Shipment',
+                token,
                 data: {
-                  navigationId: 'home',
+                  navigation: ENavigationType.SHIPMENT,
                   trackingNumber: shipment.trackingNumber,
                 },
                 notification: {
@@ -902,6 +911,18 @@ monitorShipmentQueue.process(async (job: Job<FCMShipmentPayload>) => {
   console.log('monitorShipmentQueue: ', format(new Date(), 'HH:mm:ss'), job.data)
   const { shipmentId, driverId } = job.data
   await sendNewShipmentNotification(shipmentId, driverId)
+})
+
+rejectedFavoritDriverQueue.process(async (job: Job<ShipmentResumePayload>) => {
+  const { shipmentId, every, limit } = job.data
+  console.log('rejectedFavoritDriverQueue: ', format(new Date(), 'HH:mm:ss'), job.data)
+  await removeMonitorShipmentJob(shipmentId)
+  await autoRejectedFavoritDriver(shipmentId)
+  const isContinueus = await checkShipmentStatus(shipmentId)
+  if (isContinueus) {
+    monitorShipmentQueue.add({ shipmentId }, { jobId: shipmentId, repeat: { every, limit } })
+  }
+  await job.remove()
 })
 
 updateMonitorQueue.process(async (job: Job<ShipmentResumePayload>) => {
