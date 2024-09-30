@@ -1,6 +1,8 @@
 import Bull from 'bull'
 import { TemplateOptions } from 'nodemailer-express-handlebars'
 import Mail from 'nodemailer/lib/mailer'
+import dotenv from 'dotenv'
+dotenv.config()
 
 export const FIVE_MIN = 5 * 60 * 1000
 export const TEN_MIN = 10 * 60 * 1000
@@ -34,8 +36,15 @@ export const updateMonitorQueue = new Bull<ShipmentResumePayload>('updateMonitor
 export const cancelShipmentQueue = new Bull<ShipmentPayload>('cancelShipment')
 
 // สร้าง queue สำหรับ email job
-export const emailSenderQueue = new Bull<Mail.Options & TemplateOptions>('emailSender')
-// 
+export const emailSenderQueue = new Bull<Mail.Options & TemplateOptions>('emailSender', {
+  redis: {
+    host: process.env.REDIS_HOST,
+    port: Number(process.env.REDIS_PORT),
+    password: process.env.REDIS_PASSWORD,
+    maxRetriesPerRequest: null
+  },
+})
+//
 
 // Remove all job queue
 export async function obliterateQueue() {
