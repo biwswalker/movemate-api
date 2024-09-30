@@ -16,7 +16,7 @@ export function initialWorker(redis: Redis) {
     },
     {
       connection: {
-        host: 'redis',
+        host: 'localhost',
         port: Number(process.env.REDIS_PORT),
         password: process.env.REDIS_PASSWORD,
         maxRetriesPerRequest: null
