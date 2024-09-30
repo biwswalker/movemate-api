@@ -15,7 +15,12 @@ export function initialWorker(redis: Redis) {
       console.log('job: ', QUEUE_NAMES.SHIPMENT_NOTIFICATION, format(new Date(), 'HH:mm:ss', job.data))
     },
     {
-      connection: redis,
+      connection: {
+        host: process.env.REDIS_HOST,
+        port: Number(process.env.REDIS_PORT),
+        password: process.env.REDIS_PASSWORD,
+        maxRetriesPerRequest: null
+      },
     },
   )
 }
