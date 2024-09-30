@@ -80,11 +80,23 @@ import StepDefinitionModel, {
 } from '@models/shipmentStepDefinition.model'
 import { decryption } from '@utils/encryption'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
+import { mock } from '@configs/workQueue'
 
 Aigle.mixin(lodash, {})
 
 @Resolver(Shipment)
 export default class ShipmentResolver {
+  @Query(() => Boolean)
+  async testship(): Promise<boolean> {
+    try {
+      await mock()
+      return true
+    } catch (error) {
+      console.log(error)
+      throw error
+    }
+  }
+
   @Query(() => Shipment)
   @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
   async shipment(@Arg('id') id: string): Promise<Shipment> {

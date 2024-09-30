@@ -16,9 +16,7 @@ import 'reflect-metadata'
 import { get } from 'lodash'
 import configureCronjob from '@configs/cronjob'
 import { initializeFirebase } from '@configs/firebase'
-import { startStandaloneServer } from '@apollo/server/standalone'
 import { verifyAccessToken } from '@utils/auth.utils'
-import UserModel from '@models/user.model'
 import pubsub from '@configs/pubsub'
 
 morgan.token('graphql-query', (req: Request) => {
@@ -98,7 +96,7 @@ async function server() {
     }),
   )
   app.use('/api/v1', api_v1)
-
+  
   const PORT = process.env.API_PORT || 5000
 
   await new Promise<void>((resolve) => httpServer.listen({ port: PORT }, resolve))
