@@ -112,31 +112,11 @@ export default class LocationResolver {
     return limitCounts
   }
 
-  @Mutation(() => Boolean)
-  @UseMiddleware(AllowGuard)
-  async initialRequestLimitCountData(@Ctx() ctx: GraphQLContext): Promise<boolean> {
-    const payload = await getLatestCount(ctx.ip, ELimiterType.LOCATION, ctx.req.user_id || '')
-    let limit = 10
-    if (ctx.req.user_id) {
-      const userModel = await UserModel.findById(ctx.req.user_id)
-      if (userModel) {
-        limit =
-          userModel.userType === EUserType.BUSINESS
-            ? -1 // -1 mean Infinity
-            : userModel.userType === EUserType.INDIVIDUAL
-            ? 20
-            : 10
-      }
-    }
-    await pubsub.publish(LOCATIONS.REQUEST_LIMIT, { count: payload, limit })
-    return true
-  }
-
   // Subscript with user
   @Subscription({
     topics: LOCATIONS.REQUEST_LIMIT,
     subscribe: async ({ context }) => {
-      console.log('listenLocationLimitCount subscribe:', context)
+      console.log('listenLocationLimitCount subscribe:')
       const repeater = new Repeater(async (push, stop) => {
         const payload = await getLatestCount(context.ip, ELimiterType.LOCATION, context.user_id || '')
         let limit = 10

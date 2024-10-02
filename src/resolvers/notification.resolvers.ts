@@ -10,6 +10,7 @@ import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 import { sum } from 'lodash'
 import { decryption } from '@utils/encryption'
+import { Repeater } from '@graphql-yoga/subscription'
 
 export async function getAdminMenuNotificationCount(): Promise<AdminNotificationCountPayload> {
   const individualCustomer = await UserModel.countDocuments({
@@ -49,8 +50,6 @@ export async function getAdminMenuNotificationCount(): Promise<AdminNotification
     shipment,
     financial,
   }
-  await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, payload)
-
   return payload
 }
 @Resolver()
@@ -98,7 +97,8 @@ export default class NotificationResolver {
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard(['admin']))
   async triggerAdminMenuNotificationCount(): Promise<boolean> {
-    await getAdminMenuNotificationCount()
+    const payload = await getAdminMenuNotificationCount()
+    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, payload)
     return true
   }
 
@@ -106,7 +106,18 @@ export default class NotificationResolver {
    *
    * @returns https://typegraphql.com/docs/subscriptions.html
    */
-  @Subscription({ topics: NOTFICATIONS.GET_MENU_BADGE_COUNT })
+  @Subscription({
+    topics: NOTFICATIONS.GET_MENU_BADGE_COUNT,
+    subscribe: async () => {
+      console.log('ListenAdminNotificationCoun Subscribe: ')
+      const repeater = new Repeater(async (push, stop) => {
+        const notificationCount = await getAdminMenuNotificationCount()
+        push(notificationCount)
+        await stop
+      })
+      return Repeater.merge([repeater, pubsub.subscribe(NOTFICATIONS.GET_MENU_BADGE_COUNT)])
+    },
+  } as any)
   getAdminNotificationCount(@Root() payload: AdminNotificationCountPayload): AdminNotificationCountPayload {
     return payload
   }

@@ -80,7 +80,7 @@ export default class MatchingResolver {
   @Subscription(() => [Shipment], {
     topics: SHIPMENTS.GET_MATCHING_SHIPMENT,
     subscribe: async ({ context }) => {
-      console.log('ListenAvailableShipment Subscribe: ', context)
+      console.log('ListenAvailableShipment Subscribe: ')
       const repeater = new Repeater(async (push, stop) => {
         const shipments = await ShipmentModel.getNewAllAvailableShipmentForDriver(context.user_id)
         push(shipments)
