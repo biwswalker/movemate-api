@@ -1,70 +1,41 @@
-import Bull from 'bull'
+import Queue from 'bull'
 import { TemplateOptions } from 'nodemailer-express-handlebars'
 import Mail from 'nodemailer/lib/mailer'
 import dotenv from 'dotenv'
+import { RedisOptions } from 'ioredis'
 dotenv.config()
 
-export const FIVE_MIN = 5 * 60 * 1000
-export const TEN_MIN = 10 * 60 * 1000
-export const TWENTY_MIN = 20 * 60 * 1000
-export const TWO_HOUR = 120 * 60 * 1000
-export const TWO_HALF_HOUR = 150 * 60 * 1000
-export const DEFAULT_LIMIT = 12
+const redisOption: RedisOptions = {
+  host: process.env.REDIS_HOST,
+  port: Number(process.env.REDIS_PORT),
+  password: process.env.REDIS_PASSWORD,
+  maxRetriesPerRequest: null,
+}
 
 export interface ShipmentPayload {
   shipmentId: string
 }
 
-export interface ShipmentResumePayload {
+export interface ShipmentNotifyPayload {
   shipmentId: string
-  every: number
-  limit: number
-}
-
-export interface FCMShipmentPayload extends ShipmentPayload {
   driverId?: string
+  limit: number
+  delay: number
 }
 
-// สร้าง queue สำหรับ monitor shipment
-export const monitorShipmentQueue = new Bull<FCMShipmentPayload>('monitorShipment', {
-  defaultJobOptions: { repeat: { every: TEN_MIN, limit: DEFAULT_LIMIT } },
-})
-
-// สร้าง queue สำหรับ update job
-export const rejectedFavoritDriverQueue = new Bull<ShipmentResumePayload>('rejectedFavoritDriver')
-export const updateMonitorQueue = new Bull<ShipmentResumePayload>('updateMonitor')
-export const cancelShipmentQueue = new Bull<ShipmentPayload>('cancelShipment')
-
-// สร้าง queue สำหรับ email job
-export const emailSenderQueue = new Bull<Mail.Options & TemplateOptions>('emailSender', {
-  redis: {
-    host: process.env.REDIS_HOST,
-    port: Number(process.env.REDIS_PORT),
-    password: process.env.REDIS_PASSWORD,
-    maxRetriesPerRequest: null
-  },
-})
-//
+// Notify
+export const shipmentNotifyQueue = new Queue<ShipmentNotifyPayload>('shipmentNotify', { redis: redisOption })
+export const cancelShipmentQueue = new Queue<ShipmentPayload>('cancelShipment', { redis: redisOption })
+// Email sender
+export const emailSenderQueue = new Queue<Mail.Options & TemplateOptions>('emailSender', { redis: redisOption })
 
 // Remove all job queue
 export async function obliterateQueue() {
   try {
-    await monitorShipmentQueue.obliterate({ force: true })
-    await rejectedFavoritDriverQueue.obliterate({ force: true })
-    await updateMonitorQueue.obliterate({ force: true })
+    await shipmentNotifyQueue.obliterate({ force: true })
     await cancelShipmentQueue.obliterate({ force: true })
-
+    await emailSenderQueue.obliterate({ force: true })
     console.log('Queue obliterated.')
-  } catch (error) {
-    console.error('Error obliterating queue:', error)
-  }
-}
-
-// Remove job queue
-export async function removeMonitorShipmentJob(jobId: string) {
-  try {
-    await monitorShipmentQueue.removeRepeatable({ jobId, every: TEN_MIN })
-    console.log(`Queue ${jobId} removed.`)
   } catch (error) {
     console.error('Error obliterating queue:', error)
   }

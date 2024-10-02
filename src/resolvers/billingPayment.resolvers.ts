@@ -17,7 +17,7 @@ import TransactionModel, {
   ETransactionType,
   MOVEMATE_OWNER_ID,
 } from '@models/transaction.model'
-import { monitorShipmentStatus } from './shipment.resolvers'
+import { shipmentNotify } from './shipment.resolvers'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
 
@@ -52,7 +52,7 @@ export default class BillingPaymentResolver {
       await movemateTransaction.save()
       const shipment = head(billingCycleModel.shipments) as Shipment
       if (shipment) {
-        monitorShipmentStatus(shipment._id, get(shipment, 'requestedDriver._id', ''))
+        shipmentNotify(shipment._id, get(shipment, 'requestedDriver._id', ''))
         const newShipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
         await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
       }

@@ -43,7 +43,6 @@ async function addEmailQueue(content: Mail.Options & TemplateOptions) {
   // await transporter.sendMail(content)
   console.log('addEmailQueue: ', format(new Date(), 'HH:mm:ss'))
   await emailSenderQueue.add(content)
-  console.log('end addEmailQueue: ', format(new Date(), 'HH:mm:ss'))
 }
 
 emailSenderQueue.process(async (job: Job<Mail.Options & TemplateOptions>) => {

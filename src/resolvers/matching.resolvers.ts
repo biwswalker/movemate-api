@@ -17,7 +17,6 @@ import {
   NextShipmentStepInput,
   SentPODDocumentShipmentStepInput,
 } from '@inputs/matching.input'
-import { removeMonitorShipmentJob } from '@configs/jobQueue'
 import { addDays } from 'date-fns'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { Repeater } from '@graphql-yoga/subscription'
@@ -225,7 +224,7 @@ export default class MatchingResolver {
         })
       }
 
-      await removeMonitorShipmentJob(shipment._id)
+      // await removeMonitorShipmentJob(shipment._id)
 
       return true
     }

@@ -43,6 +43,7 @@ export interface GraphQLContext {
 export interface AuthContext {
   user_id: string
   user_role: string
+  ip: string
 }
 
 export async function createGraphQLServer(httpServer: http.Server) {
@@ -92,6 +93,10 @@ export async function createGraphQLServer(httpServer: http.Server) {
     {
       schema,
       context: async (ctx, msg, args) => {
+        console.log('contexttttttt: ', JSON.stringify(ctx))
+        const ipheader = String(get(ctx, 'connectionParams.authorization', '') || '')
+        // const clientIp: string = String(ctx.headers['x-forwarded-for'] || req.socket.remoteAddress || '')
+
         const authorization = String(get(ctx, 'connectionParams.authorization', '') || '')
         const token = authorization.split(' ')[1]
         if (token) {
@@ -99,10 +104,10 @@ export async function createGraphQLServer(httpServer: http.Server) {
           if (decodedToken) {
             const user_id = decodedToken.user_id
             const user_role = decodedToken.user_role
-            return { user_id, user_role }
+            return { user_id, user_role, ip: ipheader }
           }
         }
-        return {}
+        return { }
       },
     },
     wsServer,

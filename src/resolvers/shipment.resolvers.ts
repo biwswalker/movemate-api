@@ -4,28 +4,13 @@ import { GetShipmentArgs, ShipmentInput } from '@inputs/shipment.input'
 import PaymentModel, { CashDetail, EPaymentMethod } from '@models/payment.model'
 import ShipmentModel, { EDriverAcceptanceStatus, EShipingStatus, Shipment } from '@models/shipment.model'
 import ShipmentAdditionalServicePriceModel from '@models/shipmentAdditionalServicePrice.model'
-import UserModel, { EUserRole, User } from '@models/user.model'
+import UserModel, { EDriverStatus, EUserRole, User } from '@models/user.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
 import { AnyBulkWriteOperation, FilterQuery, PaginateOptions, Types } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
-import lodash, {
-  filter,
-  find,
-  get,
-  head,
-  isEmpty,
-  isEqual,
-  last,
-  map,
-  omitBy,
-  reduce,
-  sum,
-  tail,
-  toNumber,
-  values,
-} from 'lodash'
+import lodash, { filter, find, get, head, isEmpty, isEqual, last, map, omitBy, reduce, sum, tail, values } from 'lodash'
 import AdditionalServiceCostPricingModel from '@models/additionalServiceCostPricing.model'
 import ShipmentDistancePricingModel from '@models/shipmentDistancePricing.model'
 import VehicleCostModel from '@models/vehicleCost.model'
@@ -54,22 +39,12 @@ import { REPONSE_NAME } from 'constants/status'
 import { generateInvoice } from 'reports/invoice'
 import {
   cancelShipmentQueue,
-  DEFAULT_LIMIT,
-  FCMShipmentPayload,
-  FIVE_MIN,
-  TWO_HALF_HOUR,
-  monitorShipmentQueue,
   obliterateQueue,
-  removeMonitorShipmentJob,
   ShipmentPayload,
-  ShipmentResumePayload,
-  TEN_MIN,
-  TWENTY_MIN,
-  TWO_HOUR,
-  updateMonitorQueue,
-  rejectedFavoritDriverQueue,
+  shipmentNotifyQueue,
+  ShipmentNotifyPayload,
 } from '@configs/jobQueue'
-import { Job } from 'bull'
+import { DoneCallback, Job } from 'bull'
 import { Message } from 'firebase-admin/messaging'
 import RefundModel, { ERefundStatus } from '@models/refund.model'
 import StepDefinitionModel, {
@@ -80,6 +55,7 @@ import StepDefinitionModel, {
 } from '@models/shipmentStepDefinition.model'
 import { decryption } from '@utils/encryption'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
+import redis from '@configs/redis'
 
 Aigle.mixin(lodash, {})
 
@@ -637,7 +613,7 @@ export default class ShipmentResolver {
 
       if (isCreditPaymentMethod) {
         // Notification to Driver
-        monitorShipmentStatus(response._id, get(response, 'requestedDriver._id', ''))
+        shipmentNotify(response._id, get(response, 'requestedDriver._id', ''))
       }
 
       // Clear redis seach limiter
@@ -723,19 +699,31 @@ export default class ShipmentResolver {
   }
 }
 
-export async function monitorShipmentStatus(shipmentId: string, driverId: string) {
-  await removeMonitorShipmentJob(shipmentId)
+export async function shipmentNotify(shipmentId: string, driverId: string) {
   if (driverId) {
     // Favorite Driver
-    monitorShipmentQueue.add({ shipmentId, driverId }, { jobId: shipmentId, repeat: { limit: 3, every: TEN_MIN } })
-    rejectedFavoritDriverQueue.add({ shipmentId, every: TEN_MIN, limit: DEFAULT_LIMIT }, { delay: TWENTY_MIN })
-    // Update request driver to uninterest
-    updateMonitorQueue.add({ shipmentId, every: FIVE_MIN, limit: 6 }, { delay: TWENTY_MIN + TWO_HOUR })
-    cancelShipmentQueue.add({ shipmentId: shipmentId }, { delay: TWENTY_MIN + TWO_HALF_HOUR + FIVE_MIN })
+    const LIMIT_3 = 3
+    const LIMIT_6 = 6
+    const LIMIT_12 = 12
+    const FIVEMIN = 5 * 60_000
+    const TENMIN = 10 * 60_000
+    const DELAY_1 = TENMIN * LIMIT_3 + TENMIN
+    const DELAY_2 = DELAY_1 + TENMIN * LIMIT_12 + TENMIN
+    const DELAY_3 = DELAY_2 + FIVEMIN * LIMIT_6 + FIVEMIN
+    shipmentNotifyQueue.add({ shipmentId, driverId, delay: TENMIN, limit: LIMIT_3 })
+    shipmentNotifyQueue.add({ shipmentId, driverId, delay: TENMIN, limit: LIMIT_12 }, { delay: DELAY_1 })
+    shipmentNotifyQueue.add({ shipmentId, driverId, delay: FIVEMIN, limit: LIMIT_6 }, { delay: DELAY_2 })
+    cancelShipmentQueue.add({ shipmentId }, { delay: DELAY_3 })
   } else {
-    monitorShipmentQueue.add({ shipmentId }, { jobId: shipmentId })
-    updateMonitorQueue.add({ shipmentId, every: FIVE_MIN, limit: 6 }, { delay: TWO_HOUR })
-    cancelShipmentQueue.add({ shipmentId: shipmentId }, { delay: TWO_HALF_HOUR + FIVE_MIN })
+    const LIMIT_6 = 6
+    const LIMIT_12 = 12
+    const FIVEMIN = 5 * 60_000
+    const TENMIN = 10 * 60_000
+    const DELAY_1 = TENMIN * LIMIT_12 + TENMIN
+    const DELAY_2 = DELAY_1 + FIVEMIN * LIMIT_6 + FIVEMIN
+    shipmentNotifyQueue.add({ shipmentId, delay: TENMIN, limit: LIMIT_12 })
+    shipmentNotifyQueue.add({ shipmentId, delay: FIVEMIN, limit: LIMIT_6 }, { delay: DELAY_1 })
+    cancelShipmentQueue.add({ shipmentId }, { delay: DELAY_2 })
   }
 }
 
@@ -813,7 +801,7 @@ export const cancelShipmentIfNotInterested = async (shipmentId: string) => {
         $push: { steps: refundStep._id },
       })
     }
-
+    
     // TODO: Sent notification to cash customer
   } else {
     const currentStep = find(shipment.steps, ['seq', shipment.currentStepSeq]) as StepDefinition | undefined
@@ -851,7 +839,7 @@ export const checkShipmentStatus = async (shipmentId: string): Promise<boolean> 
   return shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING
 }
 
-export const sendNewShipmentNotification = async (shipmentId: string, requestDriverId: string) => {
+export const sendNewShipmentNotification = async (shipmentId: string, requestDriverId: string): Promise<boolean> => {
   const shipment = await ShipmentModel.findById(shipmentId)
 
   if (shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING) {
@@ -860,11 +848,12 @@ export const sendNewShipmentNotification = async (shipmentId: string, requestDri
 
     // ถ้าผ่านไป 240 นาทีแล้วยังไม่มี driver รับงาน
     const coutingdownTime = currentTime - createdTime
-    if (coutingdownTime < TWO_HALF_HOUR + TWENTY_MIN) {
+    const LIMITIME = 190 * 60 * 1000
+    if (coutingdownTime < LIMITIME) {
       // ส่ง FCM Notification
       if (requestDriverId) {
         const driver = await UserModel.findOne({ _id: shipment.requestedDriver, userRole: EUserRole.DRIVER })
-        if (driver && driver.fcmToken) {
+        if (driver && driver.fcmToken && driver.drivingStatus === EDriverStatus.IDLE) {
           const token = decryption(driver.fcmToken)
           await NotificationModel.sendFCMNotification({
             token,
@@ -880,7 +869,7 @@ export const sendNewShipmentNotification = async (shipmentId: string, requestDri
         }
       } else {
         // TODO: Check driver
-        const drivers = await UserModel.find({ userRole: EUserRole.DRIVER })
+        const drivers = await UserModel.find({ userRole: EUserRole.DRIVER, drivingStatus: EDriverStatus.IDLE })
         const messages = map<User, Message>(
           filter(drivers, ({ fcmToken }) => !isEmpty(fcmToken)),
           (driver) => {
@@ -904,45 +893,31 @@ export const sendNewShipmentNotification = async (shipmentId: string, requestDri
         await NotificationModel.sendFCMNotification(messages)
       }
     }
+    return true
   }
+
+  return false
 }
 
-monitorShipmentQueue.process(async (job: Job<FCMShipmentPayload>) => {
-  console.log('monitorShipmentQueue: ', format(new Date(), 'HH:mm:ss'), job.data)
-  const { shipmentId, driverId } = job.data
-  await sendNewShipmentNotification(shipmentId, driverId)
-})
-
-rejectedFavoritDriverQueue.process(async (job: Job<ShipmentResumePayload>) => {
-  const { shipmentId, every, limit } = job.data
-  console.log('rejectedFavoritDriverQueue: ', format(new Date(), 'HH:mm:ss'), job.data)
-  await removeMonitorShipmentJob(shipmentId)
-  await autoRejectedFavoritDriver(shipmentId)
-  const isContinueus = await checkShipmentStatus(shipmentId)
-  if (isContinueus) {
-    monitorShipmentQueue.add({ shipmentId }, { jobId: shipmentId, repeat: { every, limit } })
+shipmentNotifyQueue.process(async (job: Job<ShipmentNotifyPayload>, done: DoneCallback) => {
+  const { shipmentId, driverId, delay, limit } = job.data
+  console.log('Shipment Notify queue: ', format(new Date(), 'HH:mm:ss'), job.data)
+  const redisKey = `shipment:${shipmentId}`
+  const newCount = await redis.incr(redisKey)
+  if (newCount < limit) {
+    const isNotify = await sendNewShipmentNotification(shipmentId, driverId)
+    if (isNotify) {
+      shipmentNotifyQueue.add({ shipmentId, driverId, limit, delay }, { delay })
+    }
+  } else {
+    redis.set(redisKey, 0)
   }
-  await job.remove()
+  done()
 })
 
-updateMonitorQueue.process(async (job: Job<ShipmentResumePayload>) => {
-  const { shipmentId, every, limit } = job.data
-  console.log('updateMonitorQueue: ', format(new Date(), 'HH:mm:ss'), job.data)
-  await removeMonitorShipmentJob(shipmentId)
-  const isContinueus = await checkShipmentStatus(shipmentId)
-  if (isContinueus) {
-    // Resume notification
-    // TODO: Send notification to user
-    monitorShipmentQueue.add({ shipmentId }, { jobId: shipmentId, repeat: { every, limit } })
-  }
-  await job.remove()
-})
-
-// ประมวลผล job cancelShipment แบบ Type-safe
-cancelShipmentQueue.process(async (job: Job<ShipmentPayload>) => {
+cancelShipmentQueue.process(async (job: Job<ShipmentPayload>, done: DoneCallback) => {
   const { shipmentId } = job.data
   console.log('cancelShipmentQueue: ', format(new Date(), 'HH:mm:ss'), job.data)
-  await removeMonitorShipmentJob(shipmentId)
   await cancelShipmentIfNotInterested(shipmentId)
-  await job.remove()
+  done()
 })

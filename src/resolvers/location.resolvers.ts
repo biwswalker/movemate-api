@@ -8,13 +8,14 @@ import { LocationInput, SearchLocationsArgs } from '@inputs/location.input'
 import { AxiosError } from 'axios'
 import { get } from 'lodash'
 import { Marker } from '@models/marker.model'
-import { GraphQLContext } from '@configs/graphQL.config'
+import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { DirectionsResultPayload } from '@payloads/direction.payloads'
 import { ELimiterType, getLatestCount, rateLimiter } from '@configs/rateLimit'
 import { LocationRequestLimitPayload } from '@payloads/location.payloads'
 import pubsub, { LOCATIONS } from '@configs/pubsub'
 import UserModel, { EUserType } from '@models/user.model'
 import { RequestLimiterGuard } from '@guards/limiter.guards'
+import { Repeater } from '@graphql-yoga/subscription'
 
 const handlePlaceError = (error: any, apiName: string) => {
   if (error instanceof AxiosError) {
@@ -119,10 +120,12 @@ export default class LocationResolver {
     if (ctx.req.user_id) {
       const userModel = await UserModel.findById(ctx.req.user_id)
       if (userModel) {
-        limit = userModel.userType === EUserType.BUSINESS
-          ? -1 // -1 mean Infinity
-          : userModel.userType === EUserType.INDIVIDUAL
-            ? 20 : 10
+        limit =
+          userModel.userType === EUserType.BUSINESS
+            ? -1 // -1 mean Infinity
+            : userModel.userType === EUserType.INDIVIDUAL
+            ? 20
+            : 10
       }
     }
     await pubsub.publish(LOCATIONS.REQUEST_LIMIT, { count: payload, limit })
@@ -130,16 +133,40 @@ export default class LocationResolver {
   }
 
   // Subscript with user
-  @Subscription({ topics: LOCATIONS.REQUEST_LIMIT })
-  requestLocationLimitCount(@Root() payload: LocationRequestLimitPayload): LocationRequestLimitPayload {
+  @Subscription({
+    topics: LOCATIONS.REQUEST_LIMIT,
+    subscribe: async ({ context }) => {
+      console.log('listenLocationLimitCount subscribe:', context)
+      const repeater = new Repeater(async (push, stop) => {
+        const payload = await getLatestCount(context.ip, ELimiterType.LOCATION, context.user_id || '')
+        let limit = 10
+        if (context.user_id) {
+          const userModel = await UserModel.findById(context.user_id)
+          if (userModel) {
+            limit =
+              userModel.userType === EUserType.BUSINESS
+                ? -1 // -1 mean Infinity
+                : userModel.userType === EUserType.INDIVIDUAL
+                ? 20
+                : 10
+          }
+        }
+        push({ count: payload, limit })
+        await stop
+      })
+      return Repeater.merge([repeater, pubsub.subscribe(LOCATIONS.REQUEST_LIMIT)])
+    },
+  } as any)
+  listenLocationLimitCount(@Root() payload: LocationRequestLimitPayload, @Ctx() ctx: AuthContext): LocationRequestLimitPayload {
+    console.log('listenLocationLimitCount payload', payload)
     return payload
   }
 
   /**
    * @deprecated Recheck Handle check request data for anonmaus user (limit 20?)
-   * @param origin 
-   * @param destinations 
-   * @returns 
+   * @param origin
+   * @param destinations
+   * @returns
    */
   @Query(() => DirectionsResultPayload)
   async calculateRoute(
