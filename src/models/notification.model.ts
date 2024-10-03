@@ -6,10 +6,11 @@ import { LoadmoreArgs } from '@inputs/query.input'
 import admin from '@configs/firebase'
 import { Message } from 'firebase-admin/messaging'
 import { isArray } from 'lodash'
+import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 
 export enum ENavigationType {
-  SHIPMENT = "shipment",
-  FINANCE = "finance",
+  SHIPMENT = 'shipment',
+  FINANCE = 'finance',
 }
 
 export enum ENotificationVarient {
@@ -95,6 +96,8 @@ export class Notification extends TimeStamps {
     const notification = new NotificationModel({ ...data, read: false })
     await notification.save()
     await UserModel.findByIdAndUpdate(data.userId, { $push: { notifications: notification._id } })
+    const unreadCount = await NotificationModel.countDocuments({ userId: data.userId, read: false })
+    await pubsub.publish(NOTFICATIONS.COUNT, data.userId, unreadCount)
   }
   static async sendFCMNotification(data: Message | Message[]): Promise<void> {
     if (isArray(data)) {
@@ -103,9 +106,9 @@ export class Notification extends TimeStamps {
       await admin
         .messaging()
         .send(data)
-        .then(res => {
-            console.log('response: ', res)
-            return res
+        .then((res) => {
+          console.log('response: ', res)
+          return res
         })
         .catch((error) => {
           console.log(JSON.stringify(error))
@@ -114,7 +117,9 @@ export class Notification extends TimeStamps {
     }
   }
   static async markNotificationAsRead(_id: string): Promise<void> {
-    await NotificationModel.findByIdAndUpdate(_id, { read: true })
+    const notification = await NotificationModel.findByIdAndUpdate(_id, { read: true })
+    const unreadCount = await NotificationModel.countDocuments({ userId: notification.userId, read: false })
+    await pubsub.publish(NOTFICATIONS.COUNT, notification.userId, unreadCount)
   }
 
   static async findByUserId(userId: string, { skip, limit }: LoadmoreArgs): Promise<Notification[]> {

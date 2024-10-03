@@ -12,6 +12,7 @@ import { BusinessCustomer } from '@models/customerBusiness.model'
 import { VerifyOTPArgs } from '@inputs/verify.payloads'
 import { get, isEqual } from 'lodash'
 import { requestOTP } from './otp.resolvers'
+import { generateExpToken } from '@utils/encryption'
 
 @Resolver()
 export default class VerifyAccountResolver {
@@ -35,7 +36,8 @@ export default class VerifyAccountResolver {
             }
 
             const host = getCurrentHost(ctx)
-            const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
+            const userNumberToken = generateExpToken({ userNumber: user.userNumber })
+            const activate_link = `${host}/api/v1/activate/customer/${userNumberToken}`
             const movemate_link = `https://www.movematethailand.com`
 
             let email = ''

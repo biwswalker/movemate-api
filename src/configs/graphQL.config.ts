@@ -94,19 +94,26 @@ export async function createGraphQLServer(httpServer: http.Server) {
       schema,
       context: async (ctx, msg, args) => {
         const ip =
-          get(ctx, 'extra.request.headers.x-forwarded-for', '') || get(ctx, 'extra.request.headers.x-real-ip', '') || ''
+          get(ctx, 'extra.request.headers.x-forwarded-for', '') ||
+          get(ctx, 'extra.request.headers.x-real-ip', '') ||
+          '::1'
         console.log('x-forwarded-for context: ', ip)
-        const authorization = String(get(ctx, 'connectionParams.authorization', '') || '')
-        const token = authorization.split(' ')[1]
-        if (token) {
-          const decodedToken = verifyAccessToken(token)
-          if (decodedToken) {
-            const user_id = decodedToken.user_id
-            const user_role = decodedToken.user_role
-            return { user_id, user_role, ip }
+        try {
+          const authorization = String(get(ctx, 'connectionParams.authorization', '') || '')
+          const token = authorization.split(' ')[1]
+          if (token) {
+            const decodedToken = verifyAccessToken(token)
+            if (decodedToken) {
+              const user_id = decodedToken.user_id
+              const user_role = decodedToken.user_role
+              return { user_id, user_role, ip }
+            }
           }
+          return { ip }
+        } catch (error) {
+          console.log('context error:', error)
+          return { ip }
         }
-        return { ip }
       },
     },
     wsServer,

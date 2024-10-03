@@ -50,6 +50,8 @@ export async function requestOTP(phoneNumber: string, action: string) {
     await sendSMS({
       message: verifyLast,
       msisdn: phoneNumber,
+    }).catch((error) => {
+      console.log('sendSMS error: ', error)
     })
 
     const currentDate = new Date()
@@ -137,7 +139,7 @@ export default class OTPRequestResolver {
   }
 
   @Mutation(() => Boolean)
-  async verifyOTP(
+  async verifyPhoneNumberOTP(
     @Arg('phoneNumber') phoneNumber: string,
     @Arg('ref') ref: string,
     @Arg('otp') otp: string,

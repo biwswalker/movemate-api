@@ -40,7 +40,7 @@ import SettingCustomerPoliciesModel from '@models/settingCustomerPolicies.model'
 import SettingDriverPoliciesModel from '@models/settingDriverPolicies.model'
 import { VerifyPayload } from '@payloads/verify.payloads'
 import { addMinutes, addSeconds } from 'date-fns'
-import { decryption } from '@utils/encryption'
+import { decryption, generateExpToken } from '@utils/encryption'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import { fDateTime } from '@utils/formatTime'
 import { IndividualDriver } from '@models/driverIndividual.model'
@@ -489,7 +489,8 @@ export default class UserResolver {
           } else {
             await user.updateOne({ status, validationStatus: result, password: hashedPassword })
             const host = getCurrentHost(ctx)
-            const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
+            const userNumberToken = generateExpToken({ userNumber: user.userNumber })
+            const activate_link = `${host}/api/v1/activate/customer/${userNumberToken}`
             const movemate_link = `https://www.movematethailand.com`
             await addEmailQueue({
               from: process.env.NOREPLY_EMAIL,

@@ -1,7 +1,19 @@
-import { Resolver, Mutation, Ctx, Arg, Args, Query, Int, UseMiddleware, Subscription, Root } from 'type-graphql'
+import {
+  Resolver,
+  Mutation,
+  Ctx,
+  Arg,
+  Args,
+  Query,
+  Int,
+  UseMiddleware,
+  Subscription,
+  Root,
+  SubscribeResolverData,
+} from 'type-graphql'
 import NotificationModel, { ENavigationType, Notification } from '@models/notification.model'
 import { LoadmoreArgs } from '@inputs/query.input'
-import { GraphQLContext } from '@configs/graphQL.config'
+import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { AdminNotificationCountPayload } from '@payloads/notification.payloads'
 import ShipmentModel from '@models/shipment.model'
@@ -65,12 +77,24 @@ export default class NotificationResolver {
     return []
   }
 
+  @Query(() => Notification)
+  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  async notification(@Ctx() ctx: GraphQLContext, @Arg('id') notificationId: string) {
+    const userId = ctx.req.user_id
+    if (userId) {
+      const notification = await NotificationModel.findOne({ userId, _id: notificationId })
+      return notification
+    }
+    return undefined
+  }
+
   @Query(() => Int)
   @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
   async unreadCount(@Ctx() ctx: GraphQLContext): Promise<number> {
     const userId = ctx.req.user_id
     if (userId) {
       const notifications = await NotificationModel.countDocuments({ userId, read: false })
+      await pubsub.publish(NOTFICATIONS.COUNT, userId, notifications)
       return notifications
     }
     return 0
@@ -141,5 +165,13 @@ export default class NotificationResolver {
       })
     }
     return true
+  }
+
+  @Subscription({
+    topics: NOTFICATIONS.COUNT,
+    topicId: ({ context }: SubscribeResolverData<number, any, AuthContext>) => context.user_id,
+  })
+  listenNotificationCount(@Root() payload: number, @Ctx() context: AuthContext): number {
+    return payload
   }
 }

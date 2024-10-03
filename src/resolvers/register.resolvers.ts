@@ -1,126 +1,130 @@
-import { Resolver, Mutation, Arg, Ctx, UseMiddleware } from "type-graphql";
-import UserModel, { EUserRole, EUserStatus, EUserType, EUserValidationStatus, User } from "@models/user.model";
-import CustomerIndividualModel from "@models/customerIndividual.model";
-import BusinessCustomerModel from "@models/customerBusiness.model";
-import BusinessCustomerCashPaymentModel from "@models/customerBusinessCashPayment.model";
-import BusinessCustomerCreditPaymentModel from "@models/customerBusinessCreditPayment.model";
-import { RegisterInput } from "@inputs/user.input";
-import bcrypt from "bcrypt";
-import { AuthGuard } from "@guards/auth.guards";
-import { GraphQLContext } from "@configs/graphQL.config";
-import { get, isEmpty, isEqual, omit } from "lodash";
-import { generateId, generateRandomNumberPattern, getCurrentHost } from "@utils/string.utils";
+import { Resolver, Mutation, Arg, Ctx, UseMiddleware } from 'type-graphql'
+import UserModel, { EUserRole, EUserStatus, EUserType, EUserValidationStatus, User } from '@models/user.model'
+import CustomerIndividualModel from '@models/customerIndividual.model'
+import BusinessCustomerModel from '@models/customerBusiness.model'
+import BusinessCustomerCashPaymentModel from '@models/customerBusinessCashPayment.model'
+import BusinessCustomerCreditPaymentModel from '@models/customerBusinessCreditPayment.model'
+import { RegisterInput } from '@inputs/user.input'
+import bcrypt from 'bcrypt'
+import { AuthGuard } from '@guards/auth.guards'
+import { GraphQLContext } from '@configs/graphQL.config'
+import { get, isEmpty, isEqual, omit } from 'lodash'
+import { generateId, generateRandomNumberPattern, getCurrentHost } from '@utils/string.utils'
 import addEmailQueue from '@utils/email.utils'
-import { GraphQLError } from "graphql";
-import FileModel from "@models/file.model";
-import { CutomerBusinessInput, CutomerIndividualInput } from "@inputs/customer.input";
-import { decryption } from "@utils/encryption";
-import { BusinessCustomerSchema, IndividualCustomerSchema } from "@validations/customer.validations";
-import { ValidationError } from "yup";
-import { yupValidationThrow } from "@utils/error.utils";
+import { GraphQLError } from 'graphql'
+import FileModel from '@models/file.model'
+import { CutomerBusinessInput, CutomerIndividualInput } from '@inputs/customer.input'
+import { decryption, generateExpToken } from '@utils/encryption'
+import { BusinessCustomerSchema, IndividualCustomerSchema } from '@validations/customer.validations'
+import { ValidationError } from 'yup'
+import { yupValidationThrow } from '@utils/error.utils'
 
 @Resolver(User)
 export default class RegisterResolver {
-  async isExistingEmail(email: string, fieldName = "email"): Promise<boolean> {
+  async isExistingEmail(email: string, fieldName = 'email'): Promise<boolean> {
     if (email) {
-      const isExistingEmailWithIndividual =
-        await CustomerIndividualModel.findOne({ email });
+      const isExistingEmailWithIndividual = await CustomerIndividualModel.findOne({ email })
       if (isExistingEmailWithIndividual) {
-        throw new GraphQLError(
-          "ไม่สามารถใช้อีเมลร่วมกับสมาชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ",
-          {
-            extensions: {
-              code: "ERROR_VALIDATION",
-              errors: [
-                {
-                  field: fieldName,
-                  message:
-                    "ไม่สามารถใช้อีเมลร่วมกับสมาชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ",
-                },
-              ],
-            },
-          }
-        );
+        throw new GraphQLError('ไม่สามารถใช้อีเมลร่วมกับสมาชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ', {
+          extensions: {
+            code: 'ERROR_VALIDATION',
+            errors: [
+              {
+                field: fieldName,
+                message: 'ไม่สามารถใช้อีเมลร่วมกับสมาชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ',
+              },
+            ],
+          },
+        })
       }
 
       const isExistingEmailWithBusiness = await BusinessCustomerModel.findOne({
         businessEmail: email,
-      });
+      })
       if (isExistingEmailWithBusiness) {
-        throw new GraphQLError(
-          "อีเมลถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ",
-          {
-            extensions: {
-              code: "ERROR_VALIDATION",
-              errors: [
-                {
-                  field: fieldName,
-                  message: "อีเมลถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ",
-                },
-              ],
-            },
-          }
-        );
+        throw new GraphQLError('อีเมลถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ', {
+          extensions: {
+            code: 'ERROR_VALIDATION',
+            errors: [
+              {
+                field: fieldName,
+                message: 'อีเมลถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ',
+              },
+            ],
+          },
+        })
       }
     } else {
-      throw new GraphQLError("ระบุอีเมล", {
+      throw new GraphQLError('ระบุอีเมล', {
         extensions: {
-          code: "ERROR_VALIDATION",
-          errors: [{ field: fieldName, message: "ระบุอีเมล" }],
+          code: 'ERROR_VALIDATION',
+          errors: [{ field: fieldName, message: 'ระบุอีเมล' }],
         },
-      });
+      })
     }
-    return true;
+    return true
   }
 
   @Mutation(() => Boolean)
-  async register(
-    @Arg("data") data: RegisterInput,
-    @Ctx() ctx: GraphQLContext
-  ): Promise<boolean> {
-    const {
-      userType,
-      password,
-      remark,
-      acceptPolicyTime,
-      acceptPolicyVersion,
-      individualDetail,
-      businessDetail,
-    } = data;
+  async preregister(@Arg('data') data: RegisterInput, @Ctx() ctx: GraphQLContext): Promise<boolean> {
+    const { userType, individualDetail, businessDetail } = data
+    try {
+      // Check if the user already exists
+      const platform = ctx.req.headers['platform']
+      if (isEmpty(platform)) {
+        throw new Error('Bad Request: Platform is require')
+      }
+
+      const email = isEqual(userType, EUserType.INDIVIDUAL)
+        ? get(individualDetail, 'email', '')
+        : isEqual(userType, 'business')
+        ? get(businessDetail, 'businessEmail', '')
+        : ''
+      const emailFieldName = userType === EUserType.INDIVIDUAL ? 'email' : 'businessEmail'
+      await this.isExistingEmail(email, emailFieldName)
+
+      return true
+    } catch (error) {
+      console.log(error)
+      throw error
+    }
+  }
+
+  @Mutation(() => Boolean)
+  async register(@Arg('data') data: RegisterInput, @Ctx() ctx: GraphQLContext): Promise<boolean> {
+    const { userType, password, remark, acceptPolicyTime, acceptPolicyVersion, individualDetail, businessDetail } = data
 
     try {
       // Check if the user already exists
-      const platform = ctx.req.headers["platform"];
+      const platform = ctx.req.headers['platform']
       if (isEmpty(platform)) {
-        throw new Error("Bad Request: Platform is require");
+        throw new Error('Bad Request: Platform is require')
       }
 
       // Exist email
       // TODO: Refactor
       const email = isEqual(userType, EUserType.INDIVIDUAL)
-        ? get(individualDetail, "email", "")
-        : isEqual(userType, "business")
-          ? get(businessDetail, "businessEmail", "")
-          : "";
-      const emailFieldName =
-        userType === EUserType.INDIVIDUAL ? "email" : "businessEmail";
-      await this.isExistingEmail(email, emailFieldName);
+        ? get(individualDetail, 'email', '')
+        : isEqual(userType, 'business')
+        ? get(businessDetail, 'businessEmail', '')
+        : ''
+      const emailFieldName = userType === EUserType.INDIVIDUAL ? 'email' : 'businessEmail'
+      await this.isExistingEmail(email, emailFieldName)
 
       /**
        * Individual Customer Register
        */
       if (userType === EUserType.INDIVIDUAL && individualDetail) {
         const password_decryption = decryption(password)
-        const hashedPassword = await bcrypt.hash(password_decryption, 10);
-        const userNumber = await generateId("MMIN", userType);
+        const hashedPassword = await bcrypt.hash(password_decryption, 10)
+        const userNumber = await generateId('MMIN', userType)
 
         const individualCustomer = new CustomerIndividualModel({
           userNumber,
           ...individualDetail,
-        });
+        })
 
-
-        await individualCustomer.save();
+        await individualCustomer.save()
 
         const user = new UserModel({
           userRole: EUserRole.CUSTOMER,
@@ -133,67 +137,64 @@ export default class RegisterResolver {
           remark,
           registration: platform,
           isVerifiedEmail: false,
-          isVerifiedPhoneNumber: false,
+          isVerifiedPhoneNumber: true,
           acceptPolicyVersion,
           acceptPolicyTime,
           individualDetail: individualCustomer,
-          isChangePasswordRequire: false
-        });
+          isChangePasswordRequire: false,
+        })
 
-        await user.save();
+        await user.save()
 
         const host = getCurrentHost(ctx)
         // http://api.movematethailand.com/api/v1/activate/customer/MMIN0003
-        const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
+        const userNumberToken = generateExpToken({ userNumber: user.userNumber })
+        const activate_link = `${host}/api/v1/activate/customer/${userNumberToken}`
         const movemate_link = `https://www.movematethailand.com`
         // Email sender
         await addEmailQueue({
           from: process.env.NOREPLY_EMAIL,
           to: individualDetail.email,
-          subject: "ยืนยันการสมัครสมาชิก Movemate!",
-          template: "register_individual",
+          subject: 'ยืนยันการสมัครสมาชิก Movemate!',
+          template: 'register_individual',
           context: {
             fullname: individualCustomer.fullname,
             username: individualDetail.email,
             activate_link,
             movemate_link,
           },
-        });
+        })
 
-        return true;
+        return true
       }
 
       /**
        * Business Customer Register
        */
-      if (userType === "business" && businessDetail) {
+      if (userType === 'business' && businessDetail) {
         if (!businessDetail) {
-          throw new Error("ข้อมูลไม่สมบูรณ์");
+          throw new Error('ข้อมูลไม่สมบูรณ์')
         }
 
-        const userNumber = await generateId("MMBU", userType);
-        const generatedPassword =
-          generateRandomNumberPattern("MM########").toLowerCase();
-        const hashedPassword = await bcrypt.hash(generatedPassword, 10);
+        const userNumber = await generateId('MMBU', userType)
+        const generatedPassword = generateRandomNumberPattern('MM########').toLowerCase()
+        const hashedPassword = await bcrypt.hash(generatedPassword, 10)
 
-        if (
-          businessDetail.paymentMethod === "cash" &&
-          businessDetail.paymentCashDetail
-        ) {
-          const cashDetail = businessDetail.paymentCashDetail;
+        if (businessDetail.paymentMethod === 'cash' && businessDetail.paymentCashDetail) {
+          const cashDetail = businessDetail.paymentCashDetail
           const cashPayment = new BusinessCustomerCashPaymentModel({
             acceptedEReceiptDate: cashDetail.acceptedEReceiptDate,
-          });
+          })
 
-          await cashPayment.save();
+          await cashPayment.save()
 
           const business = new BusinessCustomerModel({
             ...businessDetail,
             userNumber,
             cashPayment,
-          });
+          })
 
-          await business.save();
+          await business.save()
 
           const user = new UserModel({
             userNumber,
@@ -205,89 +206,73 @@ export default class RegisterResolver {
             remark,
             registration: platform,
             isVerifiedEmail: false,
-            isVerifiedPhoneNumber: false,
+            isVerifiedPhoneNumber: true,
             acceptPolicyVersion,
             acceptPolicyTime,
             businessDetail: business,
-          });
+          })
 
-          await user.save();
+          await user.save()
 
           // Email sender
           await addEmailQueue({
             from: process.env.NOREPLY_EMAIL,
             to: businessDetail.businessEmail,
-            subject: "การลงทะเบียนรอการอนุมัติ",
-            template: "register_business_waiting_approve",
+            subject: 'การลงทะเบียนรอการอนุมัติ',
+            template: 'register_business_waiting_approve',
             context: { movemate_link: `https://www.movematethailand.com` },
-          });
-          return true;
-        } else if (
-          businessDetail.paymentMethod === "credit" &&
-          businessDetail.paymentCreditDetail
-        ) {
+          })
+          return true
+        } else if (businessDetail.paymentMethod === 'credit' && businessDetail.paymentCreditDetail) {
           // TODO: Get default config
-          const _defaultCreditLimit = 20000.0;
-          const _billedDate = 1;
-          const _billedRound = 15;
+          const _defaultCreditLimit = 20000.0
+          const _billedDate = 1
+          const _billedRound = 15
 
           const {
             businessRegistrationCertificateFile,
             copyIDAuthorizedSignatoryFile,
             certificateValueAddedTaxRegistrationFile,
             ...creditDetail
-          } = businessDetail.paymentCreditDetail;
+          } = businessDetail.paymentCreditDetail
 
           // Upload document
           if (!businessRegistrationCertificateFile) {
-            throw new GraphQLError(
-              "กรุณาอัพโหลดเอกสาร สำเนาบัตรประชาชนผู้มีอำนาจลงนาม",
-              {
-                extensions: {
-                  code: "ERROR_VALIDATION",
-                  errors: [
-                    {
-                      field: "businessRegistrationCertificate",
-                      message:
-                        "กรุณาอัพโหลดเอกสารสำเนาบัตรประชาชนผู้มีอำนาจลงนาม",
-                    },
-                  ],
-                },
-              }
-            );
+            throw new GraphQLError('กรุณาอัพโหลดเอกสาร สำเนาบัตรประชาชนผู้มีอำนาจลงนาม', {
+              extensions: {
+                code: 'ERROR_VALIDATION',
+                errors: [
+                  {
+                    field: 'businessRegistrationCertificate',
+                    message: 'กรุณาอัพโหลดเอกสารสำเนาบัตรประชาชนผู้มีอำนาจลงนาม',
+                  },
+                ],
+              },
+            })
           }
           if (!copyIDAuthorizedSignatoryFile) {
-            throw new GraphQLError(
-              "กรุณาอัพโหลดเอกสาร สำเนาบัตรประชาชนผู้มีอำนาจลงนาม",
-              {
-                extensions: {
-                  code: "ERROR_VALIDATION",
-                  errors: [
-                    {
-                      field: "copyIDAuthorizedSignatory",
-                      message:
-                        "กรุณาอัพโหลดเอกสาร สำเนาบัตรประชาชนผู้มีอำนาจลงนาม",
-                    },
-                  ],
-                },
-              }
-            );
+            throw new GraphQLError('กรุณาอัพโหลดเอกสาร สำเนาบัตรประชาชนผู้มีอำนาจลงนาม', {
+              extensions: {
+                code: 'ERROR_VALIDATION',
+                errors: [
+                  {
+                    field: 'copyIDAuthorizedSignatory',
+                    message: 'กรุณาอัพโหลดเอกสาร สำเนาบัตรประชาชนผู้มีอำนาจลงนาม',
+                  },
+                ],
+              },
+            })
           }
-          const businessRegisCertFileModel = new FileModel(
-            businessRegistrationCertificateFile
-          );
-          const copyIDAuthSignatoryFileModel = new FileModel(
-            copyIDAuthorizedSignatoryFile
-          );
-          const certValueAddedTaxRegisFileModel =
-            certificateValueAddedTaxRegistrationFile
-              ? new FileModel(certificateValueAddedTaxRegistrationFile)
-              : null;
+          const businessRegisCertFileModel = new FileModel(businessRegistrationCertificateFile)
+          const copyIDAuthSignatoryFileModel = new FileModel(copyIDAuthorizedSignatoryFile)
+          const certValueAddedTaxRegisFileModel = certificateValueAddedTaxRegistrationFile
+            ? new FileModel(certificateValueAddedTaxRegistrationFile)
+            : null
 
-          await businessRegisCertFileModel.save();
-          await copyIDAuthSignatoryFileModel.save();
+          await businessRegisCertFileModel.save()
+          await copyIDAuthSignatoryFileModel.save()
           if (certValueAddedTaxRegisFileModel) {
-            await certValueAddedTaxRegisFileModel.save();
+            await certValueAddedTaxRegisFileModel.save()
           }
 
           const creditPayment = new BusinessCustomerCreditPaymentModel({
@@ -328,20 +313,19 @@ export default class RegisterResolver {
             copyIDAuthorizedSignatoryFile: copyIDAuthSignatoryFileModel,
             ...(certValueAddedTaxRegisFileModel
               ? {
-                certificateValueAddedTaxRegistrationFile:
-                  certValueAddedTaxRegisFileModel,
-              }
+                  certificateValueAddedTaxRegistrationFile: certValueAddedTaxRegisFileModel,
+                }
               : {}),
-          });
-          await creditPayment.save();
+          })
+          await creditPayment.save()
 
           const business = new BusinessCustomerModel({
             ...businessDetail,
             userNumber,
             creditPayment,
-          });
+          })
 
-          await business.save();
+          await business.save()
 
           const user = new UserModel({
             userNumber,
@@ -357,70 +341,63 @@ export default class RegisterResolver {
             acceptPolicyVersion,
             acceptPolicyTime,
             businessDetail: business,
-          });
+          })
 
-          await user.save();
+          await user.save()
 
           // Email sender
           await addEmailQueue({
             from: process.env.NOREPLY_EMAIL,
             to: businessDetail.businessEmail,
-            subject: "การลงทะเบียนรอการอนุมัติ",
-            template: "register_business_waiting_approve",
+            subject: 'การลงทะเบียนรอการอนุมัติ',
+            template: 'register_business_waiting_approve',
             context: { movemate_link: `https://www.movematethailand.com` },
-          });
-          return true;
+          })
+          return true
         } else {
-          throw new Error("ไม่พบข้อมูลการชำระ กรุณาติดต่อผู้ดูแลระบบ");
+          throw new Error('ไม่พบข้อมูลการชำระ กรุณาติดต่อผู้ดูแลระบบ')
         }
       }
 
-      return false;
+      return false
     } catch (error) {
-      console.log(error);
-      throw error;
+      console.log(error)
+      throw error
     }
   }
 
   @Mutation(() => User)
-  @UseMiddleware(AuthGuard(["admin"]))
-  async addIndividualCustomer(
-    @Arg("data") data: CutomerIndividualInput,
-    @Ctx() ctx: GraphQLContext
-  ): Promise<User> {
-    const { email, profileImage, status, ...formValue } = data;
+  @UseMiddleware(AuthGuard(['admin']))
+  async addIndividualCustomer(@Arg('data') data: CutomerIndividualInput, @Ctx() ctx: GraphQLContext): Promise<User> {
+    const { email, profileImage, status, ...formValue } = data
     try {
       await IndividualCustomerSchema().validate(data, { abortEarly: false })
       // Check if the user already exists
-      const platform = ctx.req.headers["platform"];
+      const platform = ctx.req.headers['platform']
       if (isEmpty(platform)) {
-        throw new Error("Bad Request: Platform is require");
+        throw new Error('Bad Request: Platform is require')
       }
 
-      const rawPassword =
-        generateRandomNumberPattern("MMPWD########").toLowerCase();
-      const hashedPassword = await bcrypt.hash(rawPassword, 10);
-      const userNumber = await generateId("MMIN", "individual");
+      const rawPassword = generateRandomNumberPattern('MMPWD########').toLowerCase()
+      const hashedPassword = await bcrypt.hash(rawPassword, 10)
+      const userNumber = await generateId('MMIN', 'individual')
 
       const customer = new CustomerIndividualModel({
         userNumber,
         email,
         ...formValue,
-      });
+      })
 
-      await customer.save();
+      await customer.save()
 
-      const image =
-        profileImage
-          ? new FileModel(profileImage)
-          : null;
+      const image = profileImage ? new FileModel(profileImage) : null
       if (image) {
         await image.save()
       }
 
       const user = new UserModel({
         ...formValue,
-        userRole: "customer",
+        userRole: 'customer',
         userType: 'individual',
         validationStatus: 'approve',
         status,
@@ -430,19 +407,20 @@ export default class RegisterResolver {
         password: hashedPassword,
         registration: platform,
         individualDetail: customer,
-      });
+      })
 
-      await user.save();
+      await user.save()
 
       const host = getCurrentHost(ctx)
-      const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
+      const userNumberToken = generateExpToken({ userNumber: user.userNumber })
+      const activate_link = `${host}/api/v1/activate/customer/${userNumberToken}`
       const movemate_link = `https://www.movematethailand.com`
       // Email sender
       await addEmailQueue({
         from: process.env.NOREPLY_EMAIL,
         to: email,
-        subject: "ยืนยันการสมัครสมาชิก Movemate!",
-        template: "register_individual_withpassword",
+        subject: 'ยืนยันการสมัครสมาชิก Movemate!',
+        template: 'register_individual_withpassword',
         context: {
           fullname: customer.fullname,
           username: email,
@@ -450,81 +428,81 @@ export default class RegisterResolver {
           activate_link,
           movemate_link,
         },
-      });
+      })
 
-      return user;
+      return user
     } catch (errors) {
-      console.log("error: ", errors);
+      console.log('error: ', errors)
       if (errors instanceof ValidationError) {
-        throw yupValidationThrow(errors);
+        throw yupValidationThrow(errors)
       }
-      throw errors;
+      throw errors
     }
   }
 
   @Mutation(() => User)
-  @UseMiddleware(AuthGuard(["admin"]))
-  async addBusinessCustomer(
-    @Arg("data") data: CutomerBusinessInput,
-    @Ctx() ctx: GraphQLContext
-  ): Promise<User> {
-    const { businessEmail, profileImage, creditPayment, cashPayment, ...formValue } = data;
+  @UseMiddleware(AuthGuard(['admin']))
+  async addBusinessCustomer(@Arg('data') data: CutomerBusinessInput, @Ctx() ctx: GraphQLContext): Promise<User> {
+    const { businessEmail, profileImage, creditPayment, cashPayment, ...formValue } = data
     try {
       await BusinessCustomerSchema().validate(data, { abortEarly: false })
       // Check if the user already exists
-      const platform = ctx.req.headers["platform"];
+      const platform = ctx.req.headers['platform']
       if (isEmpty(platform)) {
-        throw new Error("Bad Request: Platform is require");
+        throw new Error('Bad Request: Platform is require')
       }
 
-      const rawPassword =
-        generateRandomNumberPattern("MMPWD########").toLowerCase();
-      const hashedPassword = await bcrypt.hash(rawPassword, 10);
-      const userNumber = await generateId("MMBU", "business");
+      const rawPassword = generateRandomNumberPattern('MMPWD########').toLowerCase()
+      const hashedPassword = await bcrypt.hash(rawPassword, 10)
+      const userNumber = await generateId('MMBU', 'business')
 
       const businessRegistrationCertificateFile = get(creditPayment, 'businessRegistrationCertificateFile', null)
       const copyIDAuthorizedSignatoryFile = get(creditPayment, 'copyIDAuthorizedSignatoryFile', null)
-      const certificateValueAddedTaxRegistrationFile = get(creditPayment, 'certificateValueAddedTaxRegistrationFile', null)
+      const certificateValueAddedTaxRegistrationFile = get(
+        creditPayment,
+        'certificateValueAddedTaxRegistrationFile',
+        null,
+      )
 
       // Document Image 1
-      const businessRegistrationCertificate =
-        businessRegistrationCertificateFile
-          ? new FileModel(businessRegistrationCertificateFile)
-          : null;
+      const businessRegistrationCertificate = businessRegistrationCertificateFile
+        ? new FileModel(businessRegistrationCertificateFile)
+        : null
       if (businessRegistrationCertificate) {
-        await businessRegistrationCertificate.save();
+        await businessRegistrationCertificate.save()
       }
       // Document Image 2
       const copyIDAuthorizedSignatory = copyIDAuthorizedSignatoryFile
         ? new FileModel(copyIDAuthorizedSignatoryFile)
-        : null;
+        : null
       if (copyIDAuthorizedSignatory) {
-        await copyIDAuthorizedSignatory.save();
+        await copyIDAuthorizedSignatory.save()
       }
       // Document Image 3
-      const certificateValueAddedTaxRegistration =
-        certificateValueAddedTaxRegistrationFile
-          ? new FileModel(certificateValueAddedTaxRegistrationFile)
-          : null;
+      const certificateValueAddedTaxRegistration = certificateValueAddedTaxRegistrationFile
+        ? new FileModel(certificateValueAddedTaxRegistrationFile)
+        : null
       if (certificateValueAddedTaxRegistration) {
-        await certificateValueAddedTaxRegistration.save();
+        await certificateValueAddedTaxRegistration.save()
       }
 
       const creditPaymentDetail =
-        (formValue.paymentMethod === 'credit' && creditPayment)
+        formValue.paymentMethod === 'credit' && creditPayment
           ? new BusinessCustomerCreditPaymentModel({
-            ...omit(creditPayment, ['businessRegistrationCertificateFile', 'copyIDAuthorizedSignatoryFile', 'certificateValueAddedTaxRegistrationFile']),
-            ...(businessRegistrationCertificate
-              ? { businessRegistrationCertificateFile: businessRegistrationCertificate }
-              : {}),
-            ...(copyIDAuthorizedSignatory
-              ? { copyIDAuthorizedSignatoryFile: copyIDAuthorizedSignatory }
-              : {}),
-            ...(certificateValueAddedTaxRegistration
-              ? { certificateValueAddedTaxRegistrationFile: certificateValueAddedTaxRegistration }
-              : {}),
-          })
-          : null;
+              ...omit(creditPayment, [
+                'businessRegistrationCertificateFile',
+                'copyIDAuthorizedSignatoryFile',
+                'certificateValueAddedTaxRegistrationFile',
+              ]),
+              ...(businessRegistrationCertificate
+                ? { businessRegistrationCertificateFile: businessRegistrationCertificate }
+                : {}),
+              ...(copyIDAuthorizedSignatory ? { copyIDAuthorizedSignatoryFile: copyIDAuthorizedSignatory } : {}),
+              ...(certificateValueAddedTaxRegistration
+                ? { certificateValueAddedTaxRegistrationFile: certificateValueAddedTaxRegistration }
+                : {}),
+            })
+          : null
       if (creditPaymentDetail) {
         await creditPaymentDetail.save()
       }
@@ -533,22 +511,19 @@ export default class RegisterResolver {
         userNumber,
         businessEmail,
         ...formValue,
-        ...(creditPaymentDetail ? { creditPayment: creditPaymentDetail } : {})
-      });
+        ...(creditPaymentDetail ? { creditPayment: creditPaymentDetail } : {}),
+      })
 
-      await customer.save();
+      await customer.save()
 
-      const image =
-        profileImage
-          ? new FileModel(profileImage)
-          : null;
+      const image = profileImage ? new FileModel(profileImage) : null
       if (image) {
         await image.save()
       }
 
       const user = new UserModel({
         ...formValue,
-        userRole: "customer",
+        userRole: 'customer',
         userType: 'business',
         validationStatus: 'approve',
         userNumber,
@@ -559,19 +534,20 @@ export default class RegisterResolver {
         isVerifiedEmail: false,
         isVerifiedPhoneNumber: false,
         ...(image ? { profileImage: image } : {}),
-      });
+      })
 
-      await user.save();
+      await user.save()
 
       const host = getCurrentHost(ctx)
-      const activate_link = `${host}/api/v1/activate/customer/${user.userNumber}`
+      const userNumberToken = generateExpToken({ userNumber: user.userNumber })
+      const activate_link = `${host}/api/v1/activate/customer/${userNumberToken}`
       const movemate_link = `https://www.movematethailand.com`
       // Email sender
       await addEmailQueue({
         from: process.env.NOREPLY_EMAIL,
         to: customer.businessEmail,
-        subject: "ยืนยันการสมัครสมาชิก Movemate!",
-        template: "register_business",
+        subject: 'ยืนยันการสมัครสมาชิก Movemate!',
+        template: 'register_business',
         context: {
           business_title: customer.businessTitle,
           business_name: customer.businessName,
@@ -580,17 +556,17 @@ export default class RegisterResolver {
           activate_link,
           movemate_link,
         },
-      });
+      })
 
       console.log('return user: ', user)
 
-      return user;
+      return user
     } catch (errors) {
-      console.log("error: ", errors);
+      console.log('error: ', errors)
       if (errors instanceof ValidationError) {
-        throw yupValidationThrow(errors);
+        throw yupValidationThrow(errors)
       }
-      throw errors;
+      throw errors
     }
   }
 
