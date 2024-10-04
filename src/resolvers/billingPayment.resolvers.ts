@@ -19,7 +19,8 @@ import TransactionModel, {
 } from '@models/transaction.model'
 import { shipmentNotify } from './shipment.resolvers'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
-import pubsub, { SHIPMENTS } from '@configs/pubsub'
+import pubsub, { NOTFICATIONS, SHIPMENTS } from '@configs/pubsub'
+import { getAdminMenuNotificationCount } from './notification.resolvers'
 
 Aigle.mixin(lodash, {})
 
@@ -55,6 +56,8 @@ export default class BillingPaymentResolver {
         shipmentNotify(shipment._id, get(shipment, 'requestedDriver._id', ''))
         const newShipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
         await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
+        const adminNotificationCount = await getAdminMenuNotificationCount()
+        await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
       }
       return true
     } else if (args.result === 'reject') {

@@ -1,9 +1,9 @@
-import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses"
-import { Field, ID, Int, ObjectType } from "type-graphql"
+import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
+import { Field, ID, Int, ObjectType, registerEnumType } from 'type-graphql'
 import { prop as Property, getModelForClass, Ref, plugin } from '@typegoose/typegoose'
-import mongooseAutoPopulate from "mongoose-autopopulate"
-import { Schema } from "mongoose"
-import { File } from "./file.model"
+import mongooseAutoPopulate from 'mongoose-autopopulate'
+import { Schema } from 'mongoose'
+import { File } from './file.model'
 
 export enum EStepStatus {
   IDLE = 'idle',
@@ -12,6 +12,10 @@ export enum EStepStatus {
   EXPIRE = 'expire',
   CANCELLED = 'cancelled',
 }
+registerEnumType(EStepStatus, {
+  name: 'EStepStatus',
+  description: 'Step status',
+})
 
 export enum EStepDefinition {
   CREATED = 'CREATED',
@@ -28,6 +32,10 @@ export enum EStepDefinition {
   UNINTERESTED_DRIVER = 'UNINTERESTED_DRIVER',
   REFUND = 'REFUND',
 }
+registerEnumType(EStepDefinition, {
+  name: 'EStepDefinition',
+  description: 'Step definition',
+})
 
 export enum EStepDefinitionName {
   CREATED = 'งานเข้าระบบ',
@@ -42,8 +50,12 @@ export enum EStepDefinitionName {
   POD = 'แนบเอกสารและส่งเอกสาร POD',
   REJECTED_PAYMENT = 'ไม่อนุมัติการชำระเงิน',
   UNINTERESTED_DRIVER = 'ไม่มีคนขับตอบรับงานนี้',
-  REFUND = 'ดำเนินการคืนเงิน'
+  REFUND = 'ดำเนินการคืนเงิน',
 }
+registerEnumType(EStepDefinitionName, {
+  name: 'EStepDefinitionName',
+  description: 'Step definition name',
+})
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()

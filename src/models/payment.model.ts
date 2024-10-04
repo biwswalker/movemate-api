@@ -1,4 +1,4 @@
-import { Field, ID, ObjectType } from 'type-graphql'
+import { Field, ID, ObjectType, registerEnumType } from 'type-graphql'
 import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { IsEnum } from 'class-validator'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
@@ -12,6 +12,10 @@ export enum EPaymentMethod {
   CASH = 'cash',
   CREDIT = 'credit',
 }
+registerEnumType(EPaymentMethod, {
+  name: 'EPaymentMethod',
+  description: 'Payment method',
+})
 
 export enum EPaymentStatus {
   WAITING_CONFIRM_PAYMENT = 'waiting_confirm_payment',
@@ -22,12 +26,20 @@ export enum EPaymentStatus {
   REFUND = 'refund',
   CANCELLED = 'cancelled',
 }
+registerEnumType(EPaymentStatus, {
+  name: 'EPaymentStatus',
+  description: 'Payment status',
+})
 
 export enum EPaymentRejectionReason {
   INSUFFICIENT_FUNDS = 'insufficient_funds',
   UNABLE_VERIFY_EVIDENCE = 'unable_verify_evidence',
   OTHER = 'other',
 }
+registerEnumType(EPaymentRejectionReason, {
+  name: 'EPaymentRejectionReason',
+  description: 'Payment rejection reason',
+})
 
 @ObjectType()
 export class InvoiceDetail {

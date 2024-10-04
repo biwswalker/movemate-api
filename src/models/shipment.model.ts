@@ -1,4 +1,4 @@
-import { Field, Float, ID, Int, ObjectType } from 'type-graphql'
+import { Field, Float, ID, Int, ObjectType, registerEnumType } from 'type-graphql'
 import { prop as Property, getModelForClass, Ref, Severity, plugin } from '@typegoose/typegoose'
 import UserModel, { EDriverStatus, User } from './user.model'
 import { IsEnum } from 'class-validator'
@@ -10,7 +10,7 @@ import FileModel, { File } from './file.model'
 import { Location } from './location.model'
 import { ShipmentAdditionalServicePrice } from './shipmentAdditionalServicePrice.model'
 import { ShipmentDistancePricing } from './shipmentDistancePricing.model'
-import { EPaymentMethod, Payment } from './payment.model'
+import { Payment } from './payment.model'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
 import mongoosePagination from 'mongoose-paginate-v2'
 import { DirectionsResult } from './directionResult.model'
@@ -58,7 +58,7 @@ import TransactionModel, {
 } from './transaction.model'
 import IndividualDriverModel, { IndividualDriver } from './driverIndividual.model'
 import { differenceInMinutes } from 'date-fns'
-import { refundCashBillingCycle } from './billingCycle.model'
+import BillingCycleModel, { refundCashBillingCycle } from './billingCycle.model'
 
 Aigle.mixin(lodash, {})
 
@@ -69,6 +69,10 @@ export enum EShipingStatus {
   CANCELLED = 'cancelled',
   REFUND = 'refund',
 }
+registerEnumType(EShipingStatus, {
+  name: 'EShipingStatus',
+  description: 'Shiping status',
+})
 
 export enum EAdminAcceptanceStatus {
   PENDING = 'pending',
@@ -77,6 +81,10 @@ export enum EAdminAcceptanceStatus {
   REJECTED = 'rejected',
   CANCELLED = 'cancelled',
 }
+registerEnumType(EAdminAcceptanceStatus, {
+  name: 'EAdminAcceptanceStatus',
+  description: 'Admin acceptance status',
+})
 
 export enum EDriverAcceptanceStatus {
   IDLE = 'idle',
@@ -84,6 +92,10 @@ export enum EDriverAcceptanceStatus {
   ACCEPTED = 'accepted',
   UNINTERESTED = 'uninterested',
 }
+registerEnumType(EDriverAcceptanceStatus, {
+  name: 'EDriverAcceptanceStatus',
+  description: 'Driver acceptance status',
+})
 
 export enum EShipmentCancellationReason {
   LOST_ITEM = 'lost_item',
@@ -98,6 +110,10 @@ export enum EShipmentCancellationReason {
   MANAGEMENT_DECISION = 'management_decision',
   OTHER = 'other',
 }
+registerEnumType(EShipmentCancellationReason, {
+  name: 'EShipmentCancellationReason',
+  description: 'Shipment cancellation reason',
+})
 
 enum EIssueType {
   DELAY = 'DELAY',
@@ -481,16 +497,19 @@ export class Shipment extends TimeStamps {
   }
 
   async initialStepDefinition(isReMatching: boolean = false): Promise<boolean> {
-    const shipmentId = get(this, '_doc._id', []) || get(this, '_id', [])
-    const destinations = get(this, '_doc.destinations', []) || get(this, 'destinations', [])
-    const dropoffLength = destinations.length - 1
-    const additionalServices = get(this, '_doc.additionalServices', []) || get(this, 'additionalServices', [])
-    const podServiceRaws = filter(additionalServices, (service) => {
+    // TODO: Remove this comment
+    // const shipmentId = get(this, '_doc._id', []) || get(this, '_id', [])
+    // const isReturn = get(this, '_doc.isRoundedReturn', false) || get(this, 'isRoundedReturn', false)
+    // const destinations = get(this, '_doc.destinations', []) || get(this, 'destinations', [])
+    // const additionalServices = get(this, '_doc.additionalServices', []) || get(this, 'additionalServices', [])
+    // const paymentMethod = get(this, '_doc.payment.paymentMethod', '') || get(this, 'payment.paymentMethod', '')
+    const dropoffLength = this.destinations.length - 1
+    const podServiceRaws = filter(this.additionalServices, (service) => {
       const name = get(service, 'reference.additionalService.name', '')
       return isEqual(name, 'POD')
     })
     const isPODService = podServiceRaws.length > 0
-    const paymentMethod = get(this, '_doc.payment.paymentMethod', '') || get(this, 'payment.paymentMethod', '')
+    const paymentMethod = get(this, 'payment.paymentMethod', '')
     const isCashMethod = isEqual(paymentMethod, 'cash')
     const bulkOperations = [
       {
@@ -603,6 +622,34 @@ export class Shipment extends TimeStamps {
           ]
         }),
       ),
+      ...(this.isRoundedReturn
+        ? [
+            {
+              insertOne: {
+                document: {
+                  step: EStepDefinition.ARRIVAL_DROPOFF,
+                  seq: 0,
+                  stepName: EStepDefinitionName.ARRIVAL_DROPOFF,
+                  customerMessage: 'ถึงจุดส่งสินค้ากลับ',
+                  driverMessage: 'จุดส่งสินค้ากลับ',
+                  stepStatus: EStepStatus.IDLE,
+                },
+              },
+            },
+            {
+              insertOne: {
+                document: {
+                  step: EStepDefinition.DROPOFF,
+                  seq: 0,
+                  stepName: EStepDefinitionName.DROPOFF,
+                  customerMessage: 'จัดส่งสินค้ากลับ',
+                  driverMessage: 'จัดส่งสินค้ากลับ',
+                  stepStatus: EStepStatus.IDLE,
+                },
+              },
+            },
+          ]
+        : []),
       ...(isPODService
         ? [
             {
@@ -644,7 +691,7 @@ export class Shipment extends TimeStamps {
 
     const stepDefinitionResult = await StepDefinitionModel.bulkWrite(reSequenceBulkOperation)
     const _stepDefinitionIds = values(stepDefinitionResult.insertedIds)
-    await ShipmentModel.findByIdAndUpdate(shipmentId, {
+    await ShipmentModel.findByIdAndUpdate(this._id, {
       steps: _stepDefinitionIds,
       currentStepSeq: isReMatching ? (isCashMethod ? 2 : 1) : 1,
     })
@@ -802,10 +849,6 @@ export class Shipment extends TimeStamps {
           infoText: 'ดูสรุปการจองและค่าใช้จ่าย',
           infoLink: `/main/tracking?tracking_number=${this.trackingNumber}`,
         })
-
-        /**
-         * Email & Receipt generate TODO:
-         */
 
         return true
       } else {
@@ -970,7 +1013,7 @@ export class Shipment extends TimeStamps {
     const currentStep = find(shipmentModel.steps, ['seq', shipmentModel.currentStepSeq]) as StepDefinition | undefined
     if (currentStep) {
       if (currentStep.step === 'REFUND') {
-        await StepDefinitionModel.findByIdAndUpdate(currentStep._id, { stepStatus: EStepStatus.DONE })
+        await StepDefinitionModel.findByIdAndUpdate(currentStep._id, { stepStatus: EStepStatus.DONE, customerMessage: 'ดำเนินการคืนเงินแล้ว' })
       }
     }
 

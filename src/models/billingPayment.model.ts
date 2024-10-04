@@ -1,4 +1,4 @@
-import { Field, Float, ID, ObjectType } from "type-graphql"
+import { Field, Float, ID, ObjectType, registerEnumType } from "type-graphql"
 import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses"
 import mongooseAutoPopulate from "mongoose-autopopulate"
@@ -13,6 +13,10 @@ export enum EBillingPaymentStatus {
   PENDING = 'pending',
   FAILED = 'failed',
 }
+registerEnumType(EBillingPaymentStatus, {
+  name: 'EBillingPaymentStatus',
+  description: 'Billing payment status',
+})
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()

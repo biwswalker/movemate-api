@@ -1,4 +1,4 @@
-import { Field, Float, ID, ObjectType } from 'type-graphql'
+import { Field, Float, ID, ObjectType, registerEnumType } from 'type-graphql'
 import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import UserModel, { EUserRole, EUserStatus, EUserType, User } from './user.model'
@@ -8,7 +8,7 @@ import { BusinessCustomer } from './customerBusiness.model'
 import BusinessCustomerCreditPaymentModel, {
   BusinessCustomerCreditPayment,
 } from './customerBusinessCreditPayment.model'
-import lodash, { get, isEmpty, reduce, sum, toNumber, toString, uniq, includes, isEqual } from 'lodash'
+import lodash, { get, isEmpty, reduce, sum, toNumber, toString, uniq, includes, isEqual, head, tail } from 'lodash'
 import { addDays, addMonths, differenceInDays, differenceInMinutes, format } from 'date-fns'
 import { EPaymentMethod, EPaymentRejectionReason, Payment } from './payment.model'
 import { generateTrackingNumber } from '@utils/string.utils'
@@ -28,7 +28,6 @@ import NotificationModel, { ENotificationVarient } from './notification.model'
 import { getAdminMenuNotificationCount } from '@resolvers/notification.resolvers'
 import { generateInvoice } from 'reports/invoice'
 import BillingReceiptModel, { BillingReceipt } from './billingReceipt.model'
-import { generateReceipt } from 'reports/receipt'
 import TransactionModel, {
   ERefType,
   ETransactionOwner,
@@ -39,6 +38,7 @@ import TransactionModel, {
 import { VehicleType } from './vehicleType.model'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
+import { generateReceipt } from 'reports/receipt'
 
 Aigle.mixin(lodash, {})
 
@@ -51,6 +51,10 @@ export enum EBillingStatus {
   REFUNDED = 'refunded',
   CANCELLED = 'cancelled',
 }
+registerEnumType(EBillingStatus, {
+  name: 'EBillingStatus',
+  description: 'Billing status',
+})
 
 interface MarkAsPaidPaymentProps {
   billingCycleId: string
@@ -394,8 +398,10 @@ export class BillingCycle extends TimeStamps {
         await ShipmentModel.markAsCashVerified(shipment._id, 'approve', userId)
       })
 
-      const billingCycleAfterSave = await BillingCycleModel.findById(billingCycle._id)
-      await generateReceipt(billingCycleAfterSave)
+      // ** Generate receipt sent at Finish job shipment **
+      // const billingCycleAfterSave = await BillingCycleModel.findById(billingCycle._id)
+      // await generateReceipt(billingCycleAfterSave)
+
       // Change Status
       const customerId = get(billingCycle, 'user._id', '')
       if (customerId) {
@@ -743,7 +749,7 @@ export class BillingCycle extends TimeStamps {
      * To Admin
      *
      */
-    
+
     const shipmentModel = await ShipmentModel.findByIdAndUpdate(shipmentId, {
       status: EShipingStatus.IDLE,
       driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
@@ -759,6 +765,61 @@ export class BillingCycle extends TimeStamps {
     /**
      * Add to JOB notification
      */
+  }
+
+  static async generateShipmentReceipt(shipmentId: string, sentEmail?: boolean) {
+    /**
+     * Generate receipt
+     */
+    const billingCycle = await BillingCycleModel.findOne({ shipments: { $in: [shipmentId] } })
+    const { filePath, fileName } = await generateReceipt(billingCycle)
+
+    /**
+     * Email
+     */
+    if (sentEmail) {
+      const shipment = await ShipmentModel.findById(shipmentId)
+      const customerModel = await UserModel.findById(billingCycle.user)
+      if (shipment && customerModel) {
+        const financialEmails = get(customerModel, 'businessDetail.creditPayment.financialContactEmails', [])
+        const emails = uniq([customerModel.email, ...financialEmails])
+
+        const pickup = head(shipment.destinations)?.name || ''
+        const dropoffs = reduce(
+          tail(shipment.destinations),
+          (prev, curr) => {
+            if (curr.name) {
+              return prev ? `${prev}, ${curr.name}` : curr.name
+            }
+            return prev
+          },
+          '',
+        )
+
+        const tracking_link = `https://www.movematethailand.com/main/tracking?tracking_number=${shipment.trackingNumber}`
+        await addEmailQueue({
+          from: process.env.NOREPLY_EMAIL,
+          to: emails,
+          subject: `ใบเสร็จรับเงิน Movemate Thailand | Shipment No. ${shipment.trackingNumber}`,
+          template: 'cash_receipt',
+          context: {
+            tracking_number: shipment.trackingNumber,
+            fullname: customerModel.fullname,
+            phone_number: customerModel.contactNumber,
+            email: customerModel.email,
+            customer_type: customerModel.userType === 'individual' ? 'ส่วนบุคคล' : 'บริษัท/องค์กร',
+            pickup,
+            dropoffs,
+            tracking_link,
+            contact_number: '02-xxx-xxxx',
+            movemate_link: `https://www.movematethailand.com`,
+          },
+          attachments: [{ filename: fileName, path: filePath }],
+        })
+        await billingCycle.updateOne({ emailSendedReceiptTime: new Date() })
+        console.log(`[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Billing Cycle has sent for ${emails.join(', ')}`)
+      }
+    }
   }
 }
 

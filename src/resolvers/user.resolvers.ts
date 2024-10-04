@@ -44,6 +44,8 @@ import { decryption, generateExpToken } from '@utils/encryption'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import { fDateTime } from '@utils/formatTime'
 import { IndividualDriver } from '@models/driverIndividual.model'
+import { getAdminMenuNotificationCount } from './notification.resolvers'
+import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 
 @Resolver(User)
 export default class UserResolver {
@@ -567,6 +569,10 @@ export default class UserResolver {
           throw new InvalidDirectiveError('ไม่พบประเภทคนขับรถ')
         }
       }
+
+      const adminNotificationCount = await getAdminMenuNotificationCount()
+      await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+      
       return user
     } catch (error) {
       throw error

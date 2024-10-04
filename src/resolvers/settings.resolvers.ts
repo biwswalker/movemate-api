@@ -5,7 +5,9 @@ import SettingAboutusModel, { SettingAboutus } from "@models/settingAboutus.mode
 import SettingBusinessTypeModel, { SettingBusinessType } from "@models/settingBusinessType.model";
 import SettingContactUsModel, { SettingContactUs } from "@models/settingContactUs.model";
 import SettingCustomerPoliciesModel, { SettingCustomerPolicies } from "@models/settingCustomerPolicies.model";
+import SettingCustomerTermsModel, { SettingCustomerTerms } from "@models/settingCustomerTerms.model";
 import SettingDriverPoliciesModel, { SettingDriverPolicies } from "@models/settingDriverPolicies.model";
+import SettingDriverTermsModel, { SettingDriverTerms } from "@models/settingDriverTerms.model";
 import SettingFAQModel, { SettingFAQ } from "@models/settingFAQ.model";
 import SettingInstructionModel, { SettingInstruction } from "@models/settingInstruction.model";
 import UpdateHistoryModel from "@models/updateHistory.model";
@@ -207,6 +209,71 @@ export default class SettingsResolver {
 
     @Mutation(() => Boolean)
     @UseMiddleware(AuthGuard(['admin']))
+    async updateCustomerTerms(
+        @Arg("data") data: string,
+        @Ctx() ctx: GraphQLContext
+    ): Promise<boolean> {
+        try {
+            const userId = ctx.req.user_id;
+            const settingCustomerTerms = await SettingCustomerTermsModel.find();
+            const settingCustomerTermsOldData = settingCustomerTerms[0]
+
+            const version = get(settingCustomerTermsOldData, 'version', 0)
+            const newVersion = version + 1
+            const _id = settingCustomerTermsOldData ? settingCustomerTermsOldData._id : new Types.ObjectId()
+
+            const updateHistory = new UpdateHistoryModel({
+                referenceId: _id.toString(),
+                referenceType: "SettingCustomerTerms",
+                who: userId,
+                beforeUpdate: settingCustomerTermsOldData ? omit(settingCustomerTermsOldData.toObject(), ['history']) : {},
+                afterUpdate: { customerTerms: data, version: newVersion },
+            });
+
+            const updateData = [{
+                updateOne: {
+                    filter: { _id },
+                    update: {
+                        $set: { customerTerms: data, version: newVersion },
+                        $push: { history: updateHistory },
+                    },
+                    upsert: true,
+                },
+            }]
+
+            await SettingCustomerTermsModel.bulkWrite(updateData);
+            await updateHistory.save()
+
+            return true
+        } catch (errors) {
+            console.log('error: ', errors)
+            if (errors instanceof ValidationError) {
+                throw yupValidationThrow(errors)
+            }
+            throw errors
+        }
+    }
+
+
+    @Query(() => SettingCustomerTerms)
+    async getCustomerTermsInfo(): Promise<SettingCustomerTerms> {
+        try {
+            const settingCustomerTerms = await SettingCustomerTermsModel.find();
+            if (!settingCustomerTerms) {
+                const message = `ไม่สามารถเรียกข้อมูลข้อกำหนดการให้บริการและนโยบายความเป็นส่วนตัวได้`;
+                throw new GraphQLError(message, {
+                    extensions: { code: "NOT_FOUND", errors: [{ message }] },
+                });
+            }
+            return settingCustomerTerms[0];
+        } catch (error) {
+            console.log('error: ', error)
+            throw new GraphQLError("ไม่สามารถเรียกข้อมูลข้อกำหนดการให้บริการและนโยบายความเป็นส่วนตัวได้ โปรดลองอีกครั้ง");
+        }
+    }
+
+    @Mutation(() => Boolean)
+    @UseMiddleware(AuthGuard(['admin']))
     async updateDriverPolicies(
         @Arg("data") data: string,
         @Ctx() ctx: GraphQLContext
@@ -258,6 +325,72 @@ export default class SettingsResolver {
         try {
             const settingDriverPolicies = await SettingDriverPoliciesModel.find();
             const policy = get(settingDriverPolicies, '0', undefined)
+            if (!policy) {
+                const message = `ไม่สามารถเรียกข้อมูลข้อกำหนดการให้บริการและนโยบายความเป็นส่วนตัวได้`;
+                throw new GraphQLError(message, {
+                    extensions: { code: "NOT_FOUND", errors: [{ message }] },
+                });
+            }
+            return policy
+        } catch (error) {
+            console.log('error: ', error)
+            throw new GraphQLError("ไม่สามารถเรียกข้อมูลข้อกำหนดการให้บริการและนโยบายความเป็นส่วนตัวได้ โปรดลองอีกครั้ง");
+        }
+    }
+
+    @Mutation(() => Boolean)
+    @UseMiddleware(AuthGuard(['admin']))
+    async updateDriverTerms(
+        @Arg("data") data: string,
+        @Ctx() ctx: GraphQLContext
+    ): Promise<boolean> {
+        try {
+            const userId = ctx.req.user_id;
+            const settingDriverTerms = await SettingDriverTermsModel.find();
+            const settingDriverTermsOldData = settingDriverTerms[0]
+            
+            const version = get(settingDriverTermsOldData, 'version', 0)
+            const newVersion = version + 1
+            const _id = settingDriverTermsOldData ? settingDriverTermsOldData._id : new Types.ObjectId()
+
+            const updateHistory = new UpdateHistoryModel({
+                referenceId: _id.toString(),
+                referenceType: "SettingDriverTerms",
+                who: userId,
+                beforeUpdate: settingDriverTermsOldData ? omit(settingDriverTermsOldData.toObject(), ['history']) : {},
+                afterUpdate: { driverTerms: data, version: newVersion },
+            });
+
+            const updateData = [{
+                updateOne: {
+                    filter: { _id },
+                    update: {
+                        $set: { driverTerms: data, version: newVersion },
+                        $push: { history: updateHistory },
+                    },
+                    upsert: true,
+                },
+            }]
+
+            await SettingDriverTermsModel.bulkWrite(updateData);
+            await updateHistory.save()
+
+            return true
+        } catch (errors) {
+            console.log('error: ', errors)
+            if (errors instanceof ValidationError) {
+                throw yupValidationThrow(errors)
+            }
+            throw errors
+        }
+    }
+
+
+    @Query(() => SettingDriverTerms)
+    async getDriverTermsInfo(): Promise<SettingDriverTerms> {
+        try {
+            const settingDriverTerms = await SettingDriverTermsModel.find();
+            const policy = get(settingDriverTerms, '0', undefined)
             if (!policy) {
                 const message = `ไม่สามารถเรียกข้อมูลข้อกำหนดการให้บริการและนโยบายความเป็นส่วนตัวได้`;
                 throw new GraphQLError(message, {

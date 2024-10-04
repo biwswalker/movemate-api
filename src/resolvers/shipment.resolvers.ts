@@ -54,8 +54,9 @@ import StepDefinitionModel, {
   StepDefinition,
 } from '@models/shipmentStepDefinition.model'
 import { decryption } from '@utils/encryption'
-import pubsub, { SHIPMENTS } from '@configs/pubsub'
+import pubsub, { NOTFICATIONS, SHIPMENTS } from '@configs/pubsub'
 import redis from '@configs/redis'
+import { getAdminMenuNotificationCount } from './notification.resolvers'
 
 Aigle.mixin(lodash, {})
 
@@ -685,6 +686,9 @@ export default class ShipmentResolver {
         },
       })
 
+      const adminNotificationCount = await getAdminMenuNotificationCount()
+      await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+
       return response
     } catch (error) {
       console.log(error)
@@ -801,7 +805,7 @@ export const cancelShipmentIfNotInterested = async (shipmentId: string) => {
         $push: { steps: refundStep._id },
       })
     }
-    
+
     // TODO: Sent notification to cash customer
   } else {
     const currentStep = find(shipment.steps, ['seq', shipment.currentStepSeq]) as StepDefinition | undefined

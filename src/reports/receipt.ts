@@ -12,7 +12,7 @@ import { BusinessCustomerCreditPayment } from '@models/customerBusinessCreditPay
 import { IndividualCustomer } from '@models/customerIndividual.model'
 import { Shipment } from '@models/shipment.model'
 import { VehicleType } from '@models/vehicleType.model'
-import { Payment } from '@models/payment.model'
+import { EPaymentMethod, Payment } from '@models/payment.model'
 import { BillingReceipt } from '@models/billingReceipt.model'
 
 const sarabunThin = path.join(__dirname, '..', 'assets/fonts/Sarabun-Thin.ttf')
@@ -75,7 +75,6 @@ export async function generateReceipt(billingCycle: BillingCycle) {
   let latestHeight = 0
   let rowNumber = 0
 
-
   function HeaderComponent(page: number, totalPage: number, isOriginal: boolean = true) {
     // Logo
     doc.image(logoPath, 22, 60, { width: 80 })
@@ -108,9 +107,12 @@ export async function generateReceipt(billingCycle: BillingCycle) {
     doc.fontSize(8)
     doc.font(sarabunMedium).text('Receipt No.:', 420, doc.y, { align: 'right', width: 74 }) // 81
     doc.font(sarabunLight).text(billingReceipt.receiptNumber, 504, doc.y - 10, { align: 'left' })
-    doc.moveDown(0.3)
-    doc.font(sarabunMedium).text('Invoice No.:', 420, doc.y, { align: 'right', width: 74 }) // 81
-    doc.font(sarabunLight).text(billingCycle.billingNumber, 504, doc.y - 10, { align: 'left' })
+    
+    if (billingCycle.paymentMethod === EPaymentMethod.CREDIT) {
+      doc.moveDown(0.3)
+      doc.font(sarabunMedium).text('Invoice No.:', 420, doc.y, { align: 'right', width: 74 }) // 81
+      doc.font(sarabunLight).text(billingCycle.billingNumber, 504, doc.y - 10, { align: 'left' })
+    }
 
     const receiptInBEDateMonth = fDate(billingReceipt.receiptDate, 'dd/MM')
     const receiptInBEYear = toNumber(fDate(billingReceipt.receiptDate, 'yyyy')) + 543
@@ -161,9 +163,7 @@ export async function generateReceipt(billingCycle: BillingCycle) {
     doc.font(sarabunLight).text(taxId, 110, doc.y - 9)
     doc.moveDown(0.6)
     doc.font(sarabunMedium).text('ที่อยู่ :', 22)
-    doc
-      .font(sarabunLight)
-      .text(address, 110, doc.y - 9)
+    doc.font(sarabunLight).text(address, 110, doc.y - 9)
 
     // Page detail
     doc.moveDown(2.1)
@@ -247,9 +247,7 @@ export async function generateReceipt(billingCycle: BillingCycle) {
           .text(fCurrency(payment.invoice.totalPrice || 0), 506, currentY, { width: 78, align: 'right' })
       })
     })
-
   }
-
 
   // Summary and Payment detail
   // Seperate line
@@ -270,7 +268,9 @@ export async function generateReceipt(billingCycle: BillingCycle) {
     if (billingCycle.taxAmount > 0) {
       doc.moveDown(1.6)
       doc.font(sarabunMedium).text('ภาษีหัก ณ ที่จ่าย 1% :', 0, doc.y - 10, { width: 450, align: 'right' })
-      doc.font(sarabunLight).text(`-${fCurrency(billingCycle.taxAmount)}`, 450, doc.y - 10, { align: 'right', width: 128 })
+      doc
+        .font(sarabunLight)
+        .text(`-${fCurrency(billingCycle.taxAmount)}`, 450, doc.y - 10, { align: 'right', width: 128 })
     }
     doc.moveDown(2.6)
     doc.fontSize(10)
@@ -310,9 +310,15 @@ export async function generateReceipt(billingCycle: BillingCycle) {
     doc.font(sarabunLight).fontSize(6).fillColor('#212B36')
     doc.text('1. หากต้องการแก้ไขใบแจ้งหนี้และใบเสร็จรับเงิน กรุณาติดต่อ acc@movematethailand.com ภายใน 3 วันทำการ', 22)
     doc.moveDown(1)
-    doc.text('หลังจากได้รับเอกสาร มิเช่นนั้นทางบริษัทฯ จะถือว่าเอกสารดังกล่าวถูกต้อง ครบถ้วน สมบรณ์ เป็นที่เรียบร้อยแล้ว', 28)
+    doc.text(
+      'หลังจากได้รับเอกสาร มิเช่นนั้นทางบริษัทฯ จะถือว่าเอกสารดังกล่าวถูกต้อง ครบถ้วน สมบรณ์ เป็นที่เรียบร้อยแล้ว',
+      28,
+    )
     doc.moveDown(1)
-    doc.text('2. เมื่อท่านได้ออกเอกสารภาษี หัก ณ ที่จ่ายแล้วให้ส่งเอกสารดังกล่าว มาที่ acc@movematethailand.com พร้อมอ้างอิงเลขที่ใบเสร็จรับเงิน', 22)
+    doc.text(
+      '2. เมื่อท่านได้ออกเอกสารภาษี หัก ณ ที่จ่ายแล้วให้ส่งเอกสารดังกล่าว มาที่ acc@movematethailand.com พร้อมอ้างอิงเลขที่ใบเสร็จรับเงิน',
+      22,
+    )
     doc.moveDown(1)
     doc.text('3. รบกวนส่งเอกสารภาษีหัก ณ ที่จ่ายฉบับจริงมาตามที่อยู่ในการออกเอกสารดังกล่าว')
 
@@ -366,7 +372,6 @@ export async function generateReceipt(billingCycle: BillingCycle) {
   doc.addPage()
   ContentComponent(false)
   FooterComponent()
-
 
   doc.end()
 

@@ -1,4 +1,4 @@
-import { ObjectType, Field, ID, Int } from 'type-graphql'
+import { ObjectType, Field, ID, Int, registerEnumType } from 'type-graphql'
 import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import autopopulate from 'mongoose-autopopulate'
 import { IsNotEmpty, IsString, IsEnum } from 'class-validator'
@@ -22,11 +22,19 @@ export enum EUserRole {
   ADMIN = 'admin',
   DRIVER = 'driver',
 }
+registerEnumType(EUserRole, {
+  name: 'EUserRole',
+  description: 'User role',
+})
 
 export enum EUserType {
   INDIVIDUAL = 'individual',
   BUSINESS = 'business',
 }
+registerEnumType(EUserType, {
+  name: 'EUserType',
+  description: 'User type',
+})
 
 export enum EUserStatus {
   PENDING = 'pending', // Need to Verify
@@ -35,12 +43,20 @@ export enum EUserStatus {
   BANNED = 'banned',
   DENIED = 'denied',
 }
+registerEnumType(EUserStatus, {
+  name: 'EUserStatus',
+  description: 'User status',
+})
 
 export enum EUserValidationStatus {
   PENDING = 'pending',
   APPROVE = 'approve',
   DENIED = 'denied',
 }
+registerEnumType(EUserValidationStatus, {
+  name: 'EUserValidationStatus',
+  description: 'User validation status',
+})
 
 enum ERegistration {
   WEB = 'web',
@@ -52,6 +68,10 @@ export enum EDriverStatus {
   BUSY = 'busy',
   WORKING = 'working',
 }
+registerEnumType(EDriverStatus, {
+  name: 'EDriverStatus',
+  description: 'Driver status',
+})
 
 @plugin(autopopulate)
 @plugin(mongoosePagination)
@@ -265,6 +285,21 @@ export class User extends TimeStamps {
       const businessDetail: BusinessCustomer | undefined =
         get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
       return businessDetail ? businessDetail.businessEmail : ''
+    }
+    return ''
+  }
+
+  @Field({ nullable: true })
+  get contactNumber(): string {
+    const userType = get(this, '_doc.userType', '') || this.userType || ''
+    if (userType === 'individual') {
+      const individualDetail: IndividualCustomer | undefined =
+        get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
+      return individualDetail ? individualDetail.phoneNumber : ''
+    } else if (userType === 'business') {
+      const businessDetail: BusinessCustomer | undefined =
+        get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
+      return businessDetail ? businessDetail.contactNumber : ''
     }
     return ''
   }

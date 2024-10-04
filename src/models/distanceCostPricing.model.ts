@@ -1,4 +1,4 @@
-import { Field, Float, ID, ObjectType } from "type-graphql";
+import { Field, Float, ID, ObjectType, registerEnumType } from "type-graphql";
 import { prop as Property, Ref, getModelForClass, plugin } from "@typegoose/typegoose";
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { IsEnum, IsNotEmpty } from "class-validator";
@@ -9,6 +9,10 @@ export enum EDistanceCostPricingUnit {
   LUMSUM = "lumpsum",
   KM = "km",
 }
+registerEnumType(EDistanceCostPricingUnit, {
+  name: 'EDistanceCostPricingUnit',
+  description: 'Distance cost pricing unit',
+})
 
 @ObjectType()
 @plugin(mongooseAutoPopulate)

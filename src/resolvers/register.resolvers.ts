@@ -337,7 +337,7 @@ export default class RegisterResolver {
             remark,
             registration: platform,
             isVerifiedEmail: false,
-            isVerifiedPhoneNumber: false,
+            isVerifiedPhoneNumber: true,
             acceptPolicyVersion,
             acceptPolicyTime,
             businessDetail: business,

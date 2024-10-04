@@ -18,4 +18,8 @@ export class AdminNotificationCountPayload {
   shipment: number
   @Field(() => Int)
   financial: number
+  @Field(() => Int)
+  financialCash: number
+  @Field(() => Int)
+  financialCredit: number
 }

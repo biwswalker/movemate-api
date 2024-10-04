@@ -1,4 +1,4 @@
-import { Field, ID, ObjectType } from 'type-graphql'
+import { Field, ID, ObjectType, registerEnumType } from 'type-graphql'
 import { prop as Property, getModelForClass } from '@typegoose/typegoose'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import { LoadmoreArgs } from '@inputs/query.input'
@@ -8,21 +8,37 @@ export enum ETransactionType {
   INCOME = 'income',
   OUTCOME = 'outcome',
 }
+registerEnumType(ETransactionType, {
+  name: 'ETransactionType',
+  description: 'Transaction type',
+})
 
 export enum ETransactionStatus {
   COMPLETE = 'complete',
   PENDING = 'pending',
 }
+registerEnumType(ETransactionStatus, {
+  name: 'ETransactionStatus',
+  description: 'Transaction status',
+})
 
 export enum ETransactionOwner {
   MOVEMATE = 'movemate',
   DRIVER = 'driver',
 }
+registerEnumType(ETransactionOwner, {
+  name: 'ETransactionOwner',
+  description: 'Transaction owner',
+})
 
 export enum ERefType {
   SHIPMENT = 'shipment',
   BILLING = 'billing',
 }
+registerEnumType(ERefType, {
+  name: 'ERefType',
+  description: 'Ref type',
+})
 
 /**
  * TODO: WHT Tax to calculate

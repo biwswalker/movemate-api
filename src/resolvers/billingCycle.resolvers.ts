@@ -17,6 +17,9 @@ import { get, isEmpty, map, omitBy, toNumber, toString, uniq } from 'lodash'
 import { PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import path from 'path'
+import { EPaymentMethod } from '@models/payment.model'
+import pubsub, { NOTFICATIONS } from '@configs/pubsub'
+import { getAdminMenuNotificationCount } from './notification.resolvers'
 
 @Resolver(BillingCycle)
 export default class BillingCycleResolver {
@@ -27,11 +30,11 @@ export default class BillingCycleResolver {
     @Args() paginate: PaginationArgs,
   ): Promise<BillingCyclePaginationAggregatePayload> {
     try {
-      const reformSorts: PaginateOptions = reformPaginate(paginate)
+      const { sort, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
       const filterQuery = omitBy(query, isEmpty)
       // Aggregrated
-      console.log('BILLING_CYCLE_LIST: ', JSON.stringify(BILLING_CYCLE_LIST(filterQuery)))
-      const aggregate = BillingCycleModel.aggregate(BILLING_CYCLE_LIST(filterQuery))
+      console.log('BILLING_CYCLE_LIST: ', JSON.stringify(BILLING_CYCLE_LIST(filterQuery, sort)))
+      const aggregate = BillingCycleModel.aggregate(BILLING_CYCLE_LIST(filterQuery, sort))
       const billingCycles = (await BillingCycleModel.aggregatePaginate(
         aggregate,
         reformSorts,
@@ -49,24 +52,55 @@ export default class BillingCycleResolver {
 
   @Query(() => [TotalBillingRecordPayload])
   @UseMiddleware(AuthGuard(['admin']))
-  async statusBillingCount(): Promise<TotalBillingRecordPayload[]> {
-    const all = await BillingCycleModel.countDocuments()
-    const verify = await BillingCycleModel.countDocuments({ billingStatus: EBillingStatus.VERIFY })
-    const refund = await BillingCycleModel.countDocuments({ billingStatus: EBillingStatus.REFUND })
-    const overdue = await BillingCycleModel.countDocuments({ billingStatus: EBillingStatus.OVERDUE })
-    const current = await BillingCycleModel.countDocuments({ billingStatus: EBillingStatus.CURRENT })
-    const paid = await BillingCycleModel.countDocuments({ billingStatus: EBillingStatus.PAID })
-    const refunded = await BillingCycleModel.countDocuments({ billingStatus: EBillingStatus.REFUNDED })
+  async statusBillingCount(
+    @Arg('type', () => EPaymentMethod) type: EPaymentMethod,
+  ): Promise<TotalBillingRecordPayload[]> {
+    const all = await BillingCycleModel.countDocuments({
+      paymentMethod: type,
+      ...(type === EPaymentMethod.CASH
+        ? {
+            billingStatus: {
+              $in: [EBillingStatus.VERIFY, EBillingStatus.REFUND, EBillingStatus.PAID, EBillingStatus.REFUNDED],
+            },
+          }
+        : {}),
+    })
+    const verify = await BillingCycleModel.countDocuments({ paymentMethod: type, billingStatus: EBillingStatus.VERIFY })
+    const refund = await BillingCycleModel.countDocuments({ paymentMethod: type, billingStatus: EBillingStatus.REFUND })
+    const paid = await BillingCycleModel.countDocuments({ paymentMethod: type, billingStatus: EBillingStatus.PAID })
+    const refunded = await BillingCycleModel.countDocuments({
+      paymentMethod: type,
+      billingStatus: EBillingStatus.REFUNDED,
+    })
 
-    return [
-      { label: 'ทั้งหมด', key: 'all', count: all },
-      { label: 'ตรวจสอบยอดชำระ', key: EBillingStatus.VERIFY, count: verify },
-      { label: 'คืนเงิน', key: EBillingStatus.REFUND, count: refund },
-      { label: 'เกินกำหนดชำระ', key: EBillingStatus.OVERDUE, count: overdue },
-      { label: 'อยู่ในรอบบิล', key: EBillingStatus.CURRENT, count: current },
-      { label: 'คืนเงินแล้ว', key: EBillingStatus.REFUNDED, count: refunded },
-      { label: 'ชำระเงินแล้ว', key: EBillingStatus.PAID, count: paid },
-    ]
+    if (type === EPaymentMethod.CASH) {
+      return [
+        { label: 'ทั้งหมด', key: 'all', count: all },
+        { label: 'ตรวจสอบยอดชำระ', key: EBillingStatus.VERIFY, count: verify },
+        { label: 'คืนเงิน', key: EBillingStatus.REFUND, count: refund },
+        { label: 'ชำระเงินแล้ว', key: EBillingStatus.PAID, count: paid },
+        { label: 'คืนเงินแล้ว', key: EBillingStatus.REFUNDED, count: refunded },
+      ]
+    } else if (type === EPaymentMethod.CREDIT) {
+      const overdue = await BillingCycleModel.countDocuments({
+        paymentMethod: type,
+        billingStatus: EBillingStatus.OVERDUE,
+      })
+      const current = await BillingCycleModel.countDocuments({
+        paymentMethod: type,
+        billingStatus: EBillingStatus.CURRENT,
+      })
+      return [
+        { label: 'ทั้งหมด', key: 'all', count: all },
+        { label: 'ตรวจสอบยอดชำระ', key: EBillingStatus.VERIFY, count: verify },
+        { label: 'คืนเงิน', key: EBillingStatus.REFUND, count: refund },
+        { label: 'เกินกำหนดชำระ', key: EBillingStatus.OVERDUE, count: overdue },
+        { label: 'อยู่ในรอบบิล', key: EBillingStatus.CURRENT, count: current },
+        { label: 'คืนเงินแล้ว', key: EBillingStatus.REFUNDED, count: refunded },
+        { label: 'ชำระเงินแล้ว', key: EBillingStatus.PAID, count: paid },
+      ]
+    }
+    return []
   }
 
   @Query(() => [String])
@@ -74,7 +108,6 @@ export default class BillingCycleResolver {
   async allBillingCycleIds(@Args() query: GetBillingCycleArgs): Promise<string[]> {
     try {
       const filterQuery = omitBy(query, isEmpty)
-      console.log('BILLING_CYCLE_LIST: ', JSON.stringify(BILLING_CYCLE_LIST(filterQuery)))
       const billingCycles = await BillingCycleModel.aggregate(BILLING_CYCLE_LIST(filterQuery))
       const ids = map(billingCycles, ({ _id }) => _id)
       return ids
@@ -90,7 +123,10 @@ export default class BillingCycleResolver {
     const user_id = ctx.req.user_id
     const user_role = ctx.req.user_role
     try {
-      const billingCycle = await BillingCycleModel.findOne({ billingNumber, ...(user_role === 'customer' ? { user: user_id } : {}) })
+      const billingCycle = await BillingCycleModel.findOne({
+        billingNumber,
+        ...(user_role === 'customer' ? { user: user_id } : {}),
+      })
       if (!billingCycle) {
         const message = `ไม่สามารถเรียกข้อมูลใบแจ้งหนี้`
         throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
@@ -131,6 +167,8 @@ export default class BillingCycleResolver {
         },
         user_id,
       )
+      const adminNotificationCount = await getAdminMenuNotificationCount()
+      await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
       return true
     } catch (error) {
       console.log(error)
@@ -148,6 +186,8 @@ export default class BillingCycleResolver {
     const user_id = ctx.req.user_id
     try {
       await BillingCycleModel.markAsNoRefund(billingCycleId, user_id, reason)
+      const adminNotificationCount = await getAdminMenuNotificationCount()
+      await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
       return true
     } catch (error) {
       console.log(error)
@@ -169,7 +209,7 @@ export default class BillingCycleResolver {
         createdDateTime: new Date(),
         postalProvider,
         trackingNumber,
-        updatedBy: user_id
+        updatedBy: user_id,
       }
       await BillingCycleModel.findByIdAndUpdate(billingCycleId, { postalInvoice: postalSented })
       return true
@@ -193,7 +233,7 @@ export default class BillingCycleResolver {
         createdDateTime: new Date(),
         postalProvider,
         trackingNumber,
-        updatedBy: user_id
+        updatedBy: user_id,
       }
       await BillingCycleModel.findByIdAndUpdate(billingCycleId, { postalReceipt: postalSented })
       return true
@@ -217,7 +257,10 @@ export default class BillingCycleResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard(['admin']))
-  async resentInvoiceToEmail(@Ctx() ctx: GraphQLContext, @Arg('billingCycleId') billingCycleId: string): Promise<boolean> {
+  async resentInvoiceToEmail(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('billingCycleId') billingCycleId: string,
+  ): Promise<boolean> {
     try {
       const billingCycleModel = await BillingCycleModel.findById(billingCycleId)
       const customerModel = await UserModel.findById(billingCycleModel.user)
@@ -242,7 +285,7 @@ export default class BillingCycleResolver {
             contact_number: '02-xxx-xxxx',
             movemate_link: `https://www.movematethailand.com`,
           },
-          attachments: [{ filename: path.basename(filePath), path: filePath, }],
+          attachments: [{ filename: path.basename(filePath), path: filePath }],
         })
         await billingCycleModel.updateOne({ emailSendedTime: new Date() })
         console.log(`[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Billing Cycle has sent for ${emails.join(', ')}`)
@@ -256,7 +299,10 @@ export default class BillingCycleResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard(['admin']))
-  async resentReceiptToEmail(@Ctx() ctx: GraphQLContext, @Arg('billingCycleId') billingCycleId: string): Promise<boolean> {
+  async resentReceiptToEmail(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('billingCycleId') billingCycleId: string,
+  ): Promise<boolean> {
     try {
       const billingCycleModel = await BillingCycleModel.findById(billingCycleId)
       const customerModel = await UserModel.findById(billingCycleModel.user)
@@ -280,7 +326,7 @@ export default class BillingCycleResolver {
             contact_number: '02-xxx-xxxx',
             movemate_link: `https://www.movematethailand.com`,
           },
-          attachments: [{ filename: path.basename(filePath), path: filePath, }],
+          attachments: [{ filename: path.basename(filePath), path: filePath }],
         })
         await billingCycleModel.updateOne({ emailSendedReceiptTime: new Date() })
         console.log(`[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Billing Cycle has sent for ${emails.join(', ')}`)
@@ -298,14 +344,16 @@ export default class BillingCycleResolver {
   async isNearbyDuedate(@Ctx() ctx: GraphQLContext): Promise<boolean> {
     const user_id = ctx.req.user_id
     try {
-      const currentday = new Date();
+      const currentday = new Date()
       const today = currentday.setHours(0, 0, 0, 0)
       const threeDaysLater = addDays(currentday, 3).setHours(23, 59, 59, 999)
       const billingCycleModel = await BillingCycleModel.find({
-        user: user_id, billingStatus: EBillingStatus.CURRENT, paymentDueDate: {
+        user: user_id,
+        billingStatus: EBillingStatus.CURRENT,
+        paymentDueDate: {
           $gte: today, // paymentDueDate หลังจากหรือเท่ากับวันนี้
-          $lte: threeDaysLater // และก่อนหรือเท่ากับในอีก 3 วันข้างหน้า
-        }
+          $lte: threeDaysLater, // และก่อนหรือเท่ากับในอีก 3 วันข้างหน้า
+        },
       }).lean()
       return billingCycleModel.length > 0
     } catch (error) {
@@ -314,10 +362,13 @@ export default class BillingCycleResolver {
     }
   }
 
-
   @Query(() => [BillingCycle])
-  @UseMiddleware(AuthGuard(["customer", "admin"]))
-  async monthBilling(@Ctx() ctx: GraphQLContext, @Arg("monthofyear") monthofyear: string, @Args() loadmore: LoadmoreArgs) {
+  @UseMiddleware(AuthGuard(['customer', 'admin']))
+  async monthBilling(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('monthofyear') monthofyear: string,
+    @Args() loadmore: LoadmoreArgs,
+  ) {
     const userId = ctx.req.user_id
     try {
       if (userId) {
@@ -325,7 +376,14 @@ export default class BillingCycleResolver {
         const startDate = startOfMonth(month)
         const endDate = endOfMonth(month)
         console.log('---monthBilling---', startDate, endDate)
-        const billings = await BillingCycleModel.find({ user: userId, issueDate: { $gt: startDate.setHours(0, 0, 0, 0), $lt: endDate.setHours(23, 59, 59, 999) } }).sort({ issueDate: -1, createdAt: -1 }).skip(loadmore.skip).limit(loadmore.limit).exec()
+        const billings = await BillingCycleModel.find({
+          user: userId,
+          issueDate: { $gt: startDate.setHours(0, 0, 0, 0), $lt: endDate.setHours(23, 59, 59, 999) },
+        })
+          .sort({ issueDate: -1, createdAt: -1 })
+          .skip(loadmore.skip)
+          .limit(loadmore.limit)
+          .exec()
         return billings
       }
       return []
@@ -334,15 +392,18 @@ export default class BillingCycleResolver {
     }
   }
   @Query(() => Int)
-  @UseMiddleware(AuthGuard(["customer", "admin"]))
-  async totalMonthBilling(@Ctx() ctx: GraphQLContext, @Arg("monthofyear") monthofyear: string): Promise<number> {
+  @UseMiddleware(AuthGuard(['customer', 'admin']))
+  async totalMonthBilling(@Ctx() ctx: GraphQLContext, @Arg('monthofyear') monthofyear: string): Promise<number> {
     const userId = ctx.req.user_id
     if (userId) {
       const month = parse(monthofyear, 'MM/yyyy', new Date())
       const startDate = startOfMonth(month)
       const endDate = endOfMonth(month)
       console.log('---monthBilling---', startDate, endDate)
-      const total = await BillingCycleModel.countDocuments({ user: userId, issueDate: { $gt: startDate.setHours(0, 0, 0, 0), $lt: endDate.setHours(23, 59, 59, 999) } })
+      const total = await BillingCycleModel.countDocuments({
+        user: userId,
+        issueDate: { $gt: startDate.setHours(0, 0, 0, 0), $lt: endDate.setHours(23, 59, 59, 999) },
+      })
       return total
     }
     return 0

@@ -1,6 +1,6 @@
 import { prop as Property, Severity, getModelForClass } from '@typegoose/typegoose'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
-import { Field, ObjectType, ID } from 'type-graphql'
+import { Field, ObjectType, ID, registerEnumType } from 'type-graphql'
 import UserModel from './user.model'
 import { LoadmoreArgs } from '@inputs/query.input'
 import admin from '@configs/firebase'
@@ -12,6 +12,11 @@ export enum ENavigationType {
   SHIPMENT = 'shipment',
   FINANCE = 'finance',
 }
+registerEnumType(ENavigationType, {
+  name: 'ENavigationType',
+  description: 'Navigation type',
+})
+
 
 export enum ENotificationVarient {
   INFO = 'info',
@@ -20,6 +25,11 @@ export enum ENotificationVarient {
   SUCCESS = 'success',
   MASTER = 'master',
 }
+registerEnumType(ENotificationVarient, {
+  name: 'ENotificationVarient',
+  description: 'Notification varient',
+})
+
 
 interface INotification {
   userId: string

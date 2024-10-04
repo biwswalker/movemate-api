@@ -3,8 +3,8 @@ import { LoadmoreArgs } from '@inputs/query.input'
 import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
-import UserModel, { EDriverStatus } from '@models/user.model'
-import { get, isEqual } from 'lodash'
+import UserModel, { EDriverStatus, EUserType } from '@models/user.model'
+import { get, head, isEqual, reduce, tail, uniq } from 'lodash'
 import IndividualDriverModel, { IndividualDriver } from '@models/driverIndividual.model'
 import { GraphQLError } from 'graphql'
 import { FilterQuery, Types } from 'mongoose'
@@ -17,9 +17,12 @@ import {
   NextShipmentStepInput,
   SentPODDocumentShipmentStepInput,
 } from '@inputs/matching.input'
-import { addDays } from 'date-fns'
+import { addDays, format } from 'date-fns'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { Repeater } from '@graphql-yoga/subscription'
+import BillingCycleModel from '@models/billingCycle.model'
+import { EPaymentMethod } from '@models/payment.model'
+import addEmailQueue from '@utils/email.utils'
 
 // Custom status for driver
 type TShipmentStatus = 'new' | 'progressing' | 'dilivered' | 'cancelled'
@@ -315,6 +318,60 @@ export default class MatchingResolver {
     }
 
     await shipment.finishJob()
+
+    const paymentMethod = get(shipment, 'payment.paymentMethod', '')
+    const customer = await UserModel.findById(shipment.customer)
+    if (paymentMethod === EPaymentMethod.CASH) {
+      if (customer.userType === EUserType.BUSINESS) {
+        const billingCycle = BillingCycleModel.findOne({ shipments: { $in: [shipmentId] } })
+        if (billingCycle.taxAmount > 0) {
+          // Sent email
+          const customerModel = await UserModel.findById(billingCycle.user)
+          if (shipment && customerModel) {
+            const financialEmails = get(customerModel, 'businessDetail.creditPayment.financialContactEmails', [])
+            const emails = uniq([customerModel.email, ...financialEmails])
+
+            const pickup = head(shipment.destinations)?.name || ''
+            const dropoffs = reduce(
+              tail(shipment.destinations),
+              (prev, curr) => {
+                if (curr.name) {
+                  return prev ? `${prev}, ${curr.name}` : curr.name
+                }
+                return prev
+              },
+              '',
+            )
+            const tracking_link = `https://www.movematethailand.com/main/tracking?tracking_number=${shipment.trackingNumber}`
+            await addEmailQueue({
+              from: process.env.NOREPLY_EMAIL,
+              to: emails,
+              subject: `ขอบคุณที่ใช้บริการ Movemate Thailand | Shipment No. ${shipment.trackingNumber}`,
+              template: 'cash_wht_receipt',
+              context: {
+                tracking_number: shipment.trackingNumber,
+                fullname: customerModel.fullname,
+                phone_number: customerModel.contactNumber,
+                email: customerModel.email,
+                customer_type: customerModel.userType === 'individual' ? 'ส่วนบุคคล' : 'บริษัท/องค์กร',
+                pickup,
+                dropoffs,
+                tracking_link,
+                contact_number: '02-xxx-xxxx',
+                movemate_link: `https://www.movematethailand.com`,
+              },
+            })
+            console.log(
+              `[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Billing Cycle has sent for ${emails.join(', ')}`,
+            )
+          }
+        } else {
+          await BillingCycleModel.generateShipmentReceipt(shipmentId, true)
+        }
+      } else {
+        await BillingCycleModel.generateShipmentReceipt(shipmentId, true)
+      }
+    }
     await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.IDLE })
     return true
   }

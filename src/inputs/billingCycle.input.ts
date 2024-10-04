@@ -1,5 +1,6 @@
 import { ArgsType, Field } from "type-graphql";
 import { FileInput } from "./file.input";
+import { EPaymentMethod } from "@models/payment.model";
 
 @ArgsType()
 export class GetBillingCycleArgs {
@@ -15,8 +16,8 @@ export class GetBillingCycleArgs {
   @Field({ nullable: true })
   customerName?: string
 
-  @Field({ nullable: true })
-  paymentMethod?: TPaymentMethod
+  @Field(() => EPaymentMethod, { nullable: true })
+  paymentMethod?: EPaymentMethod
 
   @Field(() => [Date], { nullable: true })
   billedDate?: Date[]
@@ -26,6 +27,9 @@ export class GetBillingCycleArgs {
 
   @Field(() => [Date], { nullable: true })
   receiptDate?: Date[]
+
+  @Field({ nullable: true })
+  shipmentNumber?: string
 }
 
 @ArgsType()

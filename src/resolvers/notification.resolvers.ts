@@ -23,6 +23,7 @@ import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 import { sum } from 'lodash'
 import { decryption } from '@utils/encryption'
 import { Repeater } from '@graphql-yoga/subscription'
+import { EPaymentMethod } from '@models/payment.model'
 
 export async function getAdminMenuNotificationCount(): Promise<AdminNotificationCountPayload> {
   const individualCustomer = await UserModel.countDocuments({
@@ -48,8 +49,13 @@ export async function getAdminMenuNotificationCount(): Promise<AdminNotification
   const shipment = await ShipmentModel.countDocuments({ $or: [{ status: 'idle' }, { status: 'refund' }] }).catch(
     () => 0,
   )
-  const financial = await BillingCycleModel.countDocuments({
+  const financialCash = await BillingCycleModel.countDocuments({
     billingStatus: { $in: [EBillingStatus.VERIFY, EBillingStatus.OVERDUE, EBillingStatus.REFUND] },
+    paymentMethod: EPaymentMethod.CASH,
+  }).catch(() => 0)
+  const financialCredit = await BillingCycleModel.countDocuments({
+    billingStatus: { $in: [EBillingStatus.VERIFY, EBillingStatus.OVERDUE, EBillingStatus.REFUND] },
+    paymentMethod: EPaymentMethod.CREDIT,
   }).catch(() => 0)
 
   const payload: AdminNotificationCountPayload = {
@@ -60,7 +66,9 @@ export async function getAdminMenuNotificationCount(): Promise<AdminNotification
     individualDriver,
     businessDriver,
     shipment,
-    financial,
+    financial: sum([financialCash, financialCredit]),
+    financialCash,
+    financialCredit,
   }
   return payload
 }
