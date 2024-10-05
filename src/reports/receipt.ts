@@ -24,11 +24,11 @@ const sarabunSemiBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-SemiBol
 const sarabunBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-Bold.ttf')
 const sarabunExtraBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-ExtraBold.ttf')
 
-export async function generateReceipt(billingCycle: BillingCycle) {
+export async function generateReceipt(billingCycle: BillingCycle, filname?: string) {
   const billingReceipt = get(billingCycle, 'billingReceipt', {}) as BillingReceipt
 
   const logoPath = path.join(__dirname, '..', 'assets/images/logo_bluesky.png')
-  const fileName = `receipt_${billingReceipt.receiptNumber}.pdf`
+  const fileName = filname ? filname : `receipt_${billingReceipt.receiptNumber}.pdf`
   const filePath = path.join(__dirname, '..', '..', 'generated/receipt', fileName)
 
   const doc = new PDFDocument({ size: 'A4', margins: { top: 60, bottom: 56, left: 22, right: 22 } })
@@ -107,8 +107,9 @@ export async function generateReceipt(billingCycle: BillingCycle) {
     doc.fontSize(8)
     doc.font(sarabunMedium).text('Receipt No.:', 420, doc.y, { align: 'right', width: 74 }) // 81
     doc.font(sarabunLight).text(billingReceipt.receiptNumber, 504, doc.y - 10, { align: 'left' })
-    
-    if (billingCycle.paymentMethod === EPaymentMethod.CREDIT) {
+
+    const isCredit = billingCycle.paymentMethod === EPaymentMethod.CREDIT
+    if (isCredit) {
       doc.moveDown(0.3)
       doc.font(sarabunMedium).text('Invoice No.:', 420, doc.y, { align: 'right', width: 74 }) // 81
       doc.font(sarabunLight).text(billingCycle.billingNumber, 504, doc.y - 10, { align: 'left' })
@@ -122,12 +123,8 @@ export async function generateReceipt(billingCycle: BillingCycle) {
     doc.rect(420, 54, 162, 84).lineWidth(2).stroke()
 
     // Seperate line
-    doc
-      .lineCap('butt')
-      .lineWidth(1.5)
-      .moveTo(22, doc.y + 16)
-      .lineTo(584, doc.y + 16)
-      .stroke()
+    const linesephead = isCredit ? 16 : 29
+    doc.lineCap('butt').lineWidth(1.5).moveTo(22, doc.y + linesephead).lineTo(584, doc.y + linesephead).stroke()
 
     let address = '-'
     const user = get(billingCycle, 'user', undefined) as User | undefined
@@ -149,7 +146,7 @@ export async function generateReceipt(billingCycle: BillingCycle) {
     const businessBranch = get(user, 'businessDetail.businessBranch', '-')
     const taxId = isBusiness ? get(user, 'businessDetail.taxNumber', '-') : get(user, 'individualDetail.taxId', '-')
     // Customer detail
-    doc.moveDown(2.8)
+    doc.moveDown(isCredit ? 2.8 : 3.8)
     doc.font(sarabunMedium).fontSize(7)
     doc.text('ชื่อลูกค้า :', 22)
     doc.text(user.fullname, 110, doc.y - 9)

@@ -65,7 +65,7 @@ export const BILLING_CYCLE_LIST = (
         ...(shipmentNumber ? { 'shipments.trackingNumber': { $regex: shipmentNumber, $options: 'i' } } : {}),
         ...(billingNumber ? { billingNumber: { $regex: billingNumber, $options: 'i' } } : {}),
         ...(paymentMethod ? { paymentMethod } : {}),
-        ...(receiptNumber ? { 'receipt.receiptNumber': { $regex: receiptNumber, $options: 'i' } } : {}),
+        ...(receiptNumber ? { 'billingReceipt.receiptNumber': { $regex: receiptNumber, $options: 'i' } } : {}),
         ...(startIssueDate || endIssueDate
           ? {
               createdAt: {

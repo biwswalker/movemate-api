@@ -20,6 +20,7 @@ import path from 'path'
 import { EPaymentMethod } from '@models/payment.model'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
+import { generateReceipt } from 'reports/receipt'
 
 @Resolver(BillingCycle)
 export default class BillingCycleResolver {
@@ -407,5 +408,13 @@ export default class BillingCycleResolver {
       return total
     }
     return 0
+  }
+  
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(['admin']))
+  async regenerateReceipt(@Arg('billingCycleId') billingCycleId: string): Promise<boolean> {
+    const billing = await BillingCycleModel.findById(billingCycleId)
+    await generateReceipt(billing, billing.issueReceiptFilename)
+    return true
   }
 }
