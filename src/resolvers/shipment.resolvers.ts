@@ -125,6 +125,8 @@ export default class ShipmentResolver {
         ? ['dilivered']
         : status === 'refund'
         ? ['refund']
+        : status === 'cancelled'
+        ? ['cancelled']
         : []
 
     // Create at
@@ -183,7 +185,7 @@ export default class ShipmentResolver {
     const user_id = ctx.req.user_id
     const user_role = ctx.req.user_role
     try {
-      const reformSorts: PaginateOptions = reformPaginate(paginate)
+      const { sort = {}, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
       const filterQuery = omitBy(query, isEmpty)
       console.log(
         'raw: ',
@@ -192,6 +194,7 @@ export default class ShipmentResolver {
             { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery },
             user_role,
             user_id,
+            sort,
           ),
         ),
       )
@@ -200,6 +203,7 @@ export default class ShipmentResolver {
           { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery },
           user_role,
           user_id,
+          sort,
         ),
       )
       const shipments = (await ShipmentModel.aggregatePaginate(
@@ -330,12 +334,14 @@ export default class ShipmentResolver {
         const allCount = await ShipmentModel.countDocuments(filterQuery('all'))
         const progressingCount = await ShipmentModel.countDocuments(filterQuery('progress'))
         const refundCount = await ShipmentModel.countDocuments(filterQuery('refund'))
+        const cancelledCount = await ShipmentModel.countDocuments(filterQuery('cancelled'))
         const finishCount = await ShipmentModel.countDocuments(filterQuery('finish'))
 
         return [
           { label: 'ทั้งหมด', key: 'all', count: allCount },
           { label: 'ดำเนินการ', key: 'progress', count: progressingCount },
-          { label: 'คืนเงินแล้ว', key: 'refund', count: refundCount },
+          { label: 'ยกเลิก', key: 'refund', count: refundCount },
+          { label: 'คืนเงินแล้ว', key: 'cancelled', count: cancelledCount },
           { label: 'เสร็จสิ้น', key: 'finish', count: finishCount },
         ]
       }
@@ -735,7 +741,11 @@ export const cancelShipmentIfNotInterested = async (shipmentId: string) => {
   const shipment = await ShipmentModel.findById(shipmentId)
   const paymentMethod = get(shipment, 'payment.paymentMethod', '')
 
-  if (shipment.driverAcceptanceStatus !== EDriverAcceptanceStatus.PENDING) {
+  if (!shipment) {
+    return
+  }
+
+  if (shipment?.driverAcceptanceStatus !== EDriverAcceptanceStatus.PENDING) {
     return
   }
 
@@ -829,6 +839,8 @@ export const cancelShipmentIfNotInterested = async (shipmentId: string) => {
     }
   }
 
+  const newShipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
+  await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
   console.log(`Shipment ${shipmentId} is cancelled.`)
 }
 
@@ -845,8 +857,11 @@ export const checkShipmentStatus = async (shipmentId: string): Promise<boolean> 
 
 export const sendNewShipmentNotification = async (shipmentId: string, requestDriverId: string): Promise<boolean> => {
   const shipment = await ShipmentModel.findById(shipmentId)
+  if (!shipment) {
+    return false
+  }
 
-  if (shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING) {
+  if (shipment?.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING) {
     const currentTime = new Date().getTime()
     const createdTime = new Date(shipment.createdAt).getTime()
 
@@ -894,7 +909,9 @@ export const sendNewShipmentNotification = async (shipmentId: string, requestDri
             return
           },
         )
-        await NotificationModel.sendFCMNotification(messages)
+        if (!isEmpty(messages)) {
+          await NotificationModel.sendFCMNotification(messages)
+        }
       }
     }
     return true

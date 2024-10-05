@@ -157,6 +157,10 @@ export class BusinessCustomerCreditPayment {
   @Field(() => Float)
   @Property({ required: true })
   creditUsage: number;
+
+  @Field(() => Float, { defaultValue: 0 })
+  @Property({ required: true, default: 0 })
+  creditOutstandingBalance: number;
 }
 
 const BusinessCustomerCreditPaymentModel = getModelForClass(

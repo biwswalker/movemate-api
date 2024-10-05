@@ -282,6 +282,12 @@ export class BillingCycle extends TimeStamps {
           })
 
           await billingCycle.save()
+
+          // Update Outstanding Balance
+          const newBalance = sum([creditPayment.creditOutstandingBalance, totalAmount])
+          await BusinessCustomerCreditPaymentModel.findByIdAndUpdate(creditPayment._id, {
+            creditOutstandingBalance: newBalance,
+          })
         }
       }
     }
@@ -408,10 +414,14 @@ export class BillingCycle extends TimeStamps {
         // Check other billing is overdue
         const customerModel = await UserModel.findById(customerId)
         const creditPaymentId = get(customerModel, 'businessDetail.creditPayment._id', '')
-        if (creditPaymentId) {
+        if (billingCycle.paymentMethod === EPaymentMethod.CREDIT && creditPaymentId) {
           const creditPayment = await BusinessCustomerCreditPaymentModel.findById(creditPaymentId)
+          const newCreditOutstandingBalance = sum([creditPayment.creditOutstandingBalance, -billingCycle.totalAmount])
           const newCreditBalance = sum([creditPayment.creditUsage, -billingCycle.totalAmount])
-          await creditPayment.updateOne({ creditUsage: newCreditBalance })
+          await creditPayment.updateOne({
+            creditUsage: newCreditBalance,
+            creditOutstandingBalance: newCreditOutstandingBalance,
+          })
         }
         // const creditDetail = awa/
         const billingCycles = await BillingCycleModel.find({

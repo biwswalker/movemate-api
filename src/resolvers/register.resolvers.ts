@@ -309,6 +309,7 @@ export default class RegisterResolver {
             },
             creditLimit: _defaultCreditLimit,
             creditUsage: 0,
+            creditOutstandingBalance: 0,
             businessRegistrationCertificateFile: businessRegisCertFileModel,
             copyIDAuthorizedSignatoryFile: copyIDAuthSignatoryFileModel,
             ...(certValueAddedTaxRegisFileModel

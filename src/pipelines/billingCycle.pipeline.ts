@@ -100,8 +100,20 @@ export const BILLING_CYCLE_LIST = (
                 },
                 then: 2,
               },
+              {
+                case: {
+                  $eq: ['$billingStatus', EBillingStatus.CURRENT],
+                },
+                then: 3,
+              },
+              {
+                case: {
+                  $eq: ['$billingStatus', EBillingStatus.PAID],
+                },
+                then: 4,
+              },
             ],
-            default: 3,
+            default: 5,
           },
         },
       },

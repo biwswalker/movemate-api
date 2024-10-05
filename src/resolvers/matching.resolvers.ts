@@ -229,6 +229,9 @@ export default class MatchingResolver {
 
       // await removeMonitorShipmentJob(shipment._id)
 
+      const newShipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
+      await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
+
       return true
     }
     const message = 'ไม่สามารถรับงานขนส่งนี้ได้ เนื่องจากงานขนส่งดังกล่าวมีผู้รับไปแล้ว'
@@ -323,7 +326,7 @@ export default class MatchingResolver {
     const customer = await UserModel.findById(shipment.customer)
     if (paymentMethod === EPaymentMethod.CASH) {
       if (customer.userType === EUserType.BUSINESS) {
-        const billingCycle = BillingCycleModel.findOne({ shipments: { $in: [shipmentId] } })
+        const billingCycle = await BillingCycleModel.findOne({ shipments: { $in: [shipmentId] } }).lean()
         if (billingCycle.taxAmount > 0) {
           // Sent email
           const customerModel = await UserModel.findById(billingCycle.user)

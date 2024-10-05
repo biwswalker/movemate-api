@@ -1,31 +1,48 @@
-import BillingCycleModel, { checkBillingStatus, issueBillingCycle, issueEmailToCustomer, notifyDuedate, notifyIssueEmailToCustomer, notifyNearby1Duedate, notifyNearby3Duedate, notifyOverdue } from '@models/billingCycle.model'
+import {
+  checkBillingStatus,
+  issueBillingCycle,
+  issueEmailToCustomer,
+  notifyDuedate,
+  notifyIssueEmailToCustomer,
+  notifyNearby1Duedate,
+  notifyNearby3Duedate,
+  notifyOverdue,
+} from '@models/billingCycle.model'
 import cron from 'node-cron'
 
 export default async function configureCronjob() {
-  cron.schedule('0 0 * * *', async () => {
-    await issueBillingCycle()
-    await checkBillingStatus()
+  cron.schedule(
+    '0 0 * * *',
+    async () => {
+      await issueBillingCycle()
+      await checkBillingStatus()
 
-    /**
-     * Overdue
-     */
-    await notifyOverdue()
-  }, { timezone: 'Asia/Bangkok' })
+      /**
+       * Overdue
+       */
+      await notifyOverdue()
+    },
+    { timezone: 'Asia/Bangkok' },
+  )
 
-  cron.schedule('0 8 * * *', async () => {
-    /**
-     * Invoice
-     */
-    await issueEmailToCustomer()
-    await notifyIssueEmailToCustomer()
+  cron.schedule(
+    '0 8 * * *',
+    async () => {
+      /**
+       * Invoice
+       */
+      await issueEmailToCustomer()
+      await notifyIssueEmailToCustomer()
 
-    /**
-     * Due Date
-     */
-    await notifyNearby3Duedate()
-    await notifyNearby1Duedate()
-    await notifyDuedate()
-  }, { timezone: 'Asia/Bangkok' })
+      /**
+       * Due Date
+       */
+      await notifyNearby3Duedate()
+      await notifyNearby1Duedate()
+      await notifyDuedate()
+    },
+    { timezone: 'Asia/Bangkok' },
+  )
 
   console.log('🌽 Cronjob started')
   // await checkBillingStatus()

@@ -631,7 +631,7 @@ export class Shipment extends TimeStamps {
                   seq: 0,
                   stepName: EStepDefinitionName.ARRIVAL_DROPOFF,
                   customerMessage: 'ถึงจุดส่งสินค้ากลับ',
-                  driverMessage: 'จุดส่งสินค้ากลับ',
+                  driverMessage: 'ถึงจุดส่งสินค้ากลับ',
                   stepStatus: EStepStatus.IDLE,
                 },
               },
@@ -1013,7 +1013,11 @@ export class Shipment extends TimeStamps {
     const currentStep = find(shipmentModel.steps, ['seq', shipmentModel.currentStepSeq]) as StepDefinition | undefined
     if (currentStep) {
       if (currentStep.step === 'REFUND') {
-        await StepDefinitionModel.findByIdAndUpdate(currentStep._id, { stepStatus: EStepStatus.DONE, customerMessage: 'ดำเนินการคืนเงินแล้ว' })
+        await StepDefinitionModel.findByIdAndUpdate(currentStep._id, {
+          stepStatus: EStepStatus.DONE,
+          customerMessage: 'ดำเนินการคืนเงินแล้ว',
+          driverMessage: 'ดำเนินการคืนเงินแล้ว',
+        })
       }
     }
 
