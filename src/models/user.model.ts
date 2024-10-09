@@ -215,6 +215,10 @@ export class User extends TimeStamps {
   @Property({ default: EDriverStatus.IDLE, required: false })
   drivingStatus?: EDriverStatus
 
+  @Field(() => [String], { nullable: true, defaultValue: [] })
+  @Property({ default: [] })
+  favoriteDrivers?: string[]
+
   @Field({ nullable: true })
   get fullname(): string {
     const userRole = get(this, '_doc.userRole', '') || this.userRole || ''
@@ -304,6 +308,9 @@ export class User extends TimeStamps {
     return ''
   }
 
+  static paginate: mongoose.PaginateModel<typeof User>['paginate']
+  static aggregatePaginate: mongoose.AggregatePaginateModel<typeof User>['aggregatePaginate']
+
   async validatePassword(password: string): Promise<boolean> {
     const password_decryption = decryption(password)
     return bcrypt.compare(password_decryption, this.password)
@@ -323,8 +330,13 @@ export class User extends TimeStamps {
     return !isEmpty(exiting)
   }
 
-  static paginate: mongoose.PaginateModel<typeof User>['paginate']
-  static aggregatePaginate: mongoose.AggregatePaginateModel<typeof User>['aggregatePaginate']
+  async getFavoriteDrivers(): Promise<User[]> {
+    if (!isEmpty(this.favoriteDrivers)) {
+      const favoritDrivers = await UserModel.find({ _id: { $in: this.favoriteDrivers } }).exec()
+      return favoritDrivers
+    }
+    return []
+  }
 }
 
 const UserModel = getModelForClass(User)

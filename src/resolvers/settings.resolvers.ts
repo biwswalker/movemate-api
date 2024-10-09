@@ -190,7 +190,7 @@ export default class SettingsResolver {
     }
 
 
-    @Query(() => SettingCustomerPolicies)
+    @Query(() => SettingCustomerPolicies, { nullable: true })
     async getCustomerPoliciesInfo(): Promise<SettingCustomerPolicies> {
         try {
             const settingCustomerPolicies = await SettingCustomerPoliciesModel.find();
@@ -255,7 +255,7 @@ export default class SettingsResolver {
     }
 
 
-    @Query(() => SettingCustomerTerms)
+    @Query(() => SettingCustomerTerms, { nullable: true })
     async getCustomerTermsInfo(): Promise<SettingCustomerTerms> {
         try {
             const settingCustomerTerms = await SettingCustomerTermsModel.find();
@@ -320,7 +320,7 @@ export default class SettingsResolver {
     }
 
 
-    @Query(() => SettingDriverPolicies)
+    @Query(() => SettingDriverPolicies, { nullable: true })
     async getDriverPoliciesInfo(): Promise<SettingDriverPolicies> {
         try {
             const settingDriverPolicies = await SettingDriverPoliciesModel.find();
@@ -386,7 +386,7 @@ export default class SettingsResolver {
     }
 
 
-    @Query(() => SettingDriverTerms)
+    @Query(() => SettingDriverTerms, { nullable: true })
     async getDriverTermsInfo(): Promise<SettingDriverTerms> {
         try {
             const settingDriverTerms = await SettingDriverTermsModel.find();
@@ -427,7 +427,7 @@ export default class SettingsResolver {
         }
     }
 
-    @Query(() => [SettingBusinessType])
+    @Query(() => [SettingBusinessType], { nullable: true })
     async getBusinessTypeInfo(@Arg("includeOther", { nullable: true }) oncludeOther: boolean = false): Promise<SettingBusinessType[]> {
         try {
             const currentDate = new Date()
@@ -466,7 +466,7 @@ export default class SettingsResolver {
         }
     }
 
-    @Query(() => [SettingFAQ])
+    @Query(() => [SettingFAQ], { nullable: true })
     async getFAQInfo(): Promise<SettingFAQ[]> {
         try {
             const settingFAQs = await SettingFAQModel.find()
@@ -503,7 +503,7 @@ export default class SettingsResolver {
         }
     }
 
-    @Query(() => [SettingInstruction])
+    @Query(() => [SettingInstruction], { nullable: true })
     async getInstructionInfo(): Promise<SettingInstruction[]> {
         try {
             const settingInstruction = await SettingInstructionModel.find()

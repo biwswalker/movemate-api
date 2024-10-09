@@ -21,8 +21,15 @@ export default class BookingResolver {
     try {
       const isAuthorized = !isEmpty(ctx.req.user_id)
       let isBusinessCreditUser = false
+      let faveriteDrivers = []
       if (isAuthorized) {
         const user = await UserModel.findById(ctx.req.user_id)
+        if (user) {
+          const drivers = await user.getFavoriteDrivers()
+          if (drivers) {
+            faveriteDrivers = drivers
+          }
+        }
         if (user && user.userType === 'business') {
           const businessCustomer = user.businessDetail as BusinessCustomer | undefined
           const isCredit = businessCustomer.paymentMethod === 'credit'
@@ -55,6 +62,7 @@ export default class BookingResolver {
       return {
         vehicleCosts,
         paymentMethods,
+        faveriteDrivers,
       }
     } catch (error) {
       console.log(error)
@@ -88,7 +96,7 @@ export default class BookingResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard(['customer']))
-  async removePODAddress(@Ctx() ctx: GraphQLContext, @Arg("id") id: string): Promise<boolean> {
+  async removePODAddress(@Ctx() ctx: GraphQLContext, @Arg('id') id: string): Promise<boolean> {
     const user_id = ctx.req.user_id
     try {
       await PODAddressModel.findOneAndDelete({ user: user_id, _id: new Types.ObjectId(id) })

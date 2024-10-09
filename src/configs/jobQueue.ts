@@ -20,12 +20,20 @@ export interface ShipmentNotifyPayload {
   shipmentId: string
   driverId?: string
   limit: number
-  delay: number
+  each: number
+}
+
+export interface DeleteShipmentPayload extends ShipmentPayload {
+  type?: 'uninterest' | 'idle_customer'
+  message?: string
+  reason?: string
 }
 
 // Notify
 export const shipmentNotifyQueue = new Queue<ShipmentNotifyPayload>('shipmentNotify', { redis: redisOption })
-export const cancelShipmentQueue = new Queue<ShipmentPayload>('cancelShipment', { redis: redisOption })
+export const askCustomerShipmentQueue = new Queue<ShipmentPayload>('askCustomerShipment', { redis: redisOption })
+export const cancelShipmentQueue = new Queue<DeleteShipmentPayload>('cancelShipment', { redis: redisOption })
+export const cancelIdleShipmentQueue = new Queue<DeleteShipmentPayload>('cancelIdleShipment', { redis: redisOption })
 // Email sender
 export const emailSenderQueue = new Queue<Mail.Options & TemplateOptions>('emailSender', { redis: redisOption })
 
@@ -33,7 +41,9 @@ export const emailSenderQueue = new Queue<Mail.Options & TemplateOptions>('email
 export async function obliterateQueue() {
   try {
     await shipmentNotifyQueue.obliterate({ force: true })
+    await askCustomerShipmentQueue.obliterate({ force: true })
     await cancelShipmentQueue.obliterate({ force: true })
+    await cancelIdleShipmentQueue.obliterate({ force: true })
     await emailSenderQueue.obliterate({ force: true })
     console.log('Queue obliterated.')
   } catch (error) {

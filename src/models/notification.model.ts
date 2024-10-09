@@ -17,7 +17,6 @@ registerEnumType(ENavigationType, {
   description: 'Navigation type',
 })
 
-
 export enum ENotificationVarient {
   INFO = 'info',
   ERROR = 'error',
@@ -30,7 +29,6 @@ registerEnumType(ENotificationVarient, {
   description: 'Notification varient',
 })
 
-
 interface INotification {
   userId: string
   varient: ENotificationVarient
@@ -42,6 +40,7 @@ interface INotification {
   errorLink?: string
   masterText?: string
   masterLink?: string
+  permanent?: boolean
   read?: boolean
 }
 
@@ -90,6 +89,10 @@ export class Notification extends TimeStamps {
   @Property()
   masterLink: string
 
+  @Field({ defaultValue: false })
+  @Property({ default: false })
+  permanent?: boolean
+
   @Field()
   @Property({ default: false })
   read: boolean
@@ -108,6 +111,7 @@ export class Notification extends TimeStamps {
     await UserModel.findByIdAndUpdate(data.userId, { $push: { notifications: notification._id } })
     const unreadCount = await NotificationModel.countDocuments({ userId: data.userId, read: false })
     await pubsub.publish(NOTFICATIONS.COUNT, data.userId, unreadCount)
+    // Publish to new noti
   }
   static async sendFCMNotification(data: Message | Message[]): Promise<void> {
     if (isArray(data)) {

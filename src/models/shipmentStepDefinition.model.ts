@@ -31,6 +31,7 @@ export enum EStepDefinition {
   REJECTED_PAYMENT = 'REJECTED_PAYMENT',
   UNINTERESTED_DRIVER = 'UNINTERESTED_DRIVER',
   REFUND = 'REFUND',
+  OTHER = 'OTHER',
 }
 registerEnumType(EStepDefinition, {
   name: 'EStepDefinition',
@@ -51,6 +52,7 @@ export enum EStepDefinitionName {
   REJECTED_PAYMENT = 'ไม่อนุมัติการชำระเงิน',
   UNINTERESTED_DRIVER = 'ไม่มีคนขับตอบรับงานนี้',
   REFUND = 'ดำเนินการคืนเงิน',
+  OTHER = 'อื่นๆ',
 }
 registerEnumType(EStepDefinitionName, {
   name: 'EStepDefinitionName',

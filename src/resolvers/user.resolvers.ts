@@ -563,6 +563,7 @@ export default class UserResolver {
             title: title,
             message: messages,
           })
+          // TODO: Handle FCM Notification and Websocket (Need to handle store FCM token in register success)
         } else if (user.userType === 'business') {
           // TODO: BUSINESS
         } else {

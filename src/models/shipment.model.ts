@@ -45,7 +45,7 @@ import { FileInput } from '@inputs/file.input'
 import Aigle from 'aigle'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
 import UpdateHistoryModel, { UpdateHistory } from './updateHistory.model'
-import RefundModel, { ERefundStatus, Refund } from './refund.model'
+import { Refund } from './refund.model'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
 import NotificationModel, { ENotificationVarient } from './notification.model'
@@ -56,9 +56,7 @@ import TransactionModel, {
   ETransactionType,
   MOVEMATE_OWNER_ID,
 } from './transaction.model'
-import IndividualDriverModel, { IndividualDriver } from './driverIndividual.model'
-import { differenceInMinutes } from 'date-fns'
-import BillingCycleModel, { refundCashBillingCycle } from './billingCycle.model'
+import IndividualDriverModel from './driverIndividual.model'
 
 Aigle.mixin(lodash, {})
 
@@ -375,6 +373,14 @@ export class Shipment extends TimeStamps {
   @Property({ required: false })
   cancelledDate?: Date
 
+  @Field({ defaultValue: 0 })
+  @Property({ required: false, default: 0 })
+  notificationCount?: number
+
+  @Field({ defaultValue: false })
+  @Property({ required: false, default: false })
+  isNotificationPause?: boolean
+
   static paginate: mongoose.PaginateModel<typeof Shipment>['paginate']
   static aggregatePaginate: mongoose.AggregatePaginateModel<typeof Shipment>['aggregatePaginate']
 
@@ -672,7 +678,7 @@ export class Shipment extends TimeStamps {
             step: EStepDefinition.FINISH,
             seq: 0,
             stepName: EStepDefinitionName.FINISH,
-            customerMessage: 'ยืนยันการจัดส่งสำเร็จ',
+            customerMessage: 'รอยืนยันการจบงาน',
             driverMessage: 'ยืนยันการจัดส่งสำเร็จ',
             stepStatus: EStepStatus.IDLE,
           },
@@ -880,7 +886,7 @@ export class Shipment extends TimeStamps {
     if (result === 'approve') {
       const currentStep = find(shipmentModel.steps, ['seq', shipmentModel.currentStepSeq]) as StepDefinition | undefined
       if (currentStep) {
-        if (currentStep.step === 'CASH_VERIFY') {
+        if (currentStep.step === EStepDefinition.CASH_VERIFY) {
           shipmentModel.nextStep()
         }
       }
@@ -950,7 +956,7 @@ export class Shipment extends TimeStamps {
         // Add refund step
         const newLatestSeq = lastStep.seq + 1
         const refundStep = new StepDefinitionModel({
-          step: 'REFUND',
+          step: EStepDefinition.REFUND,
           seq: newLatestSeq,
           stepName: EStepDefinitionName.REFUND,
           customerMessage: EStepDefinitionName.REFUND,
@@ -1012,7 +1018,7 @@ export class Shipment extends TimeStamps {
 
     const currentStep = find(shipmentModel.steps, ['seq', shipmentModel.currentStepSeq]) as StepDefinition | undefined
     if (currentStep) {
-      if (currentStep.step === 'REFUND') {
+      if (currentStep.step === EStepDefinition.REFUND) {
         await StepDefinitionModel.findByIdAndUpdate(currentStep._id, {
           stepStatus: EStepStatus.DONE,
           customerMessage: 'ดำเนินการคืนเงินแล้ว',
@@ -1077,8 +1083,8 @@ export class Shipment extends TimeStamps {
       }
     }
     const query = {
-      status: 'idle',
-      driverAcceptanceStatus: 'pending',
+      status: EShipingStatus.IDLE,
+      driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
       ...(vehicleId ? { vehicleId } : {}),
       $or: [
         { requestedDriver: { $exists: false } }, // ไม่มี requestedDriver

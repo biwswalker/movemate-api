@@ -32,6 +32,7 @@ import BillingPaymentResolver from '@resolvers/billingPayment.resolvers'
 import TransactionResolver from '@resolvers/transaction.resolvers'
 import CancellationResolver from '@resolvers/cancellation.resolvers'
 import { verifyAccessToken } from '@utils/auth.utils'
+import FavoriteDriverResolver from '@resolvers/favoritedrivers.resolvers'
 
 export interface GraphQLContext {
   req: Request
@@ -72,6 +73,7 @@ export async function createGraphQLServer(httpServer: http.Server) {
       BillingPaymentResolver,
       TransactionResolver,
       CancellationResolver,
+      FavoriteDriverResolver,
     ],
     pubSub: pubSub,
     authChecker: ({ context }: { context: GraphQLContext }) => {
