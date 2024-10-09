@@ -1,7 +1,7 @@
 import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { GetShipmentArgs, ShipmentInput } from '@inputs/shipment.input'
-import PaymentModel, { CashDetail, EPaymentMethod } from '@models/payment.model'
+import PaymentModel, { CashDetail, EPaymentMethod, Payment } from '@models/payment.model'
 import ShipmentModel, {
   EDriverAcceptanceStatus,
   EShipingStatus,
@@ -39,7 +39,9 @@ import { format, parse } from 'date-fns'
 import { th } from 'date-fns/locale'
 import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
 import { clearLimiter, ELimiterType } from '@configs/rateLimit'
-import BusinessCustomerCreditPaymentModel from '@models/customerBusinessCreditPayment.model'
+import BusinessCustomerCreditPaymentModel, {
+  BusinessCustomerCreditPayment,
+} from '@models/customerBusinessCreditPayment.model'
 import { REPONSE_NAME } from 'constants/status'
 import {
   cancelShipmentQueue,
@@ -275,7 +277,8 @@ export default class ShipmentResolver {
     const user_role = ctx.req.user_role
     try {
       // Pagination
-      const reformSorts = reformPaginate(paginateOpt)
+      console.log('----------------------', paginateOpt)
+      const reformSorts = reformPaginate({ ...paginateOpt })
       const paginate = { skip, ...reformSorts }
       const filterQuery = this.shipmentQuery(args, user_role, user_id)
 
@@ -626,7 +629,7 @@ export default class ShipmentResolver {
         status,
         adminAcceptanceStatus,
         driverAcceptanceStatus,
-        requestedDriver: favoriteDriverId,
+        ...(favoriteDriverId ? { requestedDriver: favoriteDriverId } : {}),
         // statusLog: [startStatus]
       })
       await shipment.save()
@@ -803,24 +806,12 @@ export async function shipmentNotify(shipmentId: string, driverId: string) {
       drivingStatus: EDriverStatus.IDLE,
     }).lean()
     if (driver) {
-      // const DELAY_1 = TENMIN * LIMIT_3 + TENMIN
-      // const DELAY_2 = DELAY_1 + TENMIN * LIMIT_12 + TENMIN
-      // const DELAY_3 = DELAY_2 + FIVEMIN * LIMIT_6 + FIVEMIN
       await shipmentNotifyQueue.add({ shipmentId, driverId, each: TENMIN, limit: LIMIT_3 })
-      // ไม่มีการตอบรับจากคนขับคนโปรด
-      // Sent noti
-      // shipmentNotifyQueue.add({ shipmentId, delay: TENMIN, limit: LIMIT_12 }, { delay: DELAY_1 })
-      // shipmentNotifyQueue.add({ shipmentId, delay: FIVEMIN, limit: LIMIT_6 }, { delay: DELAY_2 })
-      // cancelShipmentQueue.add({ shipmentId }, { delay: DELAY_3 })
       return
     }
   }
-  // const DELAY_1 = TENMIN * LIMIT_12 + TENMIN
-  // const DELAY_2 = DELAY_1 + FIVEMIN * LIMIT_6 + FIVEMIN
   await shipmentNotifyQueue.add({ shipmentId, each: TENMIN, limit: LIMIT_12 })
   await ShipmentModel.findByIdAndUpdate(shipmentId, { notificationCount: 1 })
-  // shipmentNotifyQueue.add({ shipmentId, delay: FIVEMIN, limit: LIMIT_6 }, { delay: DELAY_1 })
-  // cancelShipmentQueue.add({ shipmentId }, { delay: DELAY_2 })
   return
 }
 
@@ -878,8 +869,19 @@ export const cancelShipmentIfNotInterested = async (
           ...waitDriverStepChangeData,
         })
       })
+      // Add system cancelled step
+      const systemCancelledSeq = lastStep.seq + 1
+      const systemCancelledStep = new StepDefinitionModel({
+        step: EStepDefinition.SYSTEM_CANCELLED,
+        seq: systemCancelledSeq,
+        stepName: EStepDefinitionName.SYSTEM_CANCELLED,
+        customerMessage: EStepDefinitionName.SYSTEM_CANCELLED,
+        driverMessage: EStepDefinitionName.SYSTEM_CANCELLED,
+        stepStatus: EStepStatus.DONE,
+      })
+      await systemCancelledStep.save()
       // Add refund step
-      const newLatestSeq = lastStep.seq + 1
+      const newLatestSeq = lastStep.seq + 2
       const refundStep = new StepDefinitionModel({
         step: EStepDefinition.REFUND,
         seq: newLatestSeq,
@@ -894,40 +896,91 @@ export const cancelShipmentIfNotInterested = async (
       await shipment.updateOne({
         status: EShipingStatus.REFUND,
         driverAcceptanceStatus: EDriverAcceptanceStatus.UNINTERESTED,
-        rejectedReason: cancelReason,
-        rejectedDetail:
-          cancelMessage === 'ระบบทำการยกเลิกอัตโนมัติเนื่องจากไม่มีการกดดำเนินการในระยะเวลาที่กำหนด'
-            ? 'ยกเลิกโดยระบบ'
-            : cancelMessage,
+        cancellationReason: cancelReason,
+        cancellationDetail: cancelMessage,
+        cancelledDate: new Date().toISOString(),
         refund: _refund,
         currentStepSeq: newLatestSeq,
         $push: { steps: refundStep._id },
       })
     }
 
-    // TODO: Sent notification to cash customer
+    await NotificationModel.sendNotification({
+      userId: get(shipment, 'customer._id', ''),
+      varient: ENotificationVarient.WRANING,
+      title: 'การจองของท่านถูกยกเลิกอัตโนมัติ',
+      message: [
+        `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${shipment.trackingNumber} ระบบทำการยกเลิกอัตโนมัติเนื่องจากเลยระยะเวลาที่กำหนด และจะดำเนินการคืนให้ท่านในไม่ช้า`,
+      ],
+      infoText: 'ดูงานขนส่ง',
+      infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
+    })
   } else {
     const currentStep = find(shipment.steps, ['seq', shipment.currentStepSeq]) as StepDefinition | undefined
+    const lastStep = last(shipment.steps) as StepDefinition
     if (currentStep) {
       // Update Shipment
-      await StepDefinitionModel.findByIdAndUpdate(currentStep._id, {
-        stepStatus: EStepStatus.CANCELLED,
-        step: EStepDefinition.UNINTERESTED_DRIVER,
-        stepName: EStepDefinitionName.UNINTERESTED_DRIVER,
-        customerMessage: EStepDefinitionName.UNINTERESTED_DRIVER,
-        driverMessage: EStepDefinitionName.UNINTERESTED_DRIVER,
+      const deniedSteps = filter(shipment.steps as StepDefinition[], (step) => step.seq >= currentStep.seq)
+      await Aigle.forEach(deniedSteps, async (step) => {
+        const isWaitDriverStep = step.step === EStepDefinition.DRIVER_ACCEPTED && step.seq === currentStep.seq
+        const waitDriverStepChangeData = isWaitDriverStep
+          ? {
+              step: EStepDefinition.UNINTERESTED_DRIVER,
+              stepName: EStepDefinitionName.UNINTERESTED_DRIVER,
+              customerMessage: EStepDefinitionName.UNINTERESTED_DRIVER,
+              driverMessage: EStepDefinitionName.UNINTERESTED_DRIVER,
+            }
+          : {}
+        await StepDefinitionModel.findByIdAndUpdate(step._id, {
+          stepStatus: EStepStatus.CANCELLED,
+          ...waitDriverStepChangeData,
+        })
       })
+      // Add system cancelled step
+      const systemCancelledSeq = lastStep.seq + 1
+      const systemCancelledStep = new StepDefinitionModel({
+        step: EStepDefinition.SYSTEM_CANCELLED,
+        seq: systemCancelledSeq,
+        stepName: EStepDefinitionName.SYSTEM_CANCELLED,
+        customerMessage: EStepDefinitionName.SYSTEM_CANCELLED,
+        driverMessage: EStepDefinitionName.SYSTEM_CANCELLED,
+        stepStatus: EStepStatus.DONE,
+      })
+      await systemCancelledStep.save()
+
       await shipment.updateOne({
         status: EShipingStatus.CANCELLED,
         driverAcceptanceStatus: EDriverAcceptanceStatus.UNINTERESTED,
-        rejectedReason: cancelReason,
-        rejectedDetail:
-          cancelMessage === 'ระบบทำการยกเลิกอัตโนมัติเนื่องจากไม่มีการกดดำเนินการในระยะเวลาที่กำหนด'
-            ? 'ยกเลิกโดยระบบ'
-            : cancelMessage,
+        cancellationReason: cancelReason,
+        cancellationDetail: cancelMessage,
+        cancelledDate: new Date().toISOString(),
+        currentStepSeq: systemCancelledSeq,
+        $push: { steps: systemCancelledStep._id },
       })
 
-      // TODO: Sent notification to credit customer
+      const totalPaid = get(shipment, 'payment.invoice.totalPrice', 0)
+      const user = await UserModel.findById(shipment.customer)
+      const creditDetail = get(user, 'businessDetail.creditPayment', undefined) as
+        | BusinessCustomerCreditPayment
+        | undefined
+      if (creditDetail) {
+        const newCreditBalance = creditDetail.creditUsage - totalPaid
+        await BusinessCustomerCreditPaymentModel.findByIdAndUpdate(creditDetail._id, {
+          creditUsage: newCreditBalance,
+        })
+      }
+
+      await NotificationModel.sendNotification({
+        userId: get(shipment, 'customer._id', ''),
+        varient: ENotificationVarient.WRANING,
+        title: 'การจองของท่านถูกยกเลิกอัตโนมัติ',
+        message: [
+          `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${shipment.trackingNumber} ระบบทำการยกเลิกอัตโนมัติเนื่องจากเลยระยะเวลาที่กำหนด`,
+        ],
+
+        infoText: 'ดูงานขนส่ง',
+        infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
+      })
     }
   }
 

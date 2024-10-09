@@ -32,6 +32,8 @@ export enum EStepDefinition {
   UNINTERESTED_DRIVER = 'UNINTERESTED_DRIVER',
   REFUND = 'REFUND',
   OTHER = 'OTHER',
+  CUSTOMER_CANCELLED = 'CUSTOMER_CANCELLED',
+  SYSTEM_CANCELLED = 'SYSTEM_CANCELLED',
 }
 registerEnumType(EStepDefinition, {
   name: 'EStepDefinition',
@@ -53,6 +55,8 @@ export enum EStepDefinitionName {
   UNINTERESTED_DRIVER = 'ไม่มีคนขับตอบรับงานนี้',
   REFUND = 'ดำเนินการคืนเงิน',
   OTHER = 'อื่นๆ',
+  CUSTOMER_CANCELLED = 'ลูกค้ายกเลิกงานขนส่ง',
+  SYSTEM_CANCELLED = 'ระบบยกเลิกงานขนส่ง',
 }
 registerEnumType(EStepDefinitionName, {
   name: 'EStepDefinitionName',

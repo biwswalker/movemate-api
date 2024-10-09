@@ -8,7 +8,22 @@ import { BusinessCustomer } from './customerBusiness.model'
 import BusinessCustomerCreditPaymentModel, {
   BusinessCustomerCreditPayment,
 } from './customerBusinessCreditPayment.model'
-import lodash, { get, isEmpty, reduce, sum, toNumber, toString, uniq, includes, isEqual, head, tail } from 'lodash'
+import lodash, {
+  get,
+  isEmpty,
+  reduce,
+  sum,
+  toNumber,
+  toString,
+  uniq,
+  includes,
+  isEqual,
+  head,
+  tail,
+  find,
+  last,
+  filter,
+} from 'lodash'
 import { addDays, addMonths, differenceInDays, differenceInMinutes, format } from 'date-fns'
 import { EPaymentMethod, EPaymentRejectionReason, Payment } from './payment.model'
 import { generateTrackingNumber } from '@utils/string.utils'
@@ -39,6 +54,13 @@ import { VehicleType } from './vehicleType.model'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
 import { generateReceipt } from 'reports/receipt'
+import StepDefinitionModel, {
+  EStepDefinition,
+  EStepDefinitionName,
+  EStepStatus,
+  StepDefinition,
+} from './shipmentStepDefinition.model'
+import pubsub, { SHIPMENTS } from '@configs/pubsub'
 
 Aigle.mixin(lodash, {})
 
@@ -569,14 +591,28 @@ export class BillingCycle extends TimeStamps {
       /**
        * Sent notification
        */
-      await NotificationModel.sendNotification({
-        userId: billingCycle.user as string,
-        varient: ENotificationVarient.INFO,
-        title: 'การจองของท่านดำเนินคืนยอดชำระแล้ว',
-        message: [`เราขอแจ้งให้ท่าทราบว่าใบแจ้งหนี้เลขที่ ${billingCycle.billingNumber} ของท่านดำเนินคืนยอดชำระแล้ว`],
-        // infoText: 'ดูการจอง',
-        // infoLink: `/main/tracking?tracking_number=${billingCycle.billingNumber}`,
-      })
+      if (billingCycle.paymentMethod === EPaymentMethod.CASH) {
+        const shipment = get(shipments, 0, undefined) as Shipment | undefined
+        if (shipment) {
+          await NotificationModel.sendNotification({
+            userId: billingCycle.user as string,
+            varient: ENotificationVarient.SUCCESS,
+            title: 'การจองของท่านดำเนินคืนยอดชำระแล้ว',
+            message: [`เราขอแจ้งให้ท่าทราบว่างานขนส่งหมายเลข ${shipment.trackingNumber} ของท่านดำเนินคืนยอดชำระแล้ว`],
+            infoText: 'ดูงานขนส่ง',
+            infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
+          })
+        }
+      } else {
+        await NotificationModel.sendNotification({
+          userId: billingCycle.user as string,
+          varient: ENotificationVarient.SUCCESS,
+          title: 'การจองของท่านดำเนินคืนยอดชำระแล้ว',
+          message: [`เราขอแจ้งให้ท่าทราบว่าใบแจ้งหนี้เลขที่ ${billingCycle.billingNumber} ของท่านดำเนินคืนยอดชำระแล้ว`],
+          infoText: 'ดูข้อมูลการเงิน',
+          infoLink: `/main/billing?billing_number=${billingCycle.billingNumber}`,
+        })
+      }
       /**
        * Sent email
        * TODO:
@@ -629,14 +665,30 @@ export class BillingCycle extends TimeStamps {
       /**
        * Sent notification
        */
-      await NotificationModel.sendNotification({
-        userId: billingCycle.user as string,
-        varient: ENotificationVarient.INFO,
-        title: 'การจองของท่านไม่ได้รับการคืนยอดชำระ',
-        message: [`เราขอแจ้งให้ท่าทราบว่าใบแจ้งหนี้เลขที่ ${billingCycle.billingNumber} ของท่านไม่ถูกดำเนินคืนยอดชำระ`],
-        // infoText: 'ดูการจอง',
-        // infoLink: `/main/tracking?tracking_number=${billingCycle.billingNumber}`,
-      })
+      if (billingCycle.paymentMethod === EPaymentMethod.CASH) {
+        const shipment = get(shipments, 0, undefined) as Shipment | undefined
+        if (shipment) {
+          await NotificationModel.sendNotification({
+            userId: billingCycle.user as string,
+            varient: ENotificationVarient.WRANING,
+            title: 'การจองของท่านไม่ได้รับการคืนยอดชำระ',
+            message: [`เราขอแจ้งให้ท่าทราบว่างานขนส่งหมายเลข ${shipment.trackingNumber} ของท่านไม่ถูกดำเนินคืนยอดชำระ`],
+            infoText: 'ดูงานขนส่ง',
+            infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
+          })
+        }
+      } else {
+        await NotificationModel.sendNotification({
+          userId: billingCycle.user as string,
+          varient: ENotificationVarient.WRANING,
+          title: 'การจองของท่านไม่ได้รับการคืนยอดชำระ',
+          message: [
+            `เราขอแจ้งให้ท่าทราบว่าใบแจ้งหนี้เลขที่ ${billingCycle.billingNumber} ของท่านไม่ถูกดำเนินคืนยอดชำระ`,
+          ],
+          infoText: 'ดูข้อมูลการเงิน',
+          infoLink: `/main/billing?billing_number=${billingCycle.billingNumber}`,
+        })
+      }
       /**
        * Sent email
        * TODO:
@@ -725,28 +777,136 @@ export class BillingCycle extends TimeStamps {
       await driverTransaction.save()
     }
 
-    // หากเป็น cash payment ให้เปลี่ยนสถานะ refund billing cycle
+    const currentStep = find(shipment.steps, ['seq', shipment.currentStepSeq]) as StepDefinition | undefined
+    const lastStep = last(shipment.steps) as StepDefinition
+
     if (isCashPayment) {
+      // หากเป็น cash payment ให้เปลี่ยนสถานะ refund billing cycle
       await refundCashBillingCycle(shipment._id, _refund._id, reasonDetail)
+
+      if (currentStep) {
+        const deniedSteps = filter(shipment.steps as StepDefinition[], (step) => step.seq >= currentStep.seq)
+        await Aigle.forEach(deniedSteps, async (step) => {
+          await StepDefinitionModel.findByIdAndUpdate(step._id, { stepStatus: EStepStatus.CANCELLED })
+        })
+        // Add customer cancelled step
+        const customerCancelledSeq = lastStep.seq + 1
+        const customerCancelledStep = new StepDefinitionModel({
+          step: EStepDefinition.CUSTOMER_CANCELLED,
+          seq: customerCancelledSeq,
+          stepName: EStepDefinitionName.CUSTOMER_CANCELLED,
+          customerMessage: EStepDefinitionName.CUSTOMER_CANCELLED,
+          driverMessage: EStepDefinitionName.CUSTOMER_CANCELLED,
+          stepStatus: EStepStatus.DONE,
+        })
+        await customerCancelledStep.save()
+        // Add refund step
+        const newLatestSeq = lastStep.seq + 2
+        const refundStep = new StepDefinitionModel({
+          step: EStepDefinition.REFUND,
+          seq: newLatestSeq,
+          stepName: EStepDefinitionName.REFUND,
+          customerMessage: EStepDefinitionName.REFUND,
+          driverMessage: EStepDefinitionName.REFUND,
+          stepStatus: EStepStatus.PROGRESSING,
+        })
+        await refundStep.save()
+
+        // Update shipment status
+        await ShipmentModel.findByIdAndUpdate(shipment._id, {
+          status: EShipingStatus.REFUND,
+          refund: _refund,
+          cancellationReason: reason,
+          cancellationDetail: reasonDetail,
+          driverAcceptanceStatus: EDriverAcceptanceStatus.UNINTERESTED,
+          cancelledDate: currentDate,
+          currentStepSeq: newLatestSeq,
+          $push: { steps: [customerCancelledStep._id, refundStep._id] },
+        })
+      }
+
+      /**
+       * Notification & Email
+       * (Done) To Customer
+       * (Skip) To Driver & FCM to Driver
+       * To Admin
+       *
+       * update system transactions
+       */
+      await NotificationModel.sendNotification({
+        userId,
+        varient: ENotificationVarient.WRANING,
+        title: 'การจองของท่านถูกยกเลิกแล้ว',
+        message: [
+          `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${shipment.trackingNumber} ของท่านได้ยกเลิกแล้วโดยท่านเอง`,
+          'ระบบกำลังคำนวนยอดคืนเงิน และจะดำเนินการคืนให้ท่านในไม่ช้า',
+        ],
+        infoText: 'ดูงานขนส่ง',
+        infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
+      })
+    } else {
+      // Credit process
+      const currentStep = find(shipment.steps, ['seq', shipment.currentStepSeq]) as StepDefinition | undefined
+      if (currentStep) {
+        const deniedSteps = filter(shipment.steps as StepDefinition[], (step) => step.seq >= currentStep.seq)
+        await Aigle.forEach(deniedSteps, async (step) => {
+          await StepDefinitionModel.findByIdAndUpdate(step._id, { stepStatus: EStepStatus.CANCELLED })
+        })
+        // Add customer cancelled step
+        const customerCancelledSeq = lastStep.seq + 1
+        const customerCancelledStep = new StepDefinitionModel({
+          step: EStepDefinition.CUSTOMER_CANCELLED,
+          seq: customerCancelledSeq,
+          stepName: EStepDefinitionName.CUSTOMER_CANCELLED,
+          customerMessage: EStepDefinitionName.CUSTOMER_CANCELLED,
+          driverMessage: EStepDefinitionName.CUSTOMER_CANCELLED,
+          stepStatus: EStepStatus.DONE,
+        })
+        await customerCancelledStep.save()
+
+        const user = await UserModel.findById(shipment.customer)
+        const creditDetail = get(user, 'businessDetail.creditPayment', undefined) as
+          | BusinessCustomerCreditPayment
+          | undefined
+        if (creditDetail) {
+          const newCreditBalance = creditDetail.creditUsage - forCustomer
+          await BusinessCustomerCreditPaymentModel.findByIdAndUpdate(creditDetail._id, {
+            creditUsage: newCreditBalance,
+          })
+        }
+        // Update shipment status
+        await ShipmentModel.findByIdAndUpdate(shipment._id, {
+          status: EShipingStatus.CANCELLED,
+          refund: _refund,
+          driverAcceptanceStatus: EDriverAcceptanceStatus.UNINTERESTED,
+          cancellationReason: reason,
+          cancellationDetail: reasonDetail,
+          cancelledDate: currentDate,
+          currentStepSeq: customerCancelledSeq,
+          $push: { steps: customerCancelledStep._id },
+        })
+      }
+      /**
+       * Notification & Email
+       * (Done) To Customer
+       * (Skip) To Driver & FCM to Driver
+       * To Admin
+       *
+       * update system transactions
+       */
+      await NotificationModel.sendNotification({
+        userId,
+        varient: ENotificationVarient.WRANING,
+        title: 'การจองของท่านถูกยกเลิกแล้ว',
+        message: [`เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${shipment.trackingNumber} ของท่านได้ยกเลิกแล้วโดยท่านเอง`],
+        infoText: 'ดูงานขนส่ง',
+        infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
+      })
     }
 
-    // Update shipment status
-    await ShipmentModel.findByIdAndUpdate(shipment._id, {
-      status: EShipingStatus.REFUND,
-      refund: _refund,
-      cancellationReason: reason,
-      cancellationDetail: reasonDetail,
-      cancelledDate: currentDate,
-    })
-
-    /**
-     * Notification & Email
-     * To Customer
-     * To Driver & FCM to Driver
-     * To Admin
-     *
-     * update system transactions
-     */
+    const newShipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
+    await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
+    console.log(`Shipment ${shipmentId} is cancelled.`)
   }
 
   static async driverRefund(shipmentId: string, userId: string, reason: string, reasonDetail: string) {
