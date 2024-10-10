@@ -253,11 +253,18 @@ export class BillingCycle extends TimeStamps {
           const shipmentStartDeliveredDate = addMonths(billedDate, -1).setHours(0, 0, 0, 0)
           const shipmentEndDeliveredDate = addDays(billedDate, -1).setHours(23, 59, 59, 999)
 
-          const shipments = await ShipmentModel.find({
+          const shipmentsRaw = await ShipmentModel.find({
             customer: userId,
             status: EShipingStatus.DELIVERED,
             deliveredDate: { $gte: shipmentStartDeliveredDate, $lte: shipmentEndDeliveredDate },
-          }).populate({ path: 'payment', match: { paymentMethod: EPaymentMethod.CREDIT } })
+          })
+
+          const shipments = filter(shipmentsRaw, (shipment) => {
+            const paymentMethod = get(shipment, 'payment.paymentMethod', '')
+            const isCredit = paymentMethod === EPaymentMethod.CREDIT
+            return isCredit
+          })
+          // .populate({ path: 'payment', match: { paymentMethod: EPaymentMethod.CREDIT } })
 
           if (isEmpty(shipments)) {
             return // If Empty shipment won't create an billing
