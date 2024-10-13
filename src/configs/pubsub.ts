@@ -5,6 +5,7 @@ import { AdminNotificationCountPayload } from '@payloads/notification.payloads'
 
 export const enum NOTFICATIONS {
   COUNT = 'COUNT',
+  PROGRESSING_SHIPMENT = 'PROGRESSING_SHIPMENT',
   GET_MENU_BADGE_COUNT = 'GET_MENU_BADGE_COUNT',
 }
 
@@ -18,6 +19,7 @@ export const enum LOCATIONS {
 
 export default createPubSub<{
   [NOTFICATIONS.COUNT]: [string, number]
+  [NOTFICATIONS.PROGRESSING_SHIPMENT]: [string, number]
   [NOTFICATIONS.GET_MENU_BADGE_COUNT]: [AdminNotificationCountPayload]
   [LOCATIONS.REQUEST_LIMIT]: [LocationRequestLimitPayload]
   [SHIPMENTS.GET_MATCHING_SHIPMENT]: [Shipment[]]

@@ -23,3 +23,12 @@ export class AdminNotificationCountPayload {
   @Field(() => Int)
   financialCredit: number
 }
+
+
+@ObjectType()
+export class UnreadCountPayload {
+  @Field(() => Int)
+  notification: number
+  @Field(() => Int)
+  shipment: number
+}

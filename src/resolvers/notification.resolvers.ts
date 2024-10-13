@@ -15,8 +15,8 @@ import NotificationModel, { ENavigationType, Notification } from '@models/notifi
 import { LoadmoreArgs } from '@inputs/query.input'
 import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
-import { AdminNotificationCountPayload } from '@payloads/notification.payloads'
-import ShipmentModel from '@models/shipment.model'
+import { AdminNotificationCountPayload, UnreadCountPayload } from '@payloads/notification.payloads'
+import ShipmentModel, { EShipingStatus } from '@models/shipment.model'
 import UserModel, { EUserRole } from '@models/user.model'
 import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
@@ -96,16 +96,21 @@ export default class NotificationResolver {
     return undefined
   }
 
-  @Query(() => Int)
+  @Query(() => UnreadCountPayload)
   @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
-  async unreadCount(@Ctx() ctx: GraphQLContext): Promise<number> {
+  async unreadCount(@Ctx() ctx: GraphQLContext): Promise<UnreadCountPayload> {
     const userId = ctx.req.user_id
     if (userId) {
-      const notifications = await NotificationModel.countDocuments({ userId, read: false })
-      await pubsub.publish(NOTFICATIONS.COUNT, userId, notifications)
-      return notifications
+      const notification = await NotificationModel.countDocuments({ userId, read: false })
+      await pubsub.publish(NOTFICATIONS.COUNT, userId, notification)
+      const shipment = await ShipmentModel.countDocuments({
+        customer: userId,
+        status: { $in: [EShipingStatus.IDLE, EShipingStatus.PROGRESSING, EShipingStatus.REFUND] },
+      })
+      await pubsub.publish(NOTFICATIONS.PROGRESSING_SHIPMENT, userId, shipment)
+      return { notification, shipment }
     }
-    return 0
+    return { notification: 0, shipment: 0 }
   }
 
   @Query(() => Int)
@@ -180,6 +185,14 @@ export default class NotificationResolver {
     topicId: ({ context }: SubscribeResolverData<number, any, AuthContext>) => context.user_id,
   })
   listenNotificationCount(@Root() payload: number, @Ctx() context: AuthContext): number {
+    return payload
+  }
+
+  @Subscription({
+    topics: NOTFICATIONS.PROGRESSING_SHIPMENT,
+    topicId: ({ context }: SubscribeResolverData<number, any, AuthContext>) => context.user_id,
+  })
+  listenProgressingShipmentCount(@Root() payload: number): number {
     return payload
   }
 }
