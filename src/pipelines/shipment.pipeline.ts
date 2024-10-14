@@ -18,6 +18,8 @@ export const SHIPMENT_LIST = (
     customerName,
     driverName,
     driverAgentName,
+    customerId,
+    driverId,
   }: GetShipmentArgs,
   user_role: string | undefined,
   user_id: string | undefined,
@@ -48,6 +50,8 @@ export const SHIPMENT_LIST = (
         }
       : {}),
     ...(user_role === 'customer' && user_id ? { customer: user_id } : {}),
+    ...(customerId ? { customer: new Types.ObjectId(customerId) } : {}),
+    ...(driverId ? { driver: new Types.ObjectId(driverId) } : {}),
   }
 
   const orQuery = [
@@ -148,6 +152,20 @@ export const SHIPMENT_LIST = (
           {
             $unwind: {
               path: '$businessDetail',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          {
+            $lookup: {
+              from: 'files',
+              localField: 'profileImage',
+              foreignField: '_id',
+              as: 'profileImage',
+            },
+          },
+          {
+            $unwind: {
+              path: '$profileImage',
               preserveNullAndEmptyArrays: true,
             },
           },

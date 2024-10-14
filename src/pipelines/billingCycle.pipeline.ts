@@ -1,7 +1,7 @@
 import { GetBillingCycleArgs } from '@inputs/billingCycle.input'
 import { EBillingStatus } from '@models/billingCycle.model'
 import { get, isEmpty } from 'lodash'
-import { PipelineStage } from 'mongoose'
+import { PipelineStage, Types } from 'mongoose'
 
 export const BILLING_CYCLE_LIST = (
   {
@@ -14,6 +14,7 @@ export const BILLING_CYCLE_LIST = (
     billedDate,
     issueDate,
     receiptDate,
+    customerId,
   }: GetBillingCycleArgs,
   sort = {},
 ) => {
@@ -57,6 +58,18 @@ export const BILLING_CYCLE_LIST = (
   const endReceiptDateRaw = get(receiptDate, '1', '')
   const startReceiptDate = startReceiptDateRaw ? new Date(new Date(startReceiptDateRaw).setHours(0, 0, 0, 0)) : null
   const endReceiptDate = endReceiptDateRaw ? new Date(new Date(endReceiptDateRaw).setHours(23, 59, 59, 999)) : null
+
+  const beforeMatch: PipelineStage[] = [
+    ...(customerId
+      ? [
+          {
+            $match: {
+              user: new Types.ObjectId(customerId),
+            },
+          },
+        ]
+      : []),
+  ]
 
   const query: PipelineStage[] = [
     ...customerNameMatch,
@@ -127,6 +140,7 @@ export const BILLING_CYCLE_LIST = (
   ]
 
   return [
+    ...beforeMatch,
     {
       $lookup: {
         from: 'users',

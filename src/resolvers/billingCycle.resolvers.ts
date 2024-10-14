@@ -55,7 +55,9 @@ export default class BillingCycleResolver {
   @UseMiddleware(AuthGuard(['admin']))
   async statusBillingCount(
     @Arg('type', () => EPaymentMethod) type: EPaymentMethod,
+    @Arg('customerId', { nullable: true }) customerId: string,
   ): Promise<TotalBillingRecordPayload[]> {
+    const user = customerId ? { user: customerId } : {}
     const all = await BillingCycleModel.countDocuments({
       paymentMethod: type,
       ...(type === EPaymentMethod.CASH
@@ -65,13 +67,27 @@ export default class BillingCycleResolver {
             },
           }
         : {}),
+      ...user,
     })
-    const verify = await BillingCycleModel.countDocuments({ paymentMethod: type, billingStatus: EBillingStatus.VERIFY })
-    const refund = await BillingCycleModel.countDocuments({ paymentMethod: type, billingStatus: EBillingStatus.REFUND })
-    const paid = await BillingCycleModel.countDocuments({ paymentMethod: type, billingStatus: EBillingStatus.PAID })
+    const verify = await BillingCycleModel.countDocuments({
+      paymentMethod: type,
+      billingStatus: EBillingStatus.VERIFY,
+      ...user,
+    })
+    const refund = await BillingCycleModel.countDocuments({
+      paymentMethod: type,
+      billingStatus: EBillingStatus.REFUND,
+      ...user,
+    })
+    const paid = await BillingCycleModel.countDocuments({
+      paymentMethod: type,
+      billingStatus: EBillingStatus.PAID,
+      ...user,
+    })
     const refunded = await BillingCycleModel.countDocuments({
       paymentMethod: type,
       billingStatus: EBillingStatus.REFUNDED,
+      ...user,
     })
 
     if (type === EPaymentMethod.CASH) {
@@ -86,10 +102,12 @@ export default class BillingCycleResolver {
       const overdue = await BillingCycleModel.countDocuments({
         paymentMethod: type,
         billingStatus: EBillingStatus.OVERDUE,
+        ...user,
       })
       const current = await BillingCycleModel.countDocuments({
         paymentMethod: type,
         billingStatus: EBillingStatus.CURRENT,
+        ...user,
       })
       return [
         { label: 'ทั้งหมด', key: 'all', count: all },
@@ -409,7 +427,7 @@ export default class BillingCycleResolver {
     }
     return 0
   }
-  
+
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard(['admin']))
   async regenerateReceipt(@Arg('billingCycleId') billingCycleId: string): Promise<boolean> {

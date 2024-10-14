@@ -184,4 +184,11 @@ export class GetShipmentArgs {
 
   @Field({ nullable: true })
   driverAgentName?: string
+
+  // By ID
+  @Field({ nullable: true })
+  customerId?: string
+
+  @Field({ nullable: true })
+  driverId?: string
 }

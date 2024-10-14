@@ -1,6 +1,6 @@
-import { ArgsType, Field } from "type-graphql";
-import { FileInput } from "./file.input";
-import { EPaymentMethod } from "@models/payment.model";
+import { ArgsType, Field } from 'type-graphql'
+import { FileInput } from './file.input'
+import { EPaymentMethod } from '@models/payment.model'
 
 @ArgsType()
 export class GetBillingCycleArgs {
@@ -30,6 +30,9 @@ export class GetBillingCycleArgs {
 
   @Field({ nullable: true })
   shipmentNumber?: string
+
+  @Field({ nullable: true })
+  customerId?: string
 }
 
 @ArgsType()

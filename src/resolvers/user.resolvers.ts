@@ -46,6 +46,7 @@ import { fDateTime } from '@utils/formatTime'
 import { IndividualDriver } from '@models/driverIndividual.model'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
+import { FileInput } from '@inputs/file.input'
 
 @Resolver(User)
 export default class UserResolver {
@@ -573,7 +574,7 @@ export default class UserResolver {
 
       const adminNotificationCount = await getAdminMenuNotificationCount()
       await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
-      
+
       return user
     } catch (error) {
       throw error
@@ -909,6 +910,45 @@ export default class UserResolver {
           })
         }
         await userModel.updateOne({ fcmToken: '' })
+        return true
+      }
+      const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน'
+      throw new GraphQLError(message, {
+        extensions: {
+          code: 'NOT_FOUND',
+          errors: [{ message }],
+        },
+      })
+    } catch (errors) {
+      console.log('error: ', errors)
+      throw errors
+    }
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard(['driver', 'customer', 'admin']))
+  async updateProfileImage(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('fileDetail') fileDetail: FileInput,
+    @Arg('uid', { nullable: true }) uid: string,
+  ): Promise<boolean> {
+    try {
+      const userId = uid || ctx.req.user_id
+      console.log('ctx: ', ctx)
+      if (userId) {
+        const userModel = await UserModel.findById(userId)
+        if (!userModel) {
+          const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
+          throw new GraphQLError(message, {
+            extensions: {
+              code: 'NOT_FOUND',
+              errors: [{ message }],
+            },
+          })
+        }
+        const file = new FileModel(fileDetail)
+        await file.save()
+        await userModel.updateOne({ profileImage: file })
         return true
       }
       const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน'

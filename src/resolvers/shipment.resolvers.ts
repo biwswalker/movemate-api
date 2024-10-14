@@ -187,7 +187,8 @@ export default class ShipmentResolver {
   @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
   async shipmentList(
     @Ctx() ctx: GraphQLContext,
-    @Args() { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...query }: GetShipmentArgs,
+    @Args()
+    { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...query }: GetShipmentArgs,
     @Args() paginate: PaginationArgs,
   ): Promise<ShipmentPaginationPayload> {
     const user_id = ctx.req.user_id
@@ -319,13 +320,14 @@ export default class ShipmentResolver {
     const user_id = ctx.req.user_id
     if (user_id) {
       if (user_role === 'admin') {
-        const all = await ShipmentModel.countDocuments()
-        const idle = await ShipmentModel.countDocuments({ status: 'idle' })
-        const progressing = await ShipmentModel.countDocuments({ status: 'progressing' })
-        const dilivered = await ShipmentModel.countDocuments({ status: 'dilivered' })
-        const cancelled = await ShipmentModel.countDocuments({ status: 'cancelled' })
-        const refund = await ShipmentModel.countDocuments({ status: 'refund' })
-        const expire = await ShipmentModel.countDocuments({ status: 'expire' })
+        const customerFilter = args.customerId ? { customer: args.customerId } : {}
+        const all = await ShipmentModel.countDocuments({ ...customerFilter })
+        const idle = await ShipmentModel.countDocuments({ status: 'idle', ...customerFilter })
+        const progressing = await ShipmentModel.countDocuments({ status: 'progressing', ...customerFilter })
+        const dilivered = await ShipmentModel.countDocuments({ status: 'dilivered', ...customerFilter })
+        const cancelled = await ShipmentModel.countDocuments({ status: 'cancelled', ...customerFilter })
+        const refund = await ShipmentModel.countDocuments({ status: 'refund', ...customerFilter })
+        const expire = await ShipmentModel.countDocuments({ status: 'expire', ...customerFilter })
 
         return [
           { label: 'ทั้งหมด', key: 'all', count: all },

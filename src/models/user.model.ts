@@ -1,5 +1,5 @@
 import { ObjectType, Field, ID, Int, registerEnumType } from 'type-graphql'
-import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
+import { prop as Property, Ref, Severity, getModelForClass, plugin } from '@typegoose/typegoose'
 import autopopulate from 'mongoose-autopopulate'
 import { IsNotEmpty, IsString, IsEnum } from 'class-validator'
 import bcrypt from 'bcrypt'
@@ -216,7 +216,7 @@ export class User extends TimeStamps {
   drivingStatus?: EDriverStatus
 
   @Field(() => [String], { nullable: true, defaultValue: [] })
-  @Property({ default: [] })
+  @Property({ default: [], allowMixed: Severity.ALLOW })
   favoriteDrivers?: string[]
 
   @Field({ nullable: true })

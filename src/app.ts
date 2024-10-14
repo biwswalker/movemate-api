@@ -37,14 +37,12 @@ async function server() {
     maxAge: 600,
     credentials: true,
     methods: ['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS'],
-    origin: '*',
-    // [
-    //   'https://movematethailand.com',
-    //   'https://www.movematethailand.com',
-    //   'https://admin.movematethailand.com',
-    //   'http://localhost:3000',
-    //   'http://localhost:3001',
-    // ],
+    origin: [
+      'https://movematethailand.com',
+      'https://www.movematethailand.com',
+      'https://admin.movematethailand.com',
+      ...(process.env.NODE_ENV === 'development' ? ['http://localhost:3000', 'http://localhost:3001'] : []),
+    ],
   })
   app.use(alllowedCors)
   app.use(express.json({ limit: '10mb' }))

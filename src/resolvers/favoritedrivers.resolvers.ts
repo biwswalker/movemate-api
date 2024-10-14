@@ -13,10 +13,13 @@ Aigle.mixin(lodash, {})
 @Resolver()
 export default class FvoariteDriverResolver {
   @Query(() => [FavoriteDriverPayload])
-  @UseMiddleware(AuthGuard(['customer']))
-  async getFavoriteDrivers(@Ctx() ctx: GraphQLContext): Promise<FavoriteDriverPayload[]> {
+  @UseMiddleware(AuthGuard(['customer', 'admin']))
+  async getFavoriteDrivers(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('uid', { nullable: true }) uid: string,
+  ): Promise<FavoriteDriverPayload[]> {
     try {
-      const userId = ctx.req.user_id
+      const userId = uid || ctx.req.user_id
       const user = await UserModel.findById(userId)
       if (!user) {
         const message = `ไม่สามารถเรียกข้อมูลของคุณได้`
@@ -34,7 +37,6 @@ export default class FvoariteDriverResolver {
         })
         return { ...get(driver, '_doc', {}), acceptedWork: acceptedCount, cancelledWork: cancelledCount }
       })
-      console.log('driverWith', driverWith)
       return driverWith as FavoriteDriverPayload[]
     } catch (error) {
       console.log(error)
@@ -44,9 +46,9 @@ export default class FvoariteDriverResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard(['customer']))
-  async makeFavoriteDriver(@Ctx() ctx: GraphQLContext, @Arg('driverId') driverId: string): Promise<boolean> {
+  async makeFavoriteDriver(@Ctx() ctx: GraphQLContext, @Arg('driverId') driverId: string, @Arg('uid', { nullable: true }) uid: string): Promise<boolean> {
     try {
-      const userId = ctx.req.user_id
+      const userId = uid || ctx.req.user_id
       const user = await UserModel.findById(userId)
       if (!user) {
         const message = `ไม่สามารถเรียกข้อมูลของคุณได้`
@@ -72,8 +74,8 @@ export default class FvoariteDriverResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard(['customer']))
-  async removeFavoriteDriver(@Ctx() ctx: GraphQLContext, @Arg('driverId') driverId: string): Promise<boolean> {
-    const userId = ctx.req.user_id
+  async removeFavoriteDriver(@Ctx() ctx: GraphQLContext, @Arg('driverId') driverId: string, @Arg('uid', { nullable: true }) uid: string): Promise<boolean> {
+    const userId = uid || ctx.req.user_id
     try {
       const user = await UserModel.findById(userId)
       if (!user) {
