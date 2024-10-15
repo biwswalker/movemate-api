@@ -1,6 +1,7 @@
 import { buildSchema } from 'type-graphql'
 import { ApolloServer } from '@apollo/server'
 import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHttpServer'
+import { ApolloServerPluginLandingPageDisabled } from '@apollo/server/plugin/disabled'
 import { Request, Response } from 'express'
 import { get } from 'lodash'
 import http from 'http'
@@ -34,6 +35,7 @@ import CancellationResolver from '@resolvers/cancellation.resolvers'
 import { verifyAccessToken } from '@utils/auth.utils'
 import FavoriteDriverResolver from '@resolvers/favoritedrivers.resolvers'
 import EventResolver from '@resolvers/event.resolvers'
+import SearchHistoryResolver from '@resolvers/search.resolvers'
 
 export interface GraphQLContext {
   req: Request
@@ -49,6 +51,7 @@ export interface AuthContext {
 }
 
 export async function createGraphQLServer(httpServer: http.Server) {
+  const isProd = process.env.NODE_ENV === 'production'
   const schema = await buildSchema({
     resolvers: [
       AuthResolver,
@@ -76,6 +79,7 @@ export async function createGraphQLServer(httpServer: http.Server) {
       CancellationResolver,
       FavoriteDriverResolver,
       EventResolver,
+      SearchHistoryResolver,
     ],
     pubSub: pubSub,
     authChecker: ({ context }: { context: GraphQLContext }) => {
@@ -125,7 +129,9 @@ export async function createGraphQLServer(httpServer: http.Server) {
 
   const server = new ApolloServer<GraphQLContext>({
     schema,
+    introspection: !isProd,
     plugins: [
+      ApolloServerPluginLandingPageDisabled(),
       ApolloServerPluginDrainHttpServer({ httpServer }),
       {
         async serverWillStart() {

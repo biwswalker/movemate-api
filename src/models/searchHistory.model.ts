@@ -1,10 +1,13 @@
 import { Field, ID, Int, ObjectType } from "type-graphql"
-import { prop as Property, Ref, getModelForClass } from '@typegoose/typegoose'
+import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { User } from "./user.model";
-import { Schema } from "mongoose";
+import mongoose, { Schema } from "mongoose";
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
+import mongoosePagination from 'mongoose-paginate-v2'
+import mongooseAutoPopulate from "mongoose-autopopulate";
 
-
+@plugin(mongooseAutoPopulate)
+@plugin(mongoosePagination)
 @ObjectType()
 export class SearchHistory extends TimeStamps {
   @Field(() => ID)
@@ -15,7 +18,7 @@ export class SearchHistory extends TimeStamps {
   ipaddress: string
 
   @Field(() => User, { nullable: true })
-  @Property({ ref: () => User, type: Schema.Types.ObjectId, required: false })
+  @Property({ ref: () => User, type: Schema.Types.ObjectId, required: false, autopopulate: true })
   user?: Ref<User>
 
   @Field()
@@ -49,6 +52,8 @@ export class SearchHistory extends TimeStamps {
   @Field()
   @Property({ default: Date.now })
   updatedAt: Date
+
+  static paginate: mongoose.PaginateModel<typeof SearchHistory>['paginate']
 }
 
 const SearchHistoryModel = getModelForClass(SearchHistory)
