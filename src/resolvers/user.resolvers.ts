@@ -762,13 +762,29 @@ export default class UserResolver {
     try {
       const original = ctx.req.headers['original']
       if (username) {
-        const user = await UserModel.findOne({ username })
+        const isAdminWeb = original === 'movemate-admin'
+        const isCustomerWeb = original === 'movemate-th'
+        const user = isAdminWeb
+          ? await UserModel.findByUsername(username)
+          : isCustomerWeb
+          ? await UserModel.findCustomerByEmail(username)
+          : null
         if (!user) {
           const message = 'ไม่สามารถเรียกข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
           throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
         }
 
-        const email = original === 'movemate-admin' ? get(user, 'adminDetail.email', '') : username
+        const userType = user.userType
+
+        const email = isAdminWeb
+          ? get(user, 'adminDetail.email', '')
+          : isCustomerWeb
+          ? userType === 'individual'
+            ? get(user, 'individualDetail.email', '')
+            : userType === 'business'
+            ? get(user, 'businessDetail.businessEmail', '')
+            : ''
+          : ''
 
         console.log('email', email)
 
@@ -816,7 +832,13 @@ export default class UserResolver {
   async verifyResetPassword(@Args() data: ResetPasswordInput, @Ctx() ctx: GraphQLContext): Promise<boolean> {
     const original = ctx.req.headers['original']
     try {
-      const user = await UserModel.findByUsername(data.username)
+      const isAdminWeb = original === 'movemate-admin'
+      const isCustomerWeb = original === 'movemate-th'
+      const user = isAdminWeb
+        ? await UserModel.findByUsername(data.username)
+        : isCustomerWeb
+        ? await UserModel.findCustomerByEmail(data.username)
+        : null
       if (!user) {
         const message = 'ไม่สามารถเรียกข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
         throw new GraphQLError(message, {
