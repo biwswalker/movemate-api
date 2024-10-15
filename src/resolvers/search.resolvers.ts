@@ -10,7 +10,7 @@ import { reformPaginate } from '@utils/pagination.utils'
 import { GraphQLError } from 'graphql'
 import { map } from 'lodash'
 import { FilterQuery, PaginateOptions } from 'mongoose'
-import { Arg, Args, Ctx, Int, Query, Resolver, UseMiddleware } from 'type-graphql'
+import { Arg, Args, Ctx, Query, Resolver, UseMiddleware } from 'type-graphql'
 
 @Resolver(SearchHistory)
 export default class SearchHistoryResolver {

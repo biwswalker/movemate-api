@@ -99,6 +99,7 @@ export async function verifyOTP(phoneNumber: string, otp: string, ref: string) {
       })
     }
 
+    // TODO: Change this time incorrect handle
     const currentDate = new Date()
     if (currentDate.getTime() > new Date().getTime()) {
       const message = 'หมดเวลา กรุณาดำเนินการอีกครั้ง'

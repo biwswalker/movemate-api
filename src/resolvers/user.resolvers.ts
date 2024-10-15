@@ -39,7 +39,7 @@ import BusinessCustomerCashPaymentModel from '@models/customerBusinessCashPaymen
 import SettingCustomerPoliciesModel from '@models/settingCustomerPolicies.model'
 import SettingDriverPoliciesModel from '@models/settingDriverPolicies.model'
 import { VerifyPayload } from '@payloads/verify.payloads'
-import { addMinutes, addSeconds } from 'date-fns'
+import { addHours, addMinutes, addSeconds } from 'date-fns'
 import { decryption, generateExpToken } from '@utils/encryption'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import { fDateTime } from '@utils/formatTime'
@@ -758,36 +758,42 @@ export default class UserResolver {
   }
 
   @Mutation(() => VerifyPayload)
-  async forgotPassword(@Arg('email') email: string): Promise<VerifyPayload> {
+  async forgotPassword(@Arg('username') username: string, @Ctx() ctx: GraphQLContext): Promise<VerifyPayload> {
     try {
-      if (email) {
-        const user = await UserModel.findCustomerByEmail(email)
+      const original = ctx.req.headers['original']
+      if (username) {
+        const user = await UserModel.findOne({ username })
         if (!user) {
           const message = 'ไม่สามารถเรียกข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
           throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
         }
 
-        const code = generateOTP()
+        const email = original === 'movemate-admin' ? get(user, 'adminDetail.email', '') : username
 
-        const currentDate = new Date()
-        const resend_countdown = addSeconds(currentDate, 45)
-        const reset_time = addMinutes(currentDate, 30)
+        console.log('email', email)
 
-        await UserModel.findByIdAndUpdate(user._id, { resetPasswordCode: code, lastestResetPassword: reset_time })
-        const movemate_link = `https://www.movematethailand.com`
-        await addEmailQueue({
-          from: process.env.NOREPLY_EMAIL,
-          to: email,
-          subject: 'ยืนยันตัวตนคุณ',
-          template: 'forgot_password',
-          context: {
-            code,
-            movemate_link,
-          },
-        })
-        return {
-          countdown: resend_countdown,
-          duration: '45s',
+        if (email) {
+          const code = generateOTP()
+          const currentDate = new Date()
+          const resend_countdown = addSeconds(currentDate, 45)
+          const reset_time = addMinutes(currentDate, 30)
+
+          await UserModel.findByIdAndUpdate(user._id, { resetPasswordCode: code, lastestResetPassword: reset_time })
+          const movemate_link = `https://www.movematethailand.com`
+          await addEmailQueue({
+            from: process.env.NOREPLY_EMAIL,
+            to: email,
+            subject: 'ยืนยันตัวตนคุณ',
+            template: 'forgot_password',
+            context: {
+              code,
+              movemate_link,
+            },
+          })
+          return {
+            countdown: resend_countdown,
+            duration: '45s',
+          }
         }
       }
       const message = 'ไม่สามารถรีเซ็ทรหัสผ่านได้ เนื่องจากไม่พบอีเมลผู้ใช้งาน'
@@ -807,9 +813,10 @@ export default class UserResolver {
   }
 
   @Mutation(() => Boolean)
-  async verifyResetPassword(@Args() data: ResetPasswordInput): Promise<boolean> {
+  async verifyResetPassword(@Args() data: ResetPasswordInput, @Ctx() ctx: GraphQLContext): Promise<boolean> {
+    const original = ctx.req.headers['original']
     try {
-      const user = await UserModel.findCustomerByEmail(data.email)
+      const user = await UserModel.findByUsername(data.username)
       if (!user) {
         const message = 'ไม่สามารถเรียกข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
         throw new GraphQLError(message, {
@@ -820,33 +827,61 @@ export default class UserResolver {
         })
       }
 
-      // TODO: Verify time range
+      // Verify expiry time
+      if (user.lastestResetPassword) {
+        const expireTime = addHours(user.lastestResetPassword, 24)
+        const currentDate = new Date()
+        if (currentDate.getTime() > expireTime.getTime()) {
+          const message = 'หมดเวลา กรุณาดำเนินการอีกครั้ง'
+          throw new GraphQLError(message, {
+            extensions: {
+              code: 'FAILED_VERIFY_OTP',
+              errors: [{ message }],
+            },
+          })
+        }
+      } else {
+        const message = 'ไม่พบเวลาคำขอเปลี่ยนรหัสผ่าน'
+        throw new GraphQLError(message, {
+          extensions: {
+            code: 'FAILED_VERIFY_OTP',
+            errors: [{ message }],
+          },
+        })
+      }
 
       // Verify code
       if (!isEmpty(user.resetPasswordCode) && isEqual(data.code, user.resetPasswordCode)) {
         // Decryption password from frontend
         const password_decryption = decryption(data.password)
         const hashedPassword = await bcrypt.hash(password_decryption, 10)
-        // Save password and return
-        await UserModel.findByIdAndUpdate(user._id, { password: hashedPassword, resetPasswordCode: null })
-        // Email sender
-        const movemate_link = `https://www.movematethailand.com`
-        await addEmailQueue({
-          from: process.env.NOREPLY_EMAIL,
-          to: data.email,
-          subject: 'เปลี่ยนรหัสผ่านบัญชีสำเร็จ',
-          template: 'passwordchanged',
-          context: { movemate_link },
-        })
-        // Notification
-        const currentTime = fDateTime(new Date())
-        await NotificationModel.sendNotification({
-          userId: user._id,
-          varient: ENotificationVarient.MASTER,
-          title: 'เปลี่ยนรหัสผ่านบัญชีสำเร็จ',
-          message: [`บัญชีของท่านถูกเปลี่ยนรหัสผ่านเมื่อเวลา ${currentTime} หากมีข้อสงสัยโปรดติดต่อเรา`],
-        })
-        return true
+        // Get user email
+        const email = original === 'movemate-admin' ? get(user, 'adminDetail.email', '') : data.username
+        if (email) {
+          // Save password and return
+          await UserModel.findByIdAndUpdate(user._id, { password: hashedPassword, resetPasswordCode: null })
+          // Email sender
+          const movemate_link = `https://www.movematethailand.com`
+          await addEmailQueue({
+            from: process.env.NOREPLY_EMAIL,
+            to: email,
+            subject: 'เปลี่ยนรหัสผ่านบัญชีสำเร็จ',
+            template: 'passwordchanged',
+            context: { movemate_link },
+          })
+          // Notification
+          const currentTime = fDateTime(new Date())
+          await NotificationModel.sendNotification({
+            userId: user._id,
+            varient: ENotificationVarient.MASTER,
+            title: 'เปลี่ยนรหัสผ่านบัญชีสำเร็จ',
+            message: [`บัญชีของท่านถูกเปลี่ยนรหัสผ่านเมื่อเวลา ${currentTime} หากมีข้อสงสัยโปรดติดต่อเรา`],
+          })
+          return true
+        } else {
+          const message = 'ไม่พบอีเมล'
+          throw new GraphQLError(message, { extensions: { code: 'NOT_MATCH', errors: [{ message }] } })
+        }
       }
       const message = 'รหัสไม่ถูกต้อง'
       throw new GraphQLError(message, { extensions: { code: 'NOT_MATCH', errors: [{ message }] } })

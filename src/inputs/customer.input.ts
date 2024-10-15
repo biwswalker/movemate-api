@@ -428,7 +428,7 @@ export class PasswordChangeInput {
 @ArgsType()
 export class ResetPasswordInput {
   @Field()
-  email: string
+  username: string
 
   @Field()
   code: string
