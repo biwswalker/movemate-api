@@ -89,6 +89,10 @@ export class StepDefinition extends TimeStamps {
   @Property()
   driverMessage: string
 
+  @Field(() => Int, { nullable: true })
+  @Property({ default: 0, required: false })
+  meta: number
+
   @Field()
   @Property({ default: EStepStatus.IDLE, enum: EStepStatus })
   stepStatus: TStepStatus

@@ -26,7 +26,7 @@ morgan.token('graphql-query', (req: Request) => {
 })
 
 dotenv.config()
-const MaxUploadFileSize = 2 * 1024 * 1024
+const MaxUploadFileSize = 10 * 1024 * 1024
 
 async function server() {
   const app = express()

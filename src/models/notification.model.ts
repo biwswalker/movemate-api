@@ -11,6 +11,7 @@ import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 export enum ENavigationType {
   SHIPMENT = 'shipment',
   FINANCE = 'finance',
+  NOTIFICATION = 'notification',
 }
 registerEnumType(ENavigationType, {
   name: 'ENavigationType',
@@ -28,6 +29,8 @@ registerEnumType(ENotificationVarient, {
   name: 'ENotificationVarient',
   description: 'Notification varient',
 })
+
+export const NOTIFICATION_TITLE = 'MovemateTH'
 
 interface INotification {
   userId: string

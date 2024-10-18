@@ -102,6 +102,10 @@ export default class BillingPaymentResolver {
         status: ETransactionStatus.COMPLETE,
       })
       await movemateTransaction.save()
+
+      const adminNotificationCount = await getAdminMenuNotificationCount()
+      await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+
       return true
     } catch (error) {
       console.log(error)

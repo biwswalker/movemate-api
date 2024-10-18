@@ -97,18 +97,33 @@ export async function createGraphQLServer(httpServer: http.Server) {
     socket.on('close', (code, error) => console.log(`❌ Client disconnected: ${code} - ${error}`))
   })
 
+  function getCookieValue(cookieString: string | undefined, cookieName: string): string | null {
+    if (!cookieString) return null // Handle undefined or empty cookie string
+
+    const cookies = cookieString.split('; ') // Split cookies by "; "
+
+    for (const cookie of cookies) {
+      const [name, value] = cookie.split('=') // Split each cookie into name and value
+      if (name === cookieName && value) {
+        return decodeURIComponent(value) // Return decoded value if found
+      }
+    }
+    return null // Return null if cookie is not found
+  }
+
   useServer(
     {
       schema,
       context: async (ctx, msg, args) => {
-        const ip =
-          get(ctx, 'extra.request.headers.x-forwarded-for', '') ||
-          get(ctx, 'extra.request.headers.x-real-ip', '') ||
-          '::1'
+        const headers = get(ctx, 'extra.request.headers', {})
+        const cookie = get(headers, 'cookie', '')
+        const ip = get(headers, 'x-forwarded-for', '') || get(headers, 'x-real-ip', '') || '::1'
         console.log('x-forwarded-for context: ', ip)
         try {
-          const authorization = String(get(ctx, 'connectionParams.authorization', '') || '')
-          const token = authorization.split(' ')[1]
+          const authorizationFromConnectionParam = String(get(ctx, 'connectionParams.authorization', ''))
+          const tokenFromConnectionParam = authorizationFromConnectionParam.split(' ')[1]
+          const tokenFromCookie = getCookieValue(cookie, 'access_token') || undefined
+          const token = tokenFromConnectionParam || tokenFromCookie
           if (token) {
             const decodedToken = verifyAccessToken(token)
             if (decodedToken) {

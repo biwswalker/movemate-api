@@ -232,10 +232,6 @@ export class Shipment extends TimeStamps {
   @Property({ ref: () => User, required: false, autopopulate: true })
   requestedDriver: Ref<User>
 
-  @Field({ nullable: true })
-  @Property({ default: false })
-  requestedDriverAccepted: boolean
-
   @Field(() => User, { nullable: true })
   @Property({ ref: () => User, required: false, autopopulate: true })
   driver: Ref<User>
@@ -600,6 +596,8 @@ export class Shipment extends TimeStamps {
       },
       ...flatten(
         map(range(1, dropoffLength + 1), (seq, index) => {
+          const isMultiple = dropoffLength > 1
+          const isLatest = index >= dropoffLength - 1
           return [
             {
               insertOne: {
@@ -607,9 +605,12 @@ export class Shipment extends TimeStamps {
                   step: EStepDefinition.ARRIVAL_DROPOFF,
                   seq: 0,
                   stepName: EStepDefinitionName.ARRIVAL_DROPOFF,
-                  customerMessage: dropoffLength > 1 ? `ถึงจุดส่งสินค้าที่ ${seq}` : 'ถึงจุดส่งสินค้า',
-                  driverMessage: dropoffLength > 1 ? `ถึงจุดส่งสินค้าที่ ${seq}` : 'ถึงจุดส่งสินค้า',
+                  customerMessage: isMultiple ? `ถึงจุดส่งสินค้าที่ ${seq}` : 'ถึงจุดส่งสินค้า',
+                  driverMessage: isMultiple
+                    ? `จุดส่งสินค้าที่ ${seq}${isLatest ? ' (จุดสุดท้าย)' : ''}`
+                    : 'จุดส่งสินค้า',
                   stepStatus: EStepStatus.IDLE,
+                  meta: seq,
                 },
               },
             },
@@ -619,9 +620,12 @@ export class Shipment extends TimeStamps {
                   step: EStepDefinition.DROPOFF,
                   seq: 0,
                   stepName: EStepDefinitionName.DROPOFF,
-                  customerMessage: dropoffLength > 1 ? `จัดส่งสินค้าจุดที่ ${seq}` : 'จัดส่งสินค้า',
-                  driverMessage: dropoffLength > 1 ? `จัดส่งสินค้าจุดที่ ${seq}` : 'จัดส่งสินค้า',
+                  customerMessage: isMultiple ? `จัดส่งสินค้าจุดที่ ${seq}` : 'จัดส่งสินค้า',
+                  driverMessage: isMultiple
+                    ? `จุดส่งสินค้าที่ ${seq}${isLatest ? ' (จุดสุดท้าย)' : ''}`
+                    : 'จุดส่งสินค้า',
                   stepStatus: EStepStatus.IDLE,
+                  meta: seq,
                 },
               },
             },
@@ -637,7 +641,7 @@ export class Shipment extends TimeStamps {
                   seq: 0,
                   stepName: EStepDefinitionName.ARRIVAL_DROPOFF,
                   customerMessage: 'ถึงจุดส่งสินค้ากลับ',
-                  driverMessage: 'ถึงจุดส่งสินค้ากลับ',
+                  driverMessage: 'จุดส่งสินค้า(กลับไปยังต้นทาง)',
                   stepStatus: EStepStatus.IDLE,
                 },
               },
@@ -649,7 +653,7 @@ export class Shipment extends TimeStamps {
                   seq: 0,
                   stepName: EStepDefinitionName.DROPOFF,
                   customerMessage: 'จัดส่งสินค้ากลับ',
-                  driverMessage: 'จัดส่งสินค้ากลับ',
+                  driverMessage: 'จุดส่งสินค้า (กลับไปยังต้นทาง)',
                   stepStatus: EStepStatus.IDLE,
                 },
               },
@@ -1099,7 +1103,7 @@ export class Shipment extends TimeStamps {
       ...(driverId ? { $nor: [{ driver: new Types.ObjectId(driverId) }] } : {}),
     }
 
-    const shipments = await ShipmentModel.find(query).exec()
+    const shipments = await ShipmentModel.find(query).sort({ bookingDateTime: -1 }).exec()
     if (!shipments) {
       return []
     }

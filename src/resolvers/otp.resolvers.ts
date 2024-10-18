@@ -9,7 +9,7 @@ import { GetOTPArgs } from '@inputs/otp.input'
 import { OTPPaginationPayload } from '@payloads/otp.payloads'
 import { FilterQuery, PaginateOptions } from 'mongoose'
 import { reformPaginate } from '@utils/pagination.utils'
-import { sendSMS } from '@services/sms/thaibulk'
+import { credit, sendSMS } from '@services/sms/thaibulk'
 
 const DEFUALT_OTP_DURATION = 2
 const DEFUALT_OTP_EXPIRE = 20
@@ -47,12 +47,20 @@ export async function requestOTP(phoneNumber: string, action: string) {
     const verifyLast = `${otp} คือ รหัสยืนยันเบอร์ติดต่อ Movemate Thailand ของคุณ (Ref:${ref})`
 
     // Request to thai bulk sms
-    await sendSMS({
-      message: verifyLast,
-      msisdn: phoneNumber,
-    }).catch((error) => {
-      console.log('sendSMS error: ', error)
-    })
+    if (process.env.NODE_ENV === 'production') {
+      const smscredit = await credit().catch((error) => {
+        console.log('credit error: ', error)
+      })
+      console.log('ThaiBulk Credit Remaining: ', smscredit)
+      await sendSMS({
+        message: verifyLast,
+        msisdn: phoneNumber,
+      }).catch((error) => {
+        console.log('sendSMS error: ', error)
+      })
+    } else if(process.env.NODE_ENV === 'development'){
+      console.log('OTP message: ', verifyLast)
+    }
 
     const currentDate = new Date()
     const countdown = addMinutes(currentDate, DEFUALT_OTP_DURATION)

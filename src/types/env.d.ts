@@ -18,5 +18,6 @@ declare namespace NodeJS {
     THAIBULKSMS_SENDER_NAME: string
     THAIBULKSMS_API_KEY: string
     THAIBULKSMS_API_SECRET: string
+    THAIBULKSMS_CREDIT_TYPE: string
   }
 }

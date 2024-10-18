@@ -1,10 +1,10 @@
 import { Resolver, Mutation, Arg, Ctx, UseMiddleware } from 'type-graphql'
-import UserModel, { User } from '@models/user.model'
+import UserModel, { EUserRole, User } from '@models/user.model'
 import { AuthPayload } from '@payloads/user.payloads'
 import { generateAccessToken } from '@utils/auth.utils'
 import { GraphQLContext } from '@configs/graphQL.config'
 import { GraphQLError } from 'graphql'
-import { get, split } from 'lodash'
+import { get, includes, split } from 'lodash'
 import SettingCustomerPoliciesModel from '@models/settingCustomerPolicies.model'
 import SettingDriverPoliciesModel from '@models/settingDriverPolicies.model'
 import { AuthGuard } from '@guards/auth.guards'
@@ -45,7 +45,7 @@ export default class AuthResolver {
                 // TODO: สามารถ login ได้ แต่ แจ้งชำระ และ ดูประวัติงานเก่าได้
                 // const message = `บัญชีของท่านโดนระงับการใช้งานจากผู้ดูแลระบบ โปรดติดต่อเจ้าหน้าที่หากมีข้อสงสัย`
                 // throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })
-            } else if (user.status === 'denied') {
+            } else if (user.status === 'denied' && includes([EUserRole.ADMIN, EUserRole.CUSTOMER], user.userRole)) {
                 const message = `บัญชีของท่านไม่ถูกอนุมัติ โปรดติดต่อเจ้าหน้าที่หากมีข้อสงสัย`
                 throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })
             }

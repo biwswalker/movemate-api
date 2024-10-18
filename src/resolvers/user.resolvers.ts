@@ -8,11 +8,14 @@ import {
   Args,
   Mutation,
   InvalidDirectiveError,
+  Subscription,
+  SubscribeResolverData,
+  Root,
 } from 'type-graphql'
 import UserModel, { EUserStatus, EUserValidationStatus, User } from '@models/user.model'
 import { GetUserArgs } from '@inputs/user.input'
 import { AuthGuard } from '@guards/auth.guards'
-import { GraphQLContext } from '@configs/graphQL.config'
+import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { find, get, includes, isArray, isEmpty, isEqual, map, omit, omitBy, pick, reduce } from 'lodash'
 import { RequireDataBeforePayload, UserPaginationAggregatePayload } from '@payloads/user.payloads'
 import { PaginateOptions } from 'mongoose'
@@ -41,11 +44,15 @@ import SettingDriverPoliciesModel from '@models/settingDriverPolicies.model'
 import { VerifyPayload } from '@payloads/verify.payloads'
 import { addHours, addMinutes, addSeconds } from 'date-fns'
 import { decryption, generateExpToken } from '@utils/encryption'
-import NotificationModel, { ENotificationVarient } from '@models/notification.model'
+import NotificationModel, {
+  ENavigationType,
+  ENotificationVarient,
+  NOTIFICATION_TITLE,
+} from '@models/notification.model'
 import { fDateTime } from '@utils/formatTime'
 import { IndividualDriver } from '@models/driverIndividual.model'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
-import pubsub, { NOTFICATIONS } from '@configs/pubsub'
+import pubsub, { NOTFICATIONS, USERS } from '@configs/pubsub'
 import { FileInput } from '@inputs/file.input'
 
 @Resolver(User)
@@ -549,7 +556,7 @@ export default class UserResolver {
         }
       } else if (user.userRole === 'driver') {
         // ===== DRIVER ROLE
-        const status = result === 'approve' ? 'active' : 'denied'
+        const status = result === 'approve' ? EUserStatus.ACTIVE : EUserStatus.DENIED
         const individualDriver: IndividualDriver | null = get(user, 'individualDriver', null)
         if (user.userType === 'individual') {
           await user.updateOne({ status, validationStatus: result })
@@ -564,12 +571,28 @@ export default class UserResolver {
             title: title,
             message: messages,
           })
-          // TODO: Handle FCM Notification and Websocket (Need to handle store FCM token in register success)
+
+          if (
+            user.fcmToken &&
+            includes([EUserStatus.ACTIVE, EUserStatus.BANNED, EUserStatus.DENIED, EUserStatus.INACTIVE], status)
+          )
+            await NotificationModel.sendFCMNotification({
+              token: user.fcmToken,
+              data: { navigation: ENavigationType.NOTIFICATION },
+              notification: {
+                title: NOTIFICATION_TITLE,
+                body:
+                  result === 'approve'
+                    ? 'ขอแสดงความยินดีด้วย บัญชีของท่านได้รับการอนุมัติเป็นคนขับของ Movemate'
+                    : `บัญชี ${individualDriver.fullname} ไม่ผ่านพิจารณาคนขับ Movemvate หากมีข้อสงสัยโปรดติดต่อเรา`,
+              },
+            })
         } else if (user.userType === 'business') {
           // TODO: BUSINESS
         } else {
           throw new InvalidDirectiveError('ไม่พบประเภทคนขับรถ')
         }
+        await pubsub.publish(USERS.STATUS, user._id, status)
       }
 
       const adminNotificationCount = await getAdminMenuNotificationCount()
@@ -785,8 +808,6 @@ export default class UserResolver {
             ? get(user, 'businessDetail.businessEmail', '')
             : ''
           : ''
-
-        console.log('email', email)
 
         if (email) {
           const code = generateOTP()
@@ -1019,5 +1040,13 @@ export default class UserResolver {
       console.log('error: ', errors)
       throw errors
     }
+  }
+
+  @Subscription({
+    topics: USERS.STATUS,
+    topicId: ({ context }: SubscribeResolverData<number, any, AuthContext>) => context.user_id,
+  })
+  listenUserStatus(@Root() payload: TUserStatus): TUserStatus {
+    return payload
   }
 }

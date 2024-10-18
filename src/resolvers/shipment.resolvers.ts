@@ -994,7 +994,7 @@ export const cancelShipmentIfNotInterested = async (
 export const pauseShipmentNotify = async (shipmentId: string): Promise<boolean> => {
   const FIVTY_MIN = 15 * 60_000
   const shipment = await ShipmentModel.findById(shipmentId)
-  await shipment.updateOne({ isNotificationPause: true })
+  await shipment.updateOne({ isNotificationPause: true, driver: undefined })
   await NotificationModel.sendNotification({
     varient: ENotificationVarient.WRANING,
     permanent: true,
@@ -1017,12 +1017,6 @@ export const pauseShipmentNotify = async (shipmentId: string): Promise<boolean> 
     { delay: FIVTY_MIN },
   )
 
-  return true
-}
-
-export const autoRejectedFavoritDriver = async (shipmentId: string): Promise<boolean> => {
-  const shipment = await ShipmentModel.findById(shipmentId)
-  await shipment.updateOne({ requestedDriverAccepted: false })
   return true
 }
 

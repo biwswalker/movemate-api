@@ -144,7 +144,7 @@ export default class MatchingResolver {
     const query = this.generateQuery(status, userId, individualDriver.serviceVehicleType)
 
     console.log('-----getAvailableShipment query-----', JSON.stringify(query))
-    const shipments = await ShipmentModel.find(query).skip(skip).limit(limit).sort({ createdAt: 1 }).exec()
+    const shipments = await ShipmentModel.find(query).skip(skip).limit(limit).sort({ bookingDateTime: -1 }).exec()
 
     return shipments
   }
