@@ -1,0 +1,131 @@
+diff --git a/node_modules/pdfkit-table/index.d.ts b/node_modules/pdfkit-table/index.d.ts
+index ab0684d..d37b695 100755
+--- a/node_modules/pdfkit-table/index.d.ts
++++ b/node_modules/pdfkit-table/index.d.ts
+@@ -2,14 +2,14 @@ declare module 'pdfkit-table'
+ {
+ 	import PDFDocument from 'pdfkit';
+ 
+-	interface Rect {
++	export interface Rect {
+ 		x: number;
+ 		y: number;
+ 		width: number;
+ 		height: number;
+ 	}
+ 
+-	interface Header {
++	export interface Header {
+ 		label?: string;
+ 		property?: string;
+ 		width?: number;
+@@ -30,17 +30,18 @@ declare module 'pdfkit-table'
+ 		) => string;
+ 	}
+ 
+-	interface DataOptions {
++	export interface DataOptions {
+ 		fontSize: number;
+ 		fontFamily: string;
+ 		separation: boolean;
++		align?: 'left' | 'center' | 'right'
+ 	}
+ 
+-	interface Data {
++	export interface Data {
+ 		[key: string]: string | { label: string; options?: DataOptions };
+ 	}
+ 
+-	interface Table {
++	export interface Table {
+ 		title?: string;
+ 		subtitle?: string;
+ 		headers?: (string | Header)[];
+@@ -48,18 +49,18 @@ declare module 'pdfkit-table'
+ 		rows?: string[][];
+ 	}
+ 
+-	interface DividerOptions {
++	export interface DividerOptions {
+ 		disabled?: boolean;
+ 		width?: number;
+ 		opacity?: number;
+ 	}
+ 
+-	interface Divider {
++	export interface Divider {
+ 		header?: DividerOptions;
+ 		horizontal?: DividerOptions;
+ 	}
+ 
+-	interface Title 
++	export interface Title 
+ 	{
+ 		label: string;
+ 		fontSize?: number;
+@@ -67,7 +68,7 @@ declare module 'pdfkit-table'
+ 		color?: string; 
+ 	}
+ 
+-	interface Options {
++	export interface Options {
+ 		title?: string | Title ;
+ 		subtitle?: string | Title;
+ 		width?: number;
+@@ -80,6 +81,8 @@ declare module 'pdfkit-table'
+ 		addPage?: boolean; //default false
+ 		hideHeader?: boolean;
+ 		minRowHeight?: number;
++		minRowTHHeight?: number;
++		minHeaderHeight?: number;
+ 		prepareHeader?: () => PDFDocumentWithTables;
+ 		prepareRow?: (
+ 			row?: any,
+diff --git a/node_modules/pdfkit-table/index.js b/node_modules/pdfkit-table/index.js
+index 6344638..d9e4546 100755
+--- a/node_modules/pdfkit-table/index.js
++++ b/node_modules/pdfkit-table/index.js
+@@ -81,6 +81,10 @@ class PDFDocumentWithTables extends PDFDocument {
+         options.addPage || (options.addPage = false);
+         options.absolutePosition || (options.absolutePosition = false);
+         options.minRowHeight || (options.minRowHeight = 0);
++        // Customize
++        options.minHeaderHeight || (options.minHeaderHeight = 0);
++        options.minRowTHHeight || (options.minRowTHHeight = 0);
++        
+         // TODO options.hyperlink || (options.hyperlink = { urlToLink: false, description: null });
+         
+         // divider lines
+@@ -188,7 +192,7 @@ class PDFDocumentWithTables extends PDFDocument {
+         // event emitter
+         const onFirePageAdded = () => {
+           // startX = this.page.margins.left;
+-          startY = this.page.margins.top;
++          startY = this.page.margins.top + (options.hideHeader ? 0 : options.minHeaderHeight)
+           rowBottomY = 0;
+           // lockAddPage || this.addPage(this.options);
+           lockAddPage || this.addPage({
+@@ -339,7 +343,7 @@ class PDFDocumentWithTables extends PDFDocument {
+         
+         const computeRowHeight = (row, isHeader) => {
+           
+-          let result = isHeader ? 0 : (options.minRowHeight || 0);
++          let result = isHeader ? (options.minRowTHHeight || 0) : (options.minRowHeight || 0);
+           let cellp;
+     
+           // if row is object, content with property and options
+@@ -705,7 +709,14 @@ class PDFDocumentWithTables extends PDFDocument {
+             // cell object
+             if(typeof text === 'object' ){
+     
++              if (text.options) {
++                if(text.options.align){ 
++                  align = text.align
++                }
++              }
++              
+               text = String(text.label); // get label
++
+               // row[property].hasOwnProperty('options') && prepareRowOptions(row[property]); // set style
+     
+               // options if text cell is object

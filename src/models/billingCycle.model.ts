@@ -61,6 +61,7 @@ import StepDefinitionModel, {
   StepDefinition,
 } from './shipmentStepDefinition.model'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
+import { generateReceiptCashWithNonTax } from 'reports/receiptWithCashNonTax'
 
 Aigle.mixin(lodash, {})
 
@@ -381,7 +382,7 @@ export class BillingCycle extends TimeStamps {
       }
       // Billing Receipt
       const generateMonth = format(new Date(), 'yyMM')
-      const _receiptNumber = await generateTrackingNumber(`RE${generateMonth}`, 'receipt')
+      const _receiptNumber = await generateTrackingNumber(`RE${generateMonth}`, 'receipt', 3)
       const _billingReceipt = new BillingReceiptModel({
         paidAmount: billingCycle.totalAmount,
         receiptDate: new Date(),
@@ -949,8 +950,12 @@ export class BillingCycle extends TimeStamps {
      * Generate receipt
      */
     const billingCycle = await BillingCycleModel.findOne({ shipments: { $in: [shipmentId] } })
-    const { filePath, fileName } = await generateReceipt(billingCycle)
-
+    const generateCashReceiptNonTax =
+      billingCycle.paymentMethod === EPaymentMethod.CASH && (billingCycle.taxAmount <= 0 || !billingCycle.taxAmount)
+    const { filePath, fileName } = generateCashReceiptNonTax
+      ? await generateReceiptCashWithNonTax(billingCycle)
+      : await generateReceipt(billingCycle)
+    // generateReceiptCashWithNonTax
     /**
      * Email
      */

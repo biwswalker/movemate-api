@@ -21,6 +21,7 @@ import { EPaymentMethod } from '@models/payment.model'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import { generateReceipt } from 'reports/receipt'
+import { generateReceiptCashWithNonTax } from 'reports/receiptWithCashNonTax'
 
 @Resolver(BillingCycle)
 export default class BillingCycleResolver {
@@ -432,7 +433,12 @@ export default class BillingCycleResolver {
   @UseMiddleware(AuthGuard(['admin']))
   async regenerateReceipt(@Arg('billingCycleId') billingCycleId: string): Promise<boolean> {
     const billing = await BillingCycleModel.findById(billingCycleId)
-    await generateReceipt(billing, billing.issueReceiptFilename)
+    const generateCashReceiptNonTax =
+      billing.paymentMethod === EPaymentMethod.CASH && (billing.taxAmount <= 0 || !billing.taxAmount)
+    const { filePath, fileName } = generateCashReceiptNonTax
+      ? await generateReceiptCashWithNonTax(billing, billing.issueReceiptFilename)
+      : await generateReceipt(billing, billing.issueReceiptFilename)
+
     return true
   }
 }
