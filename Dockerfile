@@ -2,8 +2,9 @@ FROM node:20-alpine as builder
 WORKDIR /usr/src/movemate-api
 
 COPY package.json package-lock.json ./
+COPY ./patches ./patches ./
 
-RUN npm install
+RUN npm install --frozen-lockfile --unsafe-perm
 
 COPY . .
 
