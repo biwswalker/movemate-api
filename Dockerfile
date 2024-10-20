@@ -5,10 +5,10 @@ COPY package.json package-lock.json ./
 COPY ./patches ./patches ./
 
 RUN npm install --frozen-lockfile --unsafe-perm
-RUN npm run postinstall
 
 COPY . .
 
+RUN npx patch-package
 RUN npm run build
 
 FROM node:20-alpine
