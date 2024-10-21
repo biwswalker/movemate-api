@@ -16,7 +16,8 @@
       "@services/*": ["services/*"],
       "@apis/*": ["apis/*"],
       "@validations/*": ["validations/*"],
-      "@pipelines/*": ["pipelines/*"]
+      "@pipelines/*": ["pipelines/*"],
+      "@enums/*": ["enums/*"]
     },
     "lib": ["ESNext", "ESNext.AsyncIterable"],
     "target": "es6",

@@ -1,4 +1,4 @@
-import { Field, Float, ID, Int, ObjectType, registerEnumType } from 'type-graphql'
+import { Field, Float, ID, Int, ObjectType } from 'type-graphql'
 import { prop as Property, getModelForClass, Ref, Severity, plugin } from '@typegoose/typegoose'
 import UserModel, { EDriverStatus, User } from './user.model'
 import { IsEnum } from 'class-validator'
@@ -57,68 +57,15 @@ import TransactionModel, {
   MOVEMATE_OWNER_ID,
 } from './transaction.model'
 import IndividualDriverModel from './driverIndividual.model'
+import { EPaymentMethod } from '@enums/payments'
+import {
+  EShipmentStatus,
+  EAdminAcceptanceStatus,
+  EDriverAcceptanceStatus,
+  EShipmentCancellationReason,
+} from '@enums/shipments'
 
 Aigle.mixin(lodash, {})
-
-export enum EShipingStatus {
-  IDLE = 'idle',
-  PROGRESSING = 'progressing',
-  DELIVERED = 'dilivered',
-  CANCELLED = 'cancelled',
-  REFUND = 'refund',
-}
-registerEnumType(EShipingStatus, {
-  name: 'EShipingStatus',
-  description: 'Shiping status',
-})
-
-export enum EAdminAcceptanceStatus {
-  PENDING = 'pending',
-  REACH = 'reach',
-  ACCEPTED = 'accepted',
-  REJECTED = 'rejected',
-  CANCELLED = 'cancelled',
-}
-registerEnumType(EAdminAcceptanceStatus, {
-  name: 'EAdminAcceptanceStatus',
-  description: 'Admin acceptance status',
-})
-
-export enum EDriverAcceptanceStatus {
-  IDLE = 'idle',
-  PENDING = 'pending',
-  ACCEPTED = 'accepted',
-  UNINTERESTED = 'uninterested',
-}
-registerEnumType(EDriverAcceptanceStatus, {
-  name: 'EDriverAcceptanceStatus',
-  description: 'Driver acceptance status',
-})
-
-export enum EShipmentCancellationReason {
-  LOST_ITEM = 'lost_item',
-  INCOMPLETE_INFO = 'incomplete_info',
-  RECIPIENT_UNAVAILABLE = 'recipient_unavailable',
-  BOOKING_ISSUE = 'booking_issue',
-  VEHICLE_ISSUE = 'vehicle_issue',
-  DRIVER_CANCELLED = 'driver_cancelled',
-  DELAYED_SHIPMENT = 'delayed_shipment',
-  CUSTOMER_REQUEST = 'customer_request',
-  PACKING_ERROR = 'packing_error',
-  MANAGEMENT_DECISION = 'management_decision',
-  OTHER = 'other',
-}
-registerEnumType(EShipmentCancellationReason, {
-  name: 'EShipmentCancellationReason',
-  description: 'Shipment cancellation reason',
-})
-
-enum EIssueType {
-  DELAY = 'DELAY',
-  DAMAGE = 'DAMAGE',
-  MISSING = 'MISSING',
-  OTHER = 'OTHER',
-}
 
 @ObjectType()
 export class ShipmentPODAddress {
@@ -209,17 +156,17 @@ export class Shipment extends TimeStamps {
   @Property({ required: true })
   trackingNumber: string
 
-  @Field()
-  @IsEnum(EShipingStatus)
-  @Property({ enum: EShipingStatus, default: EShipingStatus.IDLE })
-  status: TShipingStatus
+  @Field(() => EShipmentStatus)
+  @IsEnum(EShipmentStatus)
+  @Property({ enum: EShipmentStatus, default: EShipmentStatus.IDLE })
+  status: EShipmentStatus
 
-  @Field()
+  @Field(() => EAdminAcceptanceStatus)
   @IsEnum(EAdminAcceptanceStatus)
   @Property({ enum: EAdminAcceptanceStatus, default: EAdminAcceptanceStatus.PENDING })
-  adminAcceptanceStatus: TAdminAcceptanceStatus
+  adminAcceptanceStatus: EAdminAcceptanceStatus
 
-  @Field()
+  @Field(() => EDriverAcceptanceStatus)
   @IsEnum(EDriverAcceptanceStatus)
   @Property({ enum: EDriverAcceptanceStatus, default: EDriverAcceptanceStatus.IDLE })
   driverAcceptanceStatus: EDriverAcceptanceStatus
@@ -355,7 +302,7 @@ export class Shipment extends TimeStamps {
   @Field(() => String, { nullable: true })
   @IsEnum(EShipmentCancellationReason)
   @Property({ enum: EShipmentCancellationReason, required: false })
-  cancellationReason: TShipmentCancellationReason
+  cancellationReason: EShipmentCancellationReason
 
   @Field(() => String, { nullable: true })
   @Property({ required: false })
@@ -512,7 +459,7 @@ export class Shipment extends TimeStamps {
     })
     const isPODService = podServiceRaws.length > 0
     const paymentMethod = get(this, 'payment.paymentMethod', '')
-    const isCashMethod = isEqual(paymentMethod, 'cash')
+    const isCashMethod = isEqual(paymentMethod, EPaymentMethod.CASH)
     const bulkOperations = [
       {
         insertOne: {
@@ -536,7 +483,7 @@ export class Shipment extends TimeStamps {
                   stepName: EStepDefinitionName.CASH_VERIFY,
                   customerMessage: 'ยืนยันการชำระเงิน',
                   driverMessage: '',
-                  stepStatus: isReMatching ? EStepStatus.PROGRESSING : EStepStatus.DONE,
+                  stepStatus: isReMatching ? EStepStatus.DONE : EStepStatus.PROGRESSING,
                 },
               },
             },
@@ -795,7 +742,7 @@ export class Shipment extends TimeStamps {
         })
         await ShipmentModel.findByIdAndUpdate(this._id, {
           currentStepSeq: stepDefinitionModel.seq,
-          status: EShipingStatus.DELIVERED,
+          status: EShipmentStatus.DELIVERED,
           deliveredDate: currentDate,
         })
 
@@ -901,7 +848,7 @@ export class Shipment extends TimeStamps {
         beforeUpdate: shipment,
         afterUpdate: {
           ...shipment,
-          status: EShipingStatus.IDLE,
+          status: EShipmentStatus.IDLE,
           adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,
           driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
           steps: [{ ...currentStep, stepStatus: EStepStatus.DONE }],
@@ -909,7 +856,7 @@ export class Shipment extends TimeStamps {
       })
       await _shipmentUpdateHistory.save()
       await ShipmentModel.findByIdAndUpdate(_id, {
-        status: EShipingStatus.IDLE,
+        status: EShipmentStatus.IDLE,
         adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,
         driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
         $push: { history: _shipmentUpdateHistory },
@@ -977,14 +924,14 @@ export class Shipment extends TimeStamps {
           afterUpdate: {
             ...shipment,
             refund: refunId,
-            status: EShipingStatus.REFUND,
+            status: EShipmentStatus.REFUND,
             adminAcceptanceStatus: EAdminAcceptanceStatus.REJECTED,
             steps: [...steps, refundStep],
           },
         })
         await _shipmentUpdateHistory.save()
         await ShipmentModel.findByIdAndUpdate(_id, {
-          status: EShipingStatus.REFUND,
+          status: EShipmentStatus.REFUND,
           refund: refunId,
           adminAcceptanceStatus: EAdminAcceptanceStatus.REJECTED,
           currentStepSeq: newLatestSeq,
@@ -1040,7 +987,7 @@ export class Shipment extends TimeStamps {
     })
     await _shipmentUpdateHistory.save()
     await ShipmentModel.findByIdAndUpdate(_id, {
-      status: EShipingStatus.CANCELLED,
+      status: EShipmentStatus.CANCELLED,
       $push: { history: _shipmentUpdateHistory },
     })
   }
@@ -1069,7 +1016,7 @@ export class Shipment extends TimeStamps {
     })
     await _shipmentUpdateHistory.save()
     await ShipmentModel.findByIdAndUpdate(_id, {
-      status: EShipingStatus.CANCELLED,
+      status: EShipmentStatus.CANCELLED,
       $push: { history: _shipmentUpdateHistory },
     })
   }
@@ -1087,7 +1034,7 @@ export class Shipment extends TimeStamps {
       }
     }
     const query = {
-      status: EShipingStatus.IDLE,
+      status: EShipmentStatus.IDLE,
       driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
       ...(vehicleId ? { vehicleId } : {}),
       $or: [

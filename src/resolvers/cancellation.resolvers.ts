@@ -1,7 +1,6 @@
 import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import BillingCycleModel from '@models/billingCycle.model'
-import ShipmentModel from '@models/shipment.model'
 import { REPONSE_NAME } from 'constants/status'
 import { GraphQLError } from 'graphql'
 import { Arg, Ctx, Mutation, Resolver, UseMiddleware } from 'type-graphql'
@@ -42,7 +41,7 @@ export default class CancellationResolver {
     }
 
     // Handle Refund
-    await BillingCycleModel.driverRefund(shipmentId, userId, reason, reasonDetail)
+    await BillingCycleModel.driverCancelled(shipmentId, userId, reason, reasonDetail)
 
     return true
   }

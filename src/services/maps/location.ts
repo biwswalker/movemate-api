@@ -14,7 +14,7 @@ import logger from '@configs/logger'
 import { LocationInput } from '@inputs/location.input'
 import SearchHistoryModel, { SearchHistory } from '@models/searchHistory.model'
 import { GraphQLContext } from '@configs/graphQL.config'
-import { rateLimiter, getLatestCount, ELimiterType } from '@configs/rateLimit'
+import { getLatestCount, ELimiterType } from '@configs/rateLimit'
 
 const instance = axios.create()
 
@@ -144,8 +144,9 @@ export async function getPlaceLocationDetail(ctx: GraphQLContext, placeId: strin
   const limit = ctx.req.limit
   const cacheType = 'place-detail'
   const cached = await loadCache(cacheType, placeId)
+  const count = await getLatestCount(ip, ELimiterType.LOCATION, ctx.req.user_id)
   if (cached) {
-    const count = await getLatestCount(ip, ELimiterType.LOCATION, ctx.req.user_id)
+    // const count = await getLatestCount(ip, ELimiterType.LOCATION, ctx.req.user_id)
     await saveSearchingLog({
       ipaddress: ip,
       isCache: true,
@@ -160,7 +161,7 @@ export async function getPlaceLocationDetail(ctx: GraphQLContext, placeId: strin
     return cached
   }
   // Limit check
-  const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit, userId || '')
+  // const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit, userId || '')
 
   const params = { languageCode: 'th', regionCode: 'th', fields: '*', ...(session ? { sessionToken: session } : {}) }
   const headers = { 'X-Goog-Api-Key': process.env.GOOGLE_MAP_API_KEY }
@@ -210,8 +211,9 @@ export async function getGeocode(ctx: GraphQLContext, latitude: number, longitud
   const cacheType = 'geocode'
   const key = `${latitude}:${longitude}`
   const cached = await loadCache(cacheType, key)
+  const count = await getLatestCount(ip, ELimiterType.LOCATION, ctx.req.user_id)
   if (cached) {
-    const count = await getLatestCount(ip, ELimiterType.LOCATION, ctx.req.user_id)
+    // const count = await getLatestCount(ip, ELimiterType.LOCATION, ctx.req.user_id)
     await saveSearchingLog({
       ipaddress: ip,
       isCache: true,
@@ -227,7 +229,7 @@ export async function getGeocode(ctx: GraphQLContext, latitude: number, longitud
   }
 
   // Limit check
-  const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit, userId || '')
+  // const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit, userId || '')
 
   const response = await instance.get<google.maps.GeocoderResponse>(GOOGLEAPI_GEOCODE, {
     params: {

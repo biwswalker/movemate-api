@@ -12,8 +12,9 @@ import { BusinessCustomerCreditPayment } from '@models/customerBusinessCreditPay
 import { IndividualCustomer } from '@models/customerIndividual.model'
 import { Shipment } from '@models/shipment.model'
 import { VehicleType } from '@models/vehicleType.model'
-import { EPaymentMethod, Payment } from '@models/payment.model'
+import { Payment } from '@models/payment.model'
 import { BillingReceipt } from '@models/billingReceipt.model'
+import { EPaymentMethod } from '@enums/payments'
 
 const sarabunThin = path.join(__dirname, '..', 'assets/fonts/Sarabun-Thin.ttf')
 const sarabunExtraLight = path.join(__dirname, '..', 'assets/fonts/Sarabun-ExtraLight.ttf')
@@ -130,9 +131,9 @@ export async function generateReceipt(billingCycle: BillingCycle, filname?: stri
     const user = get(billingCycle, 'user', undefined) as User | undefined
     const businessDetail = get(user, 'businessDetail', undefined) as BusinessCustomer | undefined
     const paymentMethod = get(businessDetail, 'paymentMethod', '')
-    if (paymentMethod === 'cash') {
+    if (paymentMethod === EPaymentMethod.CASH) {
       address = `${businessDetail.address} แขวง/ตำบล ${businessDetail.subDistrict} เขต/อำเภอ ${businessDetail.district} จังหวัด ${businessDetail.province} ${businessDetail.postcode}`
-    } else if (paymentMethod === 'credit' && businessDetail.creditPayment) {
+    } else if (paymentMethod === EPaymentMethod.CREDIT && businessDetail.creditPayment) {
       const creditPayment = businessDetail.creditPayment as BusinessCustomerCreditPayment | undefined
       address = `${creditPayment.financialAddress} แขวง/ตำบล ${creditPayment.financialSubDistrict} เขต/อำเภอ ${creditPayment.financialDistrict} จังหวัด ${creditPayment.financialProvince} ${creditPayment.financialPostcode}`
     } else if (user.individualDetail) {

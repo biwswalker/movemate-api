@@ -2,6 +2,7 @@ import { Field, Int, ObjectType } from 'type-graphql'
 import { PaginationPayload } from './pagination.payloads'
 import { AggregatePaginateResult, PaginateResult } from 'mongoose'
 import { Shipment } from '@models/shipment.model'
+import { EShipmentStatusCriteria } from '@enums/shipments'
 
 @ObjectType()
 export class ShipmentPaginationPayload extends PaginationPayload implements PaginateResult<Shipment> {
@@ -21,7 +22,7 @@ export class TotalRecordPayload {
   label: string
 
   @Field()
-  key: TCriteriaStatus
+  key: EShipmentStatusCriteria
 
   @Field(() => Int)
   count: number

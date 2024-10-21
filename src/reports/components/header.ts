@@ -1,6 +1,5 @@
 import { BillingCycle } from '@models/billingCycle.model'
 import { BillingReceipt } from '@models/billingReceipt.model'
-import { EPaymentMethod } from '@models/payment.model'
 import PDFDocument from 'pdfkit-table'
 import { ASSETS, FONTS } from './constants'
 import { fDate } from '@utils/formatTime'
@@ -9,6 +8,7 @@ import { User } from '@models/user.model'
 import { BusinessCustomer } from '@models/customerBusiness.model'
 import { BusinessCustomerCreditPayment } from '@models/customerBusinessCreditPayment.model'
 import { IndividualCustomer } from '@models/customerIndividual.model'
+import { EPaymentMethod } from '@enums/payments'
 
 export function HeaderComponent(
   doc: PDFDocument,
@@ -168,9 +168,9 @@ export function HeaderComponent(
   const user = get(billingCycle, 'user', undefined) as User | undefined
   const businessDetail = get(user, 'businessDetail', undefined) as BusinessCustomer | undefined
   const paymentMethod = get(businessDetail, 'paymentMethod', '')
-  if (paymentMethod === 'cash') {
+  if (paymentMethod === EPaymentMethod.CASH) {
     address = `${businessDetail.address} แขวง/ตำบล ${businessDetail.subDistrict} เขต/อำเภอ ${businessDetail.district} จังหวัด ${businessDetail.province} ${businessDetail.postcode}`
-  } else if (paymentMethod === 'credit' && businessDetail.creditPayment) {
+  } else if (paymentMethod === EPaymentMethod.CREDIT && businessDetail.creditPayment) {
     const creditPayment = businessDetail.creditPayment as BusinessCustomerCreditPayment | undefined
     address = `${creditPayment.financialAddress} แขวง/ตำบล ${creditPayment.financialSubDistrict} เขต/อำเภอ ${creditPayment.financialDistrict} จังหวัด ${creditPayment.financialProvince} ${creditPayment.financialPostcode}`
   } else if (user.individualDetail) {

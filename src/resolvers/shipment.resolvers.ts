@@ -1,13 +1,8 @@
 import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { GetShipmentArgs, ShipmentInput } from '@inputs/shipment.input'
-import PaymentModel, { CashDetail, EPaymentMethod, Payment } from '@models/payment.model'
-import ShipmentModel, {
-  EDriverAcceptanceStatus,
-  EShipingStatus,
-  EShipmentCancellationReason,
-  Shipment,
-} from '@models/shipment.model'
+import PaymentModel, { CashDetail } from '@models/payment.model'
+import ShipmentModel, { Shipment } from '@models/shipment.model'
 import ShipmentAdditionalServicePriceModel from '@models/shipmentAdditionalServicePrice.model'
 import UserModel, { EDriverStatus, EUserRole, EUserStatus, EUserValidationStatus, User } from '@models/user.model'
 import { generateTrackingNumber } from '@utils/string.utils'
@@ -65,13 +60,21 @@ import { decryption } from '@utils/encryption'
 import pubsub, { NOTFICATIONS, SHIPMENTS } from '@configs/pubsub'
 import redis from '@configs/redis'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
+import { EPaymentMethod, EPaymentStatus } from '@enums/payments'
+import {
+  EAdminAcceptanceStatus,
+  EDriverAcceptanceStatus,
+  EShipmentCancellationReason,
+  EShipmentStatus,
+  EShipmentStatusCriteria,
+} from '@enums/shipments'
 
 Aigle.mixin(lodash, {})
 
 @Resolver(Shipment)
 export default class ShipmentResolver {
   @Query(() => Shipment)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async shipment(@Arg('id') id: string): Promise<Shipment> {
     try {
       const shipment = await ShipmentModel.findById(id)
@@ -87,7 +90,7 @@ export default class ShipmentResolver {
   }
 
   @Query(() => Shipment)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async getShipmentByTracking(
     @Ctx() ctx: GraphQLContext,
     @Arg('trackingNumber') trackingNumber: string,
@@ -97,7 +100,7 @@ export default class ShipmentResolver {
     try {
       const shipment = await ShipmentModel.findOne({
         trackingNumber,
-        ...(user_role === 'customer' ? { customer: user_id } : {}),
+        ...(user_role === EUserRole.CUSTOMER ? { customer: user_id } : {}),
       })
       if (!shipment) {
         const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
@@ -125,17 +128,17 @@ export default class ShipmentResolver {
   ): FilterQuery<typeof Shipment> {
     // Status
     const statusFilterOr =
-      status === 'all'
-        ? ['idle', 'progressing', 'dilivered', 'cancelled', 'refund']
-        : status === 'progress'
-        ? ['idle', 'progressing']
-        : status === 'finish'
-        ? ['dilivered']
-        : status === 'refund'
-        ? ['refund']
-        : status === 'cancelled'
-        ? ['cancelled']
-        : []
+      status === EShipmentStatusCriteria.ALL
+        ? [
+            EShipmentStatus.IDLE,
+            EShipmentStatus.PROGRESSING,
+            EShipmentStatus.DELIVERED,
+            EShipmentStatus.CANCELLED,
+            EShipmentStatus.REFUND,
+          ]
+        : status === EShipmentStatusCriteria.PAYMENT_VERIFY || status === EShipmentStatusCriteria.WAITING_DRIVER
+        ? [EShipmentStatus.IDLE]
+        : [status]
 
     // Create at
     const startOfCreated = dateRangeStart ? new Date(new Date(dateRangeStart).setHours(0, 0, 0, 0)) : null
@@ -178,13 +181,19 @@ export default class ShipmentResolver {
           }
         : {}),
       ...(!isEmpty(orQuery) ? { $or: orQuery } : {}),
-      ...(user_role === 'customer' && user_id ? { customer: user_id } : {}),
+      ...(status === EShipmentStatusCriteria.PAYMENT_VERIFY
+        ? { adminAcceptanceStatus: EAdminAcceptanceStatus.PENDING }
+        : {}),
+      ...(status === EShipmentStatusCriteria.WAITING_DRIVER
+        ? { driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING }
+        : {}),
+      ...(user_role === EUserRole.CUSTOMER && user_id ? { customer: user_id } : {}),
     }
     return filterQuery
   }
 
   @Query(() => ShipmentPaginationPayload)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async shipmentList(
     @Ctx() ctx: GraphQLContext,
     @Args()
@@ -231,7 +240,7 @@ export default class ShipmentResolver {
   }
 
   @Query(() => [String])
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async allshipmentIds(
     @Ctx() ctx: GraphQLContext,
     @Args() { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...query }: GetShipmentArgs,
@@ -268,7 +277,7 @@ export default class ShipmentResolver {
   }
 
   @Query(() => [Shipment])
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async shipments(
     @Ctx() ctx: GraphQLContext,
     @Args() args: GetShipmentArgs,
@@ -300,7 +309,7 @@ export default class ShipmentResolver {
   }
 
   @Query(() => Int)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async totalShipment(@Ctx() ctx: GraphQLContext, @Args() args: GetShipmentArgs): Promise<number> {
     const user_role = ctx.req.user_role
     const user_id = ctx.req.user_id
@@ -314,7 +323,7 @@ export default class ShipmentResolver {
   }
 
   @Query(() => [TotalRecordPayload])
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async statusCount(@Ctx() ctx: GraphQLContext, @Args() args: GetShipmentArgs): Promise<TotalRecordPayload[]> {
     const user_role = ctx.req.user_role
     const user_id = ctx.req.user_id
@@ -322,37 +331,55 @@ export default class ShipmentResolver {
       if (user_role === 'admin') {
         const customerFilter = args.customerId ? { customer: args.customerId } : {}
         const all = await ShipmentModel.countDocuments({ ...customerFilter })
-        const idle = await ShipmentModel.countDocuments({ status: 'idle', ...customerFilter })
-        const progressing = await ShipmentModel.countDocuments({ status: 'progressing', ...customerFilter })
-        const dilivered = await ShipmentModel.countDocuments({ status: 'dilivered', ...customerFilter })
-        const cancelled = await ShipmentModel.countDocuments({ status: 'cancelled', ...customerFilter })
-        const refund = await ShipmentModel.countDocuments({ status: 'refund', ...customerFilter })
-        const expire = await ShipmentModel.countDocuments({ status: 'expire', ...customerFilter })
+        const paymentVerify = await ShipmentModel.countDocuments({
+          status: EShipmentStatus.IDLE,
+          adminAcceptanceStatus: EAdminAcceptanceStatus.PENDING,
+          ...customerFilter,
+        })
+        const waitingDriver = await ShipmentModel.countDocuments({
+          status: EShipmentStatus.IDLE,
+          driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
+          ...customerFilter,
+        })
+        const progressing = await ShipmentModel.countDocuments({
+          status: EShipmentStatus.PROGRESSING,
+          ...customerFilter,
+        })
+        const delivered = await ShipmentModel.countDocuments({
+          status: EShipmentStatus.DELIVERED,
+          ...customerFilter,
+        })
+        const cancelled = await ShipmentModel.countDocuments({
+          status: EShipmentStatus.CANCELLED,
+          ...customerFilter,
+        })
+        const refund = await ShipmentModel.countDocuments({ status: EShipmentStatusCriteria.REFUND, ...customerFilter })
 
         return [
-          { label: 'ทั้งหมด', key: 'all', count: all },
-          { label: 'รอตรวจสอบการชำระ/รอคนขับตอบรับ', key: 'idle', count: idle },
-          { label: 'กำลังดำเนินการขนส่ง', key: 'progressing', count: progressing },
-          { label: 'เสร็จสิ้น', key: 'dilivered', count: dilivered },
-          { label: 'ยกเลิก', key: 'cancelled', count: cancelled },
-          { label: 'คืนเงิน', key: 'refund', count: refund },
-          { label: 'หมดอายุ', key: 'expire', count: expire },
+          { label: 'ทั้งหมด', key: EShipmentStatusCriteria.ALL, count: all },
+          { label: 'รอตรวจสอบการชำระ', key: EShipmentStatusCriteria.PAYMENT_VERIFY, count: paymentVerify },
+          { label: 'รอคนขับตอบรับ', key: EShipmentStatusCriteria.WAITING_DRIVER, count: waitingDriver },
+          { label: 'คืนเงิน', key: EShipmentStatusCriteria.REFUND, count: refund },
+          { label: 'กำลังดำเนินการขนส่ง', key: EShipmentStatusCriteria.PROGRESSING, count: progressing },
+          { label: 'เสร็จสิ้น', key: EShipmentStatusCriteria.DELIVERED, count: delivered },
+          { label: 'ยกเลิก', key: EShipmentStatusCriteria.CANCELLED, count: cancelled },
         ]
       } else {
-        const filterQuery = (status: TCriteriaStatus) => this.shipmentQuery({ ...args, status }, user_role, user_id)
+        const filterQuery = (status: EShipmentStatusCriteria) =>
+          this.shipmentQuery({ ...args, status }, user_role, user_id)
 
-        const allCount = await ShipmentModel.countDocuments(filterQuery('all'))
-        const progressingCount = await ShipmentModel.countDocuments(filterQuery('progress'))
-        const refundCount = await ShipmentModel.countDocuments(filterQuery('refund'))
-        const cancelledCount = await ShipmentModel.countDocuments(filterQuery('cancelled'))
-        const finishCount = await ShipmentModel.countDocuments(filterQuery('finish'))
+        const allCount = await ShipmentModel.countDocuments(filterQuery(EShipmentStatusCriteria.ALL))
+        const progressingCount = await ShipmentModel.countDocuments(filterQuery(EShipmentStatusCriteria.PROGRESSING))
+        const refundCount = await ShipmentModel.countDocuments(filterQuery(EShipmentStatusCriteria.REFUND))
+        const cancelledCount = await ShipmentModel.countDocuments(filterQuery(EShipmentStatusCriteria.CANCELLED))
+        const finishCount = await ShipmentModel.countDocuments(filterQuery(EShipmentStatusCriteria.DELIVERED))
 
         return [
-          { label: 'ทั้งหมด', key: 'all', count: allCount },
-          { label: 'ดำเนินการ', key: 'progress', count: progressingCount },
-          { label: 'ยกเลิก', key: 'refund', count: refundCount },
-          { label: 'คืนเงินแล้ว', key: 'cancelled', count: cancelledCount },
-          { label: 'เสร็จสิ้น', key: 'finish', count: finishCount },
+          { label: 'ทั้งหมด', key: EShipmentStatusCriteria.ALL, count: allCount },
+          { label: 'ดำเนินการ', key: EShipmentStatusCriteria.PROGRESSING, count: progressingCount },
+          { label: 'คืนเงิน', key: EShipmentStatusCriteria.REFUND, count: refundCount },
+          { label: 'ยกเลิก', key: EShipmentStatusCriteria.CANCELLED, count: cancelledCount },
+          { label: 'เสร็จสิ้น', key: EShipmentStatusCriteria.DELIVERED, count: finishCount },
         ]
       }
     }
@@ -360,7 +387,7 @@ export default class ShipmentResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['customer']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   async continueMatchingShipment(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
     const user_id = ctx.req.user_id
     if (user_id) {
@@ -372,7 +399,7 @@ export default class ShipmentResolver {
         })
       }
 
-      if (shipmentModel.status !== EShipingStatus.IDLE) {
+      if (shipmentModel.status !== EShipmentStatus.IDLE) {
         const message = 'ไม่สามารถดำเนินการค้นหาพนักงานขนส่งต่อได้ เนื่องจากสถานะงานขนส่งถูกเปลี่ยนแล้ว'
         throw new GraphQLError(message, {
           extensions: { code: REPONSE_NAME.SHIPMENT_CHANGED_STATUS, errors: [{ message }] },
@@ -416,7 +443,7 @@ export default class ShipmentResolver {
   }
 
   @Mutation(() => Shipment)
-  @UseMiddleware(AuthGuard(['customer', 'admin']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN]))
   async createShipment(
     @Arg('data')
     {
@@ -454,8 +481,8 @@ export default class ShipmentResolver {
         })
       }
 
-      const isCashPaymentMethod = paymentMethod === 'cash'
-      const isCreditPaymentMethod = paymentMethod === 'credit'
+      const isCashPaymentMethod = paymentMethod === EPaymentMethod.CASH
+      const isCreditPaymentMethod = paymentMethod === EPaymentMethod.CREDIT
 
       // Make calculate pricing and for check credit usage
       const droppoint = locations.length - 1
@@ -599,7 +626,7 @@ export default class ShipmentResolver {
         invoice: _invoice,
         calculation: _calculation,
         paymentMethod,
-        status: isCreditPaymentMethod ? 'invoice' : 'waiting_confirm_payment',
+        status: isCreditPaymentMethod ? EPaymentStatus.INVOICE : EPaymentStatus.WAITING_CONFIRM_PAYMENT,
       })
 
       await _payment.save()
@@ -607,9 +634,13 @@ export default class ShipmentResolver {
       // Create shipment id before
       const shipmentId = new Types.ObjectId()
 
-      const status: TShipingStatus = 'idle'
-      const adminAcceptanceStatus: TAdminAcceptanceStatus = isCreditPaymentMethod ? 'reach' : 'pending'
-      const driverAcceptanceStatus: TDriverAcceptanceStatus = isCreditPaymentMethod ? 'pending' : 'idle'
+      const status: EShipmentStatus = EShipmentStatus.IDLE
+      const adminAcceptanceStatus: EAdminAcceptanceStatus = isCreditPaymentMethod
+        ? EAdminAcceptanceStatus.REACH
+        : EAdminAcceptanceStatus.PENDING
+      const driverAcceptanceStatus: EDriverAcceptanceStatus = isCreditPaymentMethod
+        ? EDriverAcceptanceStatus.PENDING
+        : EDriverAcceptanceStatus.IDLE
       // Initial status log
       // const text = isCreditPaymentMethod ? favoriteDriverId ? 'รอคนขับคนโปรดรับงาน' : 'รอคนขับรับงาน' : 'รอเจ้าหน้าที่ยืนยันยอดการชำระ'
       // const startStatus: StatusLog = { status: 'pending', text, createdAt: new Date() }
@@ -759,9 +790,9 @@ export default class ShipmentResolver {
         to: email,
         subject: 'Movemate Thailand ได้รับการจองรถของคุณแล้ว',
         template:
-          paymentMethod === 'cash'
+          paymentMethod === EPaymentMethod.CASH
             ? 'booking_cash_success'
-            : paymentMethod === 'credit'
+            : paymentMethod === EPaymentMethod.CREDIT
             ? 'booking_credit_success'
             : '',
         context: {
@@ -770,7 +801,11 @@ export default class ShipmentResolver {
           original: originalText,
           destination: destinationsText,
           payment:
-            paymentMethod === 'cash' ? 'ชำระเงินสด (ผ่านการโอน)' : paymentMethod === 'credit' ? 'ออกใบแจ้งหนี้' : '',
+            paymentMethod === EPaymentMethod.CASH
+              ? 'ชำระเงินสด (ผ่านการโอน)'
+              : paymentMethod === EPaymentMethod.CREDIT
+              ? 'ออกใบแจ้งหนี้'
+              : '',
           tracking_link,
           movemate_link,
         },
@@ -896,7 +931,7 @@ export const cancelShipmentIfNotInterested = async (
 
       // Update Shipment
       await shipment.updateOne({
-        status: EShipingStatus.REFUND,
+        status: EShipmentStatus.REFUND,
         driverAcceptanceStatus: EDriverAcceptanceStatus.UNINTERESTED,
         cancellationReason: cancelReason,
         cancellationDetail: cancelMessage,
@@ -951,7 +986,7 @@ export const cancelShipmentIfNotInterested = async (
       await systemCancelledStep.save()
 
       await shipment.updateOne({
-        status: EShipingStatus.CANCELLED,
+        status: EShipmentStatus.CANCELLED,
         driverAcceptanceStatus: EDriverAcceptanceStatus.UNINTERESTED,
         cancellationReason: cancelReason,
         cancellationDetail: cancelMessage,

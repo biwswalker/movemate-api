@@ -17,11 +17,11 @@ import { get, isEmpty, map, omitBy, toNumber, toString, uniq } from 'lodash'
 import { PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import path from 'path'
-import { EPaymentMethod } from '@models/payment.model'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import { generateReceipt } from 'reports/receipt'
 import { generateReceiptCashWithNonTax } from 'reports/receiptWithCashNonTax'
+import { EPaymentMethod } from '@enums/payments'
 
 @Resolver(BillingCycle)
 export default class BillingCycleResolver {

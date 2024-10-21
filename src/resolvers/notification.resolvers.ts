@@ -16,14 +16,15 @@ import { LoadmoreArgs } from '@inputs/query.input'
 import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { AdminNotificationCountPayload, UnreadCountPayload } from '@payloads/notification.payloads'
-import ShipmentModel, { EShipingStatus } from '@models/shipment.model'
+import ShipmentModel from '@models/shipment.model'
 import UserModel, { EUserRole } from '@models/user.model'
 import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 import { sum } from 'lodash'
 import { decryption } from '@utils/encryption'
 import { Repeater } from '@graphql-yoga/subscription'
-import { EPaymentMethod } from '@models/payment.model'
+import { EPaymentMethod } from '@enums/payments'
+import { EShipmentStatus } from '@enums/shipments'
 
 export async function getAdminMenuNotificationCount(): Promise<AdminNotificationCountPayload> {
   const individualCustomer = await UserModel.countDocuments({
@@ -46,9 +47,9 @@ export async function getAdminMenuNotificationCount(): Promise<AdminNotification
     userType: 'business',
     userRole: 'driver',
   }).catch(() => 0)
-  const shipment = await ShipmentModel.countDocuments({ $or: [{ status: 'idle' }, { status: 'refund' }] }).catch(
-    () => 0,
-  )
+  const shipment = await ShipmentModel.countDocuments({
+    $or: [{ status: EShipmentStatus.IDLE }, { status: EShipmentStatus.REFUND }],
+  }).catch(() => 0)
   const financialCash = await BillingCycleModel.countDocuments({
     billingStatus: { $in: [EBillingStatus.VERIFY, EBillingStatus.OVERDUE, EBillingStatus.REFUND] },
     paymentMethod: EPaymentMethod.CASH,
@@ -75,7 +76,7 @@ export async function getAdminMenuNotificationCount(): Promise<AdminNotification
 @Resolver()
 export default class NotificationResolver {
   @Query(() => [Notification])
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async notifications(@Ctx() ctx: GraphQLContext, @Args() loadmore: LoadmoreArgs) {
     const userId = ctx.req.user_id
     if (userId) {
@@ -86,7 +87,7 @@ export default class NotificationResolver {
   }
 
   @Query(() => Notification)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async notification(@Ctx() ctx: GraphQLContext, @Arg('id') notificationId: string) {
     const userId = ctx.req.user_id
     if (userId) {
@@ -97,7 +98,7 @@ export default class NotificationResolver {
   }
 
   @Query(() => UnreadCountPayload)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async unreadCount(@Ctx() ctx: GraphQLContext): Promise<UnreadCountPayload> {
     const userId = ctx.req.user_id
     if (userId) {
@@ -105,7 +106,7 @@ export default class NotificationResolver {
       await pubsub.publish(NOTFICATIONS.COUNT, userId, notification)
       const shipment = await ShipmentModel.countDocuments({
         customer: userId,
-        status: { $in: [EShipingStatus.IDLE, EShipingStatus.PROGRESSING, EShipingStatus.REFUND] },
+        status: { $in: [EShipmentStatus.IDLE, EShipmentStatus.PROGRESSING, EShipmentStatus.REFUND] },
       })
       await pubsub.publish(NOTFICATIONS.PROGRESSING_SHIPMENT, userId, shipment)
       return { notification, shipment }
@@ -114,7 +115,7 @@ export default class NotificationResolver {
   }
 
   @Query(() => Int)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async totalNotification(@Ctx() ctx: GraphQLContext): Promise<number> {
     const userId = ctx.req.user_id
     if (userId) {
@@ -125,7 +126,7 @@ export default class NotificationResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async markNotificationAsRead(@Arg('notificationId') notificationId: string): Promise<boolean> {
     await NotificationModel.markNotificationAsRead(notificationId)
     return true

@@ -6,7 +6,8 @@ import UserModel from '@models/user.model'
 import { GraphQLError } from 'graphql'
 import { FavoriteDriverPayload } from '@payloads/favoriteDriver.payloads'
 import Aigle from 'aigle'
-import ShipmentModel, { EShipingStatus } from '@models/shipment.model'
+import ShipmentModel from '@models/shipment.model'
+import { EShipmentStatus } from '@enums/shipments'
 
 Aigle.mixin(lodash, {})
 
@@ -33,7 +34,7 @@ export default class FvoariteDriverResolver {
         const cancelledCount = await ShipmentModel.countDocuments({
           customer: userId,
           driver: driver._id,
-          status: EShipingStatus.CANCELLED,
+          status: EShipmentStatus.CANCELLED,
         })
         return { ...get(driver, '_doc', {}), acceptedWork: acceptedCount, cancelledWork: cancelledCount }
       })
@@ -46,7 +47,11 @@ export default class FvoariteDriverResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard(['customer']))
-  async makeFavoriteDriver(@Ctx() ctx: GraphQLContext, @Arg('driverId') driverId: string, @Arg('uid', { nullable: true }) uid: string): Promise<boolean> {
+  async makeFavoriteDriver(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('driverId') driverId: string,
+    @Arg('uid', { nullable: true }) uid: string,
+  ): Promise<boolean> {
     try {
       const userId = uid || ctx.req.user_id
       const user = await UserModel.findById(userId)
@@ -74,7 +79,11 @@ export default class FvoariteDriverResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard(['customer']))
-  async removeFavoriteDriver(@Ctx() ctx: GraphQLContext, @Arg('driverId') driverId: string, @Arg('uid', { nullable: true }) uid: string): Promise<boolean> {
+  async removeFavoriteDriver(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('driverId') driverId: string,
+    @Arg('uid', { nullable: true }) uid: string,
+  ): Promise<boolean> {
     const userId = uid || ctx.req.user_id
     try {
       const user = await UserModel.findById(userId)

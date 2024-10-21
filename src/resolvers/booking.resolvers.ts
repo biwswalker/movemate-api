@@ -12,6 +12,7 @@ import { Types } from 'mongoose'
 import ShipmentModel from '@models/shipment.model'
 import SearchHistoryModel from '@models/searchHistory.model'
 import { ELimiterType, getLatestCount } from '@configs/rateLimit'
+import { EPaymentMethod } from '@enums/payments'
 
 @Resolver()
 export default class BookingResolver {
@@ -32,7 +33,7 @@ export default class BookingResolver {
         }
         if (user && user.userType === 'business') {
           const businessCustomer = user.businessDetail as BusinessCustomer | undefined
-          const isCredit = businessCustomer.paymentMethod === 'credit'
+          const isCredit = businessCustomer.paymentMethod === EPaymentMethod.CREDIT
           isBusinessCreditUser = isCredit
         }
       }
@@ -45,14 +46,14 @@ export default class BookingResolver {
       const paymentMethods = [
         {
           available: true,
-          method: 'cash',
+          method: EPaymentMethod.CASH,
           name: 'ชำระด้วยเงินสด',
           subTitle: 'ชำระผ่าน QR Promptpay ขั้นตอนถัดไป',
           detail: '',
         },
         {
           available: isAuthorized && isBusinessCreditUser,
-          method: 'credit',
+          method: EPaymentMethod.CREDIT,
           name: 'ออกใบแจ้งหนี้',
           subTitle: 'สำหรับสมาชิก Movemate แบบองค์กร/บริษัท',
           detail: '',

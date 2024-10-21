@@ -18,6 +18,7 @@ import { decryption, generateExpToken } from '@utils/encryption'
 import { BusinessCustomerSchema, IndividualCustomerSchema } from '@validations/customer.validations'
 import { ValidationError } from 'yup'
 import { yupValidationThrow } from '@utils/error.utils'
+import { EPaymentMethod } from '@enums/payments'
 
 @Resolver(User)
 export default class RegisterResolver {
@@ -180,7 +181,7 @@ export default class RegisterResolver {
         const generatedPassword = generateRandomNumberPattern('MM########').toLowerCase()
         const hashedPassword = await bcrypt.hash(generatedPassword, 10)
 
-        if (businessDetail.paymentMethod === 'cash' && businessDetail.paymentCashDetail) {
+        if (businessDetail.paymentMethod === EPaymentMethod.CASH && businessDetail.paymentCashDetail) {
           const cashDetail = businessDetail.paymentCashDetail
           const cashPayment = new BusinessCustomerCashPaymentModel({
             acceptedEReceiptDate: cashDetail.acceptedEReceiptDate,
@@ -223,7 +224,7 @@ export default class RegisterResolver {
             context: { movemate_link: `https://www.movematethailand.com` },
           })
           return true
-        } else if (businessDetail.paymentMethod === 'credit' && businessDetail.paymentCreditDetail) {
+        } else if (businessDetail.paymentMethod === EPaymentMethod.CREDIT && businessDetail.paymentCreditDetail) {
           // TODO: Get default config
           const _defaultCreditLimit = 20000.0
           const _billedDate = 1
@@ -488,7 +489,7 @@ export default class RegisterResolver {
       }
 
       const creditPaymentDetail =
-        formValue.paymentMethod === 'credit' && creditPayment
+        formValue.paymentMethod === EPaymentMethod.CREDIT && creditPayment
           ? new BusinessCustomerCreditPaymentModel({
               ...omit(creditPayment, [
                 'businessRegistrationCertificateFile',

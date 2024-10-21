@@ -2,7 +2,7 @@ import { Field, Float, ID, ObjectType, registerEnumType } from 'type-graphql'
 import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import UserModel, { EUserRole, EUserStatus, EUserType, User } from './user.model'
-import ShipmentModel, { EDriverAcceptanceStatus, EShipingStatus, Shipment } from './shipment.model'
+import ShipmentModel, { Shipment } from './shipment.model'
 import BillingPaymentModel, { BillingPayment, EBillingPaymentStatus } from './billingPayment.model'
 import { BusinessCustomer } from './customerBusiness.model'
 import BusinessCustomerCreditPaymentModel, {
@@ -25,7 +25,7 @@ import lodash, {
   filter,
 } from 'lodash'
 import { addDays, addMonths, differenceInDays, differenceInMinutes, format } from 'date-fns'
-import { EPaymentMethod, EPaymentRejectionReason, Payment } from './payment.model'
+import PaymentModel, { Payment } from './payment.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { GET_CUSTOMER_WITH_TODAY_BILLED_DATE } from '@pipelines/user.pipeline'
@@ -33,9 +33,8 @@ import addEmailQueue from '@utils/email.utils'
 import { th } from 'date-fns/locale'
 import path from 'path'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
-import { AggregatePaginateModel, Types } from 'mongoose'
+import { AggregatePaginateModel } from 'mongoose'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
-import PaymentModel, { EPaymentStatus } from './payment.model'
 import UpdateHistoryModel, { UpdateHistory } from './updateHistory.model'
 import { IsEnum } from 'class-validator'
 import RefundModel, { ERefundStatus, Refund } from './refund.model'
@@ -62,6 +61,8 @@ import StepDefinitionModel, {
 } from './shipmentStepDefinition.model'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { generateReceiptCashWithNonTax } from 'reports/receiptWithCashNonTax'
+import { EPaymentMethod, EPaymentRejectionReason, EPaymentStatus } from '@enums/payments'
+import { EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
 
 Aigle.mixin(lodash, {})
 
@@ -256,7 +257,7 @@ export class BillingCycle extends TimeStamps {
 
           const shipmentsRaw = await ShipmentModel.find({
             customer: userId,
-            status: EShipingStatus.DELIVERED,
+            status: EShipmentStatus.DELIVERED,
             deliveredDate: { $gte: shipmentStartDeliveredDate, $lte: shipmentEndDeliveredDate },
           })
 
@@ -822,7 +823,7 @@ export class BillingCycle extends TimeStamps {
 
         // Update shipment status
         await ShipmentModel.findByIdAndUpdate(shipment._id, {
-          status: EShipingStatus.REFUND,
+          status: EShipmentStatus.REFUND,
           refund: _refund,
           cancellationReason: reason,
           cancellationDetail: reasonDetail,
@@ -884,7 +885,7 @@ export class BillingCycle extends TimeStamps {
         }
         // Update shipment status
         await ShipmentModel.findByIdAndUpdate(shipment._id, {
-          status: EShipingStatus.CANCELLED,
+          status: EShipmentStatus.CANCELLED,
           refund: _refund,
           driverAcceptanceStatus: EDriverAcceptanceStatus.UNINTERESTED,
           cancellationReason: reason,
@@ -917,7 +918,7 @@ export class BillingCycle extends TimeStamps {
     console.log(`Shipment ${shipmentId} is cancelled.`)
   }
 
-  static async driverRefund(shipmentId: string, userId: string, reason: string, reasonDetail: string) {
+  static async driverCancelled(shipmentId: string, userId: string, reason: string, reasonDetail: string) {
     const currentDate = new Date()
 
     /**
@@ -929,7 +930,7 @@ export class BillingCycle extends TimeStamps {
      */
 
     const shipmentModel = await ShipmentModel.findByIdAndUpdate(shipmentId, {
-      status: EShipingStatus.IDLE,
+      status: EShipmentStatus.IDLE,
       driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
       driver: undefined,
       cancellationDetail: reasonDetail,
@@ -941,6 +942,7 @@ export class BillingCycle extends TimeStamps {
     })
     await shipmentModel.initialStepDefinition(true)
     /**
+     * Add check remaining time is enough to get no
      * Add to JOB notification
      */
   }

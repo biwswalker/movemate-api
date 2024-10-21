@@ -1,404 +1,406 @@
-import { IsEmail } from "class-validator";
-import { ArgsType, Field, Float, InputType, Int } from "type-graphql";
-import { FileInput } from "./file.input";
+import { IsEmail } from 'class-validator'
+import { ArgsType, Field, Float, InputType, Int } from 'type-graphql'
+import { FileInput } from './file.input'
+import { EPaymentMethod } from '@enums/payments'
+
 @InputType()
 export class RegisterIndividualInput {
   @Field()
   @IsEmail()
-  email: string;
+  email: string
 
   @Field()
-  title: string;
+  title: string
 
   @Field({ nullable: true })
-  otherTitle: string;
+  otherTitle: string
 
   @Field()
-  firstname: string;
+  firstname: string
 
   @Field()
-  lastname: string;
+  lastname: string
 
   @Field()
-  phoneNumber: string;
+  phoneNumber: string
 
   @Field({ nullable: true })
-  taxId: string;
+  taxId: string
 
   @Field({ nullable: true })
-  address: string;
+  address: string
 
   @Field({ nullable: true })
-  province: string;
+  province: string
 
   @Field({ nullable: true })
-  district: string;
+  district: string
 
   @Field({ nullable: true })
-  subDistrict: string;
+  subDistrict: string
 
   @Field({ nullable: true })
-  postcode: string;
+  postcode: string
 }
 
 @InputType()
 export class CashPaymentInput {
   @Field()
-  acceptedEReceiptDate: Date;
+  acceptedEReceiptDate: Date
 }
 
 @InputType()
 export class CreditPaymentInput {
   @Field()
-  isSameAddress: boolean;
+  isSameAddress: boolean
 
   @Field()
-  financialFirstname: string;
+  financialFirstname: string
 
   @Field()
-  financialLastname: string;
+  financialLastname: string
 
   @Field()
-  financialContactNumber: string;
+  financialContactNumber: string
 
   @Field(() => [String])
-  financialContactEmails: string[];
+  financialContactEmails: string[]
 
   @Field()
-  financialAddress: string;
+  financialAddress: string
 
   @Field()
-  financialPostcode: string;
+  financialPostcode: string
 
   @Field()
-  financialProvince: string;
+  financialProvince: string
 
   @Field()
-  financialDistrict: string;
+  financialDistrict: string
 
   @Field()
-  financialSubDistrict: string;
+  financialSubDistrict: string
 
   @Field()
-  acceptedFirstCreditTermDate: Date;
+  acceptedFirstCreditTermDate: Date
 
   @Field(() => FileInput)
-  businessRegistrationCertificateFile: FileInput;
+  businessRegistrationCertificateFile: FileInput
 
   @Field(() => FileInput)
-  copyIDAuthorizedSignatoryFile: FileInput;
+  copyIDAuthorizedSignatoryFile: FileInput
 
   @Field(() => FileInput, { nullable: true })
-  certificateValueAddedTaxRegistrationFile: FileInput;
+  certificateValueAddedTaxRegistrationFile: FileInput
 }
 
 @InputType()
 export class RegisterBusinessInput {
   @Field()
-  businessTitle: string;
+  businessTitle: string
 
   @Field()
-  businessName: string;
+  businessName: string
 
   @Field({ nullable: true })
-  businessBranch: string;
+  businessBranch: string
 
   @Field()
-  businessType: string;
+  businessType: string
 
   @Field({ nullable: true })
-  businessTypeOther: string;
+  businessTypeOther: string
 
   @Field()
-  taxNumber: string;
+  taxNumber: string
 
   @Field()
-  address: string;
+  address: string
 
   @Field()
-  province: string;
+  province: string
 
   @Field()
-  district: string;
+  district: string
 
   @Field()
-  subDistrict: string;
+  subDistrict: string
 
   @Field()
-  postcode: string;
+  postcode: string
 
   @Field()
-  contactNumber: string;
+  contactNumber: string
 
   @Field()
   @IsEmail()
-  businessEmail: string;
+  businessEmail: string
+
+  @Field(() => EPaymentMethod)
+  paymentMethod: EPaymentMethod
 
   @Field()
-  paymentMethod: string;
-
-  @Field()
-  acceptedEDocumentDate: Date;
+  acceptedEDocumentDate: Date
 
   @Field((type) => Int)
-  acceptedPoliciesVersion: number;
+  acceptedPoliciesVersion: number
 
   @Field()
-  acceptedPoliciesDate: Date;
+  acceptedPoliciesDate: Date
 
   @Field((type) => Int)
-  acceptedTermConditionVersion: number;
+  acceptedTermConditionVersion: number
 
   @Field()
-  acceptedTermConditionDate: Date;
+  acceptedTermConditionDate: Date
 
   @Field(() => CashPaymentInput, { nullable: true })
-  paymentCashDetail: CashPaymentInput;
+  paymentCashDetail: CashPaymentInput
 
   @Field(() => CreditPaymentInput, { nullable: true })
-  paymentCreditDetail: CreditPaymentInput;
+  paymentCreditDetail: CreditPaymentInput
 }
 
 @InputType()
 export class CutomerIndividualInput {
   @Field()
-  userType: TUserType;
+  userType: TUserType
 
   @Field()
-  status: TUserStatus;
+  status: TUserStatus
 
   @Field({ nullable: true })
-  remark: string;
+  remark: string
 
   @Field({ nullable: true })
-  isVerifiedEmail: boolean;
+  isVerifiedEmail: boolean
 
   @Field({ nullable: true })
-  isVerifiedPhoneNumber: boolean;
+  isVerifiedPhoneNumber: boolean
 
   @Field()
   @IsEmail()
-  email: string;
+  email: string
 
   @Field()
-  title: string;
+  title: string
 
   @Field({ nullable: true })
-  otherTitle: string;
+  otherTitle: string
 
   @Field()
-  firstname: string;
+  firstname: string
 
   @Field()
-  lastname: string;
+  lastname: string
 
   @Field()
-  phoneNumber: string;
+  phoneNumber: string
 
   @Field({ nullable: true })
-  taxId: string;
+  taxId: string
 
   @Field({ nullable: true })
-  address: string;
+  address: string
 
   @Field({ nullable: true })
-  province: string;
+  province: string
 
   @Field({ nullable: true })
-  district: string;
+  district: string
 
   @Field({ nullable: true })
-  subDistrict: string;
+  subDistrict: string
 
   @Field({ nullable: true })
-  postcode: string;
+  postcode: string
 
   @Field(() => FileInput, { nullable: true })
-  profileImage: FileInput;
+  profileImage: FileInput
 }
 
 @InputType()
 export class CashPaymentDetailInput {
   @Field()
-  acceptedEReceipt: boolean;
+  acceptedEReceipt: boolean
 
   @Field()
-  acceptedEReceiptDate: string;
+  acceptedEReceiptDate: string
 }
 
 @InputType()
 class BilledMonthInput {
   @Field(() => Int)
-  jan: number;
+  jan: number
 
   @Field(() => Int)
-  feb: number;
+  feb: number
 
   @Field(() => Int)
-  mar: number;
+  mar: number
 
   @Field(() => Int)
-  apr: number;
+  apr: number
 
   @Field(() => Int)
-  may: number;
+  may: number
 
   @Field(() => Int)
-  jun: number;
+  jun: number
 
   @Field(() => Int)
-  jul: number;
+  jul: number
 
   @Field(() => Int)
-  aug: number;
+  aug: number
 
   @Field(() => Int)
-  sep: number;
+  sep: number
 
   @Field(() => Int)
-  oct: number;
+  oct: number
 
   @Field(() => Int)
-  nov: number;
+  nov: number
 
   @Field(() => Int)
-  dec: number;
+  dec: number
 }
 
 @InputType()
 export class CreditPaymentDetailInput {
   @Field()
-  acceptedFirstCreditTerm: boolean;
+  acceptedFirstCreditTerm: boolean
 
   @Field()
-  acceptedFirstCreditTermDate: string;
+  acceptedFirstCreditTermDate: string
 
   @Field()
-  billedDateType: string; // default | dates
+  billedDateType: string // default | dates
 
   @Field(() => BilledMonthInput)
-  billedDate: BilledMonthInput;
+  billedDate: BilledMonthInput
 
   @Field()
-  billedRoundType: string; // default | dates
+  billedRoundType: string // default | dates
 
   @Field(() => BilledMonthInput)
-  billedRound: BilledMonthInput;
+  billedRound: BilledMonthInput
 
   @Field(() => Float)
-  creditLimit: number;
+  creditLimit: number
 
   @Field(() => Float, { nullable: true })
-  creditUsage?: number;
+  creditUsage?: number
 
   @Field()
-  financialAddress: string;
+  financialAddress: string
 
   @Field(() => [String])
-  financialContactEmails: string[];
+  financialContactEmails: string[]
 
   @Field()
-  financialContactNumber: string;
+  financialContactNumber: string
 
   @Field()
-  financialDistrict: string;
+  financialDistrict: string
 
   @Field()
-  financialFirstname: string;
+  financialFirstname: string
 
   @Field()
-  financialLastname: string;
+  financialLastname: string
 
   @Field()
-  financialPostcode: string;
+  financialPostcode: string
 
   @Field()
-  financialProvince: string;
+  financialProvince: string
 
   @Field()
-  financialSubDistrict: string;
+  financialSubDistrict: string
 
   @Field()
-  isSameAddress: boolean;
+  isSameAddress: boolean
 
   @Field(() => FileInput, { nullable: true })
-  businessRegistrationCertificateFile: FileInput;
+  businessRegistrationCertificateFile: FileInput
 
   @Field(() => FileInput, { nullable: true })
-  copyIDAuthorizedSignatoryFile: FileInput;
+  copyIDAuthorizedSignatoryFile: FileInput
 
   @Field(() => FileInput, { nullable: true })
-  certificateValueAddedTaxRegistrationFile?: FileInput;
+  certificateValueAddedTaxRegistrationFile?: FileInput
 }
 
 @InputType()
 export class CutomerBusinessInput {
   @Field()
-  userType: TUserType;
+  userType: TUserType
 
   @Field()
-  status: TUserStatus;
+  status: TUserStatus
 
   @Field({ nullable: true })
-  remark: string;
+  remark: string
 
   @Field({ nullable: true })
-  isVerifiedEmail: boolean;
+  isVerifiedEmail: boolean
 
   @Field({ nullable: true })
-  isVerifiedPhoneNumber: boolean;
+  isVerifiedPhoneNumber: boolean
 
   @Field(() => FileInput, { nullable: true })
-  profileImage: FileInput;
+  profileImage: FileInput
 
   @Field()
   @IsEmail()
-  businessEmail: string;
+  businessEmail: string
 
   @Field()
-  businessTitle: string;
+  businessTitle: string
 
   @Field()
-  businessName: string;
+  businessName: string
 
   @Field()
-  businessBranch: string;
+  businessBranch: string
 
   @Field()
-  businessType: string;
+  businessType: string
 
   @Field()
-  businessTypeOther: string;
+  businessTypeOther: string
 
   @Field()
-  contactNumber: string;
+  contactNumber: string
+
+  @Field(() => EPaymentMethod)
+  paymentMethod: EPaymentMethod
 
   @Field()
-  paymentMethod: string;
+  taxNumber: string
 
   @Field()
-  taxNumber: string;
+  address: string
 
   @Field()
-  address: string;
+  province: string
 
   @Field()
-  province: string;
+  district: string
 
   @Field()
-  district: string;
+  subDistrict: string
 
   @Field()
-  subDistrict: string;
-
-  @Field()
-  postcode: string;
+  postcode: string
 
   @Field(() => CashPaymentDetailInput, { nullable: true })
-  cashPayment?: CashPaymentDetailInput;
+  cashPayment?: CashPaymentDetailInput
 
   @Field(() => CreditPaymentDetailInput, { nullable: true })
-  creditPayment?: CreditPaymentDetailInput;
+  creditPayment?: CreditPaymentDetailInput
 
   @Field({ nullable: true })
   acceptedEDocumentDate?: Date

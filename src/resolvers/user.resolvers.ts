@@ -54,6 +54,7 @@ import { IndividualDriver } from '@models/driverIndividual.model'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import pubsub, { NOTFICATIONS, USERS } from '@configs/pubsub'
 import { FileInput } from '@inputs/file.input'
+import { EPaymentMethod } from '@enums/payments'
 
 @Resolver(User)
 export default class UserResolver {
@@ -328,7 +329,7 @@ export default class UserResolver {
           await uploadedImage.save()
         }
 
-        if (formValue.paymentMethod === 'credit' && creditPayment) {
+        if (formValue.paymentMethod === EPaymentMethod.CREDIT && creditPayment) {
           const creditDetail = await BusinessCustomerCreditPaymentModel.findById(customerBusinesslModel.creditPayment)
           if (!creditDetail) {
             const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบข้อมูลการเงิน'
@@ -676,7 +677,7 @@ export default class UserResolver {
         }
 
         const cashPaymentDetail =
-          formValue.paymentMethod === 'credit' && cashPayment
+          formValue.paymentMethod === EPaymentMethod.CREDIT && cashPayment
             ? new BusinessCustomerCashPaymentModel({
                 acceptedEreceiptDate: cashPayment.acceptedEReceiptDate,
               })
@@ -686,7 +687,7 @@ export default class UserResolver {
         }
 
         const creditPaymentDetail =
-          formValue.paymentMethod === 'credit' && creditPayment
+          formValue.paymentMethod === EPaymentMethod.CREDIT && creditPayment
             ? new BusinessCustomerCreditPaymentModel({
                 ...omit(creditPayment, [
                   'businessRegistrationCertificateFile',

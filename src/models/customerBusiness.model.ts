@@ -4,6 +4,7 @@ import { IsEmail, IsNotEmpty, IsString, Length } from "class-validator";
 import autopopulate from 'mongoose-autopopulate'
 import { BusinessCustomerCreditPayment } from "./customerBusinessCreditPayment.model";
 import { BusinessCustomerCashPayment } from "./customerBusinessCashPayment.model";
+import { EPaymentMethod } from "@enums/payments";
 
 @plugin(autopopulate)
 @ObjectType()
@@ -77,9 +78,9 @@ export class BusinessCustomer {
   @Property({ required: true })
   businessEmail: string;
 
-  @Field()
-  @Property({ enum: ["cash", "credit"], required: true })
-  paymentMethod: string;
+  @Field(() => EPaymentMethod)
+  @Property({ required: true })
+  paymentMethod: EPaymentMethod;
 
   // E-Document
   @Field({ nullable: true })

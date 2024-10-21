@@ -1,4 +1,4 @@
-import { Field, ID, ObjectType, registerEnumType } from 'type-graphql'
+import { Field, ID, ObjectType } from 'type-graphql'
 import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { IsEnum } from 'class-validator'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
@@ -7,39 +7,7 @@ import { PricingCalculationMethodPayload } from '@payloads/pricing.payloads'
 import { SubtotalCalculatedPayload } from '@payloads/booking.payloads'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
 import { UpdateHistory } from './updateHistory.model'
-
-export enum EPaymentMethod {
-  CASH = 'cash',
-  CREDIT = 'credit',
-}
-registerEnumType(EPaymentMethod, {
-  name: 'EPaymentMethod',
-  description: 'Payment method',
-})
-
-export enum EPaymentStatus {
-  WAITING_CONFIRM_PAYMENT = 'waiting_confirm_payment',
-  INVOICE = 'invoice',
-  BILLED = 'billed',
-  PAID = 'paid',
-  REFUNDED = 'refunded',
-  REFUND = 'refund',
-  CANCELLED = 'cancelled',
-}
-registerEnumType(EPaymentStatus, {
-  name: 'EPaymentStatus',
-  description: 'Payment status',
-})
-
-export enum EPaymentRejectionReason {
-  INSUFFICIENT_FUNDS = 'insufficient_funds',
-  UNABLE_VERIFY_EVIDENCE = 'unable_verify_evidence',
-  OTHER = 'other',
-}
-registerEnumType(EPaymentRejectionReason, {
-  name: 'EPaymentRejectionReason',
-  description: 'Payment rejection reason',
-})
+import { EPaymentMethod, EPaymentRejectionReason, EPaymentStatus } from '@enums/payments'
 
 @ObjectType()
 export class InvoiceDetail {
@@ -110,15 +78,14 @@ export class Payment extends TimeStamps {
   @Property()
   paymentNumber: string
 
-  @Field()
+  @Field(() => EPaymentStatus)
   @IsEnum(EPaymentStatus)
   @Property({ enum: EPaymentStatus, default: EPaymentStatus.WAITING_CONFIRM_PAYMENT })
-  status: TPaymentStatus
+  status: EPaymentStatus
 
-  @Field(() => String)
-  @IsEnum(EPaymentMethod)
+  @Field(() => EPaymentMethod)
   @Property({ enum: EPaymentMethod, default: EPaymentMethod.CASH, required: true })
-  paymentMethod: TPaymentMethod
+  paymentMethod: EPaymentMethod
 
   @Field(() => InvoiceDetail, { nullable: true })
   @Property({ required: false })

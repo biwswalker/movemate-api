@@ -1,8 +1,9 @@
 import { ArgsType, Field, Float, InputType } from 'type-graphql'
 import { FileInput } from './file.input'
-// import { GraphQLJSONObject } from "graphql-type-json";
 import { LocationInput } from './location.input'
 import { PODAddressInput } from './booking.input'
+import { EPaymentMethod, EPaymentStatus } from '@enums/payments'
+import { EShipmentStatusCriteria } from '@enums/shipments'
 
 @InputType()
 class DestinationInput {
@@ -105,8 +106,8 @@ export class ShipmentInput {
   @Field(() => PODAddressInput, { nullable: true })
   podDetail?: PODAddressInput
 
-  @Field(() => String)
-  paymentMethod: TPaymentMethod
+  @Field(() => EPaymentMethod)
+  paymentMethod: EPaymentMethod
 
   @Field(() => PaymentDetailInput, { nullable: true })
   paymentDetail?: PaymentDetailInput
@@ -147,14 +148,14 @@ export class GetShipmentArgs {
   @Field({ nullable: true })
   trackingNumber?: string
 
-  @Field({ nullable: true })
-  status?: TCriteriaStatus
+  @Field(() => EShipmentStatusCriteria, { nullable: true })
+  status?: EShipmentStatusCriteria
 
   @Field({ nullable: true })
   vehicleTypeId?: string
 
-  @Field({ nullable: true })
-  paymentMethod?: TPaymentMethod
+  @Field(() => EPaymentMethod, { nullable: true })
+  paymentMethod?: EPaymentMethod
 
   @Field(() => Date, { nullable: true })
   dateRangeStart?: Date
@@ -170,8 +171,8 @@ export class GetShipmentArgs {
   endWorkingDate?: Date
 
   // Recheck
-  @Field({ nullable: true })
-  paymentStatus?: TPaymentStatus
+  @Field(() => EPaymentStatus, { nullable: true })
+  paymentStatus?: EPaymentStatus
 
   @Field({ nullable: true })
   paymentNumber?: string

@@ -1,5 +1,10 @@
+import {
+  EAdminAcceptanceStatus,
+  EDriverAcceptanceStatus,
+  EShipmentStatus,
+  EShipmentStatusCriteria,
+} from '@enums/shipments'
 import { GetShipmentArgs } from '@inputs/shipment.input'
-import { EShipingStatus } from '@models/shipment.model'
 import { isEmpty } from 'lodash'
 import { PipelineStage, Types } from 'mongoose'
 
@@ -25,7 +30,18 @@ export const SHIPMENT_LIST = (
   user_id: string | undefined,
   sort = {},
 ) => {
-  const statusFilterOr = status === 'all' ? ['idle', 'progressing', 'dilivered', 'cancelled', 'refund'] : [status]
+  const statusFilterOr =
+    status === EShipmentStatusCriteria.ALL
+      ? [
+          EShipmentStatus.IDLE,
+          EShipmentStatus.PROGRESSING,
+          EShipmentStatus.DELIVERED,
+          EShipmentStatus.CANCELLED,
+          EShipmentStatus.REFUND,
+        ]
+      : status === EShipmentStatusCriteria.PAYMENT_VERIFY || status === EShipmentStatusCriteria.WAITING_DRIVER
+      ? [EShipmentStatus.IDLE]
+      : [status]
 
   const startOfCreated = dateRangeStart ? new Date(new Date(dateRangeStart).setHours(0, 0, 0, 0)) : null
   const endOfCreated = dateRangeEnd ? new Date(new Date(dateRangeEnd).setHours(23, 59, 59, 999)) : null
@@ -52,6 +68,12 @@ export const SHIPMENT_LIST = (
     ...(user_role === 'customer' && user_id ? { customer: user_id } : {}),
     ...(customerId ? { customer: new Types.ObjectId(customerId) } : {}),
     ...(driverId ? { driver: new Types.ObjectId(driverId) } : {}),
+    ...(status === EShipmentStatusCriteria.PAYMENT_VERIFY
+      ? { adminAcceptanceStatus: EAdminAcceptanceStatus.PENDING }
+      : {}),
+    ...(status === EShipmentStatusCriteria.WAITING_DRIVER
+      ? { driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING }
+      : {}),
   }
 
   const orQuery = [
@@ -419,25 +441,25 @@ export const SHIPMENT_LIST = (
             branches: [
               {
                 case: {
-                  $eq: ['$status', EShipingStatus.IDLE],
+                  $eq: ['$status', EShipmentStatus.IDLE],
                 },
                 then: 0,
               },
               {
                 case: {
-                  $eq: ['$status', EShipingStatus.REFUND],
+                  $eq: ['$status', EShipmentStatus.REFUND],
                 },
                 then: 1,
               },
               {
                 case: {
-                  $eq: ['$status', EShipingStatus.PROGRESSING],
+                  $eq: ['$status', EShipmentStatus.PROGRESSING],
                 },
                 then: 2,
               },
               {
                 case: {
-                  $eq: ['$status', EShipingStatus.DELIVERED],
+                  $eq: ['$status', EShipmentStatus.DELIVERED],
                 },
                 then: 3,
               },

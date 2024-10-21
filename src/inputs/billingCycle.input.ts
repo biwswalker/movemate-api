@@ -1,6 +1,6 @@
 import { ArgsType, Field } from 'type-graphql'
 import { FileInput } from './file.input'
-import { EPaymentMethod } from '@models/payment.model'
+import { EPaymentMethod } from '@enums/payments'
 
 @ArgsType()
 export class GetBillingCycleArgs {

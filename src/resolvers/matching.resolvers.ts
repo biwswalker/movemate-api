@@ -21,22 +21,20 @@ import { addDays, format } from 'date-fns'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { Repeater } from '@graphql-yoga/subscription'
 import BillingCycleModel from '@models/billingCycle.model'
-import { EPaymentMethod } from '@models/payment.model'
 import addEmailQueue from '@utils/email.utils'
-
-// Custom status for driver
-type TShipmentStatus = 'new' | 'progressing' | 'dilivered' | 'cancelled'
+import { EPaymentMethod } from '@enums/payments'
+import { EDriverAcceptanceStatus, EShipmentMatchingCriteria, EShipmentStatus } from '@enums/shipments'
 
 @Resolver()
 export default class MatchingResolver {
-  generateQuery(status: TShipmentStatus, userId: string, vehicleId: Ref<VehicleType>) {
+  generateQuery(status: EShipmentMatchingCriteria, userId: string, vehicleId: Ref<VehicleType>) {
     const currentDate = new Date()
     const threeDayAfter = addDays(currentDate, 3)
     const statusQuery: FilterQuery<Shipment> =
-      status === 'new'
+      status === EShipmentMatchingCriteria.NEW
         ? {
-            status: 'idle',
-            driverAcceptanceStatus: 'pending',
+            status: EShipmentStatus.IDLE,
+            driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
             vehicleId,
             $or: [
               { requestedDriver: { $exists: false } }, // ไม่มี requestedDriver
@@ -57,22 +55,22 @@ export default class MatchingResolver {
               },
             ],
           }
-        : status === 'progressing' // Status progressing
+        : status === EShipmentMatchingCriteria.PROGRESSING // Status progressing
         ? {
-            status: 'progressing',
-            driverAcceptanceStatus: 'accepted',
+            status: EShipmentMatchingCriteria.PROGRESSING,
+            driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
             driver: new Types.ObjectId(userId),
           }
-        : status === 'cancelled' // Status cancelled
+        : status === EShipmentMatchingCriteria.CANCELLED // Status cancelled
         ? {
-            driverAcceptanceStatus: 'accepted',
+            driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
             driver: new Types.ObjectId(userId),
-            $or: [{ status: 'cancelled' }, { status: 'refund' }],
+            $or: [{ status: EShipmentMatchingCriteria.CANCELLED }, { status: 'refund' }],
           }
-        : status === 'dilivered' // Status complete
+        : status === EShipmentMatchingCriteria.DELIVERED // Status complete
         ? {
-            status: 'dilivered',
-            driverAcceptanceStatus: 'accepted',
+            status: EShipmentMatchingCriteria.DELIVERED,
+            driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
             driver: new Types.ObjectId(userId),
           }
         : { _id: 'none' } // Not Included status
@@ -124,7 +122,7 @@ export default class MatchingResolver {
   @UseMiddleware(AuthGuard(['driver']))
   async getAvailableShipment(
     @Ctx() ctx: GraphQLContext,
-    @Arg('status') status: TShipmentStatus,
+    @Arg('status') status: EShipmentMatchingCriteria,
     @Args() { skip, limit, ...loadmore }: LoadmoreArgs,
   ): Promise<Shipment[]> {
     const userId = ctx.req.user_id
@@ -170,7 +168,7 @@ export default class MatchingResolver {
 
   @Query(() => Int)
   @UseMiddleware(AuthGuard(['driver']))
-  async totalAvailableShipment(@Ctx() ctx: GraphQLContext, @Arg('status') status: TShipmentStatus): Promise<number> {
+  async totalAvailableShipment(@Ctx() ctx: GraphQLContext, @Arg('status') status: EShipmentMatchingCriteria): Promise<number> {
     const userId = ctx.req.user_id
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
@@ -205,11 +203,14 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
     // Check shipment are available
-    if (shipment.status === 'idle' && shipment.driverAcceptanceStatus === 'pending') {
+    if (
+      shipment.status === EShipmentStatus.IDLE &&
+      shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING
+    ) {
       await shipment.nextStep()
       await ShipmentModel.findByIdAndUpdate(shipmentId, {
-        status: 'progressing',
-        driverAcceptanceStatus: 'accepted',
+        status: EShipmentStatus.PROGRESSING,
+        driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
         driver: userId,
       })
       await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.WORKING })
