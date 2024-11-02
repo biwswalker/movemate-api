@@ -1,91 +1,98 @@
-import { Field, InputType, Int, ObjectType } from 'type-graphql'
-import { FileInput } from './file.input';
-import { RegisterOTPInput } from './otp.input';
+import { Field, InputType, Int } from 'type-graphql'
+import { FileInput } from './file.input'
+import { RegisterOTPInput } from './otp.input'
+import { EDriverType } from '@enums/users'
 
 @InputType()
-export class IndividualDriverDetailInput {
+export class DriverDetailInput {
   @Field(() => Int)
-  policyVersion: number;
+  policyVersion: number
+
+  @Field(() => EDriverType)
+  driverType: EDriverType
 
   @Field()
-  driverType: TUserType;
-
-  @Field()
-  title: string;
+  title: string
 
   @Field({ nullable: true })
-  otherTitle?: string;
+  otherTitle?: string
+
+  @Field({ nullable: true })
+  firstname: string
+
+  @Field({ nullable: true })
+  lastname: string
+
+  @Field({ nullable: true })
+  businessName: string
+
+  @Field({ nullable: true })
+  businessBranch: string
+  
+  @Field()
+  taxNumber: string
 
   @Field()
-  firstname: string;
+  phoneNumber: string
+
+  @Field({ nullable: true })
+  lineId: string
 
   @Field()
-  lastname: string;
+  password: string
 
   @Field()
-  taxId: string;
+  address: string
 
   @Field()
-  phoneNumber: string;
+  province: string
 
   @Field()
-  lineId: string;
+  district: string
 
   @Field()
-  password: string;
+  subDistrict: string
 
   @Field()
-  address: string;
+  postcode: string
 
   @Field()
-  province: string;
+  bank: string
 
   @Field()
-  district: string;
+  bankBranch: string
 
   @Field()
-  subDistrict: string;
+  bankName: string
 
   @Field()
-  postcode: string;
+  bankNumber: string
 
-  @Field()
-  bank: string;
-
-  @Field()
-  bankBranch: string;
-
-  @Field()
-  bankName: string;
-
-  @Field()
-  bankNumber: string;
-
-  @Field()
-  serviceVehicleType: string;
+  @Field(() => [String])
+  serviceVehicleTypes: string[]
 }
 
 @InputType()
 export class DriverDocumentInput {
-  @Field(() => FileInput)
+  @Field(() => FileInput, { nullable: true })
   frontOfVehicle: FileInput
 
-  @Field(() => FileInput)
+  @Field(() => FileInput, { nullable: true })
   backOfVehicle: FileInput
 
-  @Field(() => FileInput)
+  @Field(() => FileInput, { nullable: true })
   leftOfVehicle: FileInput
 
-  @Field(() => FileInput)
+  @Field(() => FileInput, { nullable: true })
   rigthOfVehicle: FileInput
 
-  @Field(() => FileInput)
+  @Field(() => FileInput, { nullable: true })
   copyVehicleRegistration: FileInput
 
-  @Field(() => FileInput)
+  @Field(() => FileInput, { nullable: true })
   copyIDCard: FileInput
 
-  @Field(() => FileInput)
+  @Field(() => FileInput, { nullable: true })
   copyDrivingLicense: FileInput
 
   @Field(() => FileInput, { nullable: true })
@@ -99,16 +106,71 @@ export class DriverDocumentInput {
 
   @Field(() => FileInput, { nullable: true })
   criminalRecordCheckCert?: FileInput
+
+  @Field(() => FileInput, { nullable: true })
+  businessRegistrationCertificate?: FileInput
+
+  @Field(() => FileInput, { nullable: true })
+  certificateValueAddedTaxRegistration?: FileInput
 }
 
 @InputType()
-export class IndividualDriverRegisterInput {
-  @Field(() => IndividualDriverDetailInput)
-  detail: IndividualDriverDetailInput
+export class DriverRegisterInput {
+  @Field(() => DriverDetailInput)
+  detail: DriverDetailInput
 
   @Field(() => DriverDocumentInput)
   documents: DriverDocumentInput
 
   @Field(() => RegisterOTPInput)
   otp: RegisterOTPInput
+}
+
+
+@InputType()
+export class EmployeeDetailInput {
+  @Field()
+  title: string
+
+  @Field({ nullable: true })
+  otherTitle?: string
+
+  @Field({ nullable: true })
+  firstname: string
+
+  @Field({ nullable: true })
+  lastname: string
+  
+  @Field()
+  taxNumber: string
+
+  @Field()
+  phoneNumber: string
+
+  @Field({ nullable: true })
+  lineId: string
+
+  @Field()
+  address: string
+
+  @Field()
+  province: string
+
+  @Field()
+  district: string
+
+  @Field()
+  subDistrict: string
+
+  @Field()
+  postcode: string
+}
+
+@InputType()
+export class EmployeeRegisterInput {
+  @Field(() => EmployeeDetailInput)
+  detail?: EmployeeDetailInput;
+
+  @Field(() => DriverDocumentInput)
+  documents?: DriverDocumentInput;
 }

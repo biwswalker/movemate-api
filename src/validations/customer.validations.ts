@@ -4,6 +4,7 @@ import { isEmpty, isEqual } from 'lodash'
 import IndividualCustomerModel from '@models/customerIndividual.model'
 import BusinessCustomerModel from '@models/customerBusiness.model'
 import { EPaymentMethod } from '@enums/payments'
+import { EUserRole, EUserType } from '@enums/users'
 
 export const IndividualCustomerSchema = (userId?: string) =>
   Yup.object().shape({
@@ -15,8 +16,8 @@ export const IndividualCustomerSchema = (userId?: string) =>
       .required('ระบุอีเมล')
       .test('exiting-email', 'อีเมลถูกใช้งานแล้ว', async (value) => {
         if (userId) {
-          const individualResult = await UserModel.existingEmail(userId, value, 'individual', 'customer')
-          const businessResult = await UserModel.existingEmail(userId, value, 'business', 'customer')
+          const individualResult = await UserModel.existingEmail(userId, value, EUserType.INDIVIDUAL, EUserRole.CUSTOMER)
+          const businessResult = await UserModel.existingEmail(userId, value, EUserType.BUSINESS, EUserRole.CUSTOMER)
           return !individualResult && !businessResult
         }
         const individualResult = await IndividualCustomerModel.findOne({ email: value })
@@ -132,8 +133,8 @@ export const BusinessCustomerSchema = (userId?: string) =>
       .required('ระบุอีเมล')
       .test('exiting-email', 'อีเมลถูกใช้งานแล้ว', async (value) => {
         if (userId) {
-          const individualResult = await UserModel.existingEmail(userId, value, 'individual', 'customer')
-          const businessResult = await UserModel.existingEmail(userId, value, 'business', 'customer')
+          const individualResult = await UserModel.existingEmail(userId, value, EUserType.INDIVIDUAL, EUserRole.CUSTOMER)
+          const businessResult = await UserModel.existingEmail(userId, value, EUserType.BUSINESS, EUserRole.CUSTOMER)
           return !individualResult && !businessResult
         }
         const individualResult = await IndividualCustomerModel.findOne({ email: value })

@@ -6,11 +6,11 @@ import { Schema } from 'mongoose'
 import { File } from './file.model'
 
 export enum EStepStatus {
-  IDLE = 'idle',
-  PROGRESSING = 'progressing',
-  DONE = 'done',
-  EXPIRE = 'expire',
-  CANCELLED = 'cancelled',
+  IDLE = 'IDLE',
+  PROGRESSING = 'PROGRESSING',
+  DONE = 'DONE',
+  EXPIRE = 'EXPIRE',
+  CANCELLED = 'CANCELLED',
 }
 registerEnumType(EStepStatus, {
   name: 'EStepStatus',
@@ -69,9 +69,9 @@ export class StepDefinition extends TimeStamps {
   @Field(() => ID)
   readonly _id: string
 
-  @Field()
+  @Field(() => EStepDefinition)
   @Property()
-  step: TStepDefinition
+  step: EStepDefinition
 
   @Field(() => Int)
   @Property()
@@ -93,9 +93,9 @@ export class StepDefinition extends TimeStamps {
   @Property({ default: 0, required: false })
   meta: number
 
-  @Field()
+  @Field(() => EStepStatus)
   @Property({ default: EStepStatus.IDLE, enum: EStepStatus })
-  stepStatus: TStepStatus
+  stepStatus: EStepStatus
 
   @Field(() => [File])
   @Property({

@@ -1,4 +1,4 @@
-import { ObjectType, Field, ID, Int, registerEnumType } from 'type-graphql'
+import { ObjectType, Field, ID, Int } from 'type-graphql'
 import { prop as Property, Ref, Severity, getModelForClass, plugin } from '@typegoose/typegoose'
 import autopopulate from 'mongoose-autopopulate'
 import { IsNotEmpty, IsString, IsEnum } from 'class-validator'
@@ -12,66 +12,19 @@ import { BusinessCustomer } from './customerBusiness.model'
 import { File } from './file.model'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import { decryption } from '@utils/encryption'
-import { find, get, isEmpty } from 'lodash'
+import { find, get, includes, isEmpty } from 'lodash'
 import { EXISTING_USERS, GET_CUSTOMER_BY_EMAIL } from '@pipelines/user.pipeline'
 import { Notification } from './notification.model'
-import { IndividualDriver } from './driverIndividual.model'
-
-export enum EUserRole {
-  CUSTOMER = 'customer',
-  ADMIN = 'admin',
-  DRIVER = 'driver',
-}
-registerEnumType(EUserRole, {
-  name: 'EUserRole',
-  description: 'User role',
-})
-
-export enum EUserType {
-  INDIVIDUAL = 'individual',
-  BUSINESS = 'business',
-}
-registerEnumType(EUserType, {
-  name: 'EUserType',
-  description: 'User type',
-})
-
-export enum EUserStatus {
-  PENDING = 'pending', // Need to Verify
-  ACTIVE = 'active',
-  INACTIVE = 'inactive',
-  BANNED = 'banned',
-  DENIED = 'denied',
-}
-registerEnumType(EUserStatus, {
-  name: 'EUserStatus',
-  description: 'User status',
-})
-
-export enum EUserValidationStatus {
-  PENDING = 'pending',
-  APPROVE = 'approve',
-  DENIED = 'denied',
-}
-registerEnumType(EUserValidationStatus, {
-  name: 'EUserValidationStatus',
-  description: 'User validation status',
-})
-
-enum ERegistration {
-  WEB = 'web',
-  APP = 'app',
-}
-
-export enum EDriverStatus {
-  IDLE = 'idle',
-  BUSY = 'busy',
-  WORKING = 'working',
-}
-registerEnumType(EDriverStatus, {
-  name: 'EDriverStatus',
-  description: 'Driver status',
-})
+import { DriverDetail } from './driverDetail.model'
+import {
+  EDriverStatus,
+  EDriverType,
+  ERegistration,
+  EUserRole,
+  EUserStatus,
+  EUserType,
+  EUserValidationStatus,
+} from '@enums/users'
 
 @plugin(autopopulate)
 @plugin(mongoosePagination)
@@ -87,17 +40,17 @@ export class User extends TimeStamps {
   @Property({ required: true })
   userNumber: string
 
-  @Field()
+  @Field(() => EUserRole)
   @IsEnum(EUserRole)
   @IsNotEmpty()
   @Property({ enum: EUserRole, default: EUserRole.CUSTOMER, required: true })
-  userRole: TUserRole
+  userRole: EUserRole
 
-  @Field()
+  @Field(() => EUserType)
   @IsEnum(EUserType)
   @IsNotEmpty()
   @Property({ enum: EUserType, default: EUserType.INDIVIDUAL, required: true })
-  userType: TUserType
+  userType: EUserType
 
   @Field()
   @Property({ required: true, unique: true })
@@ -110,13 +63,13 @@ export class User extends TimeStamps {
   @Property()
   remark: string
 
-  @Field()
+  @Field(() => EUserStatus)
   @IsEnum(EUserStatus)
   @IsNotEmpty()
   @Property({ required: true, enum: EUserStatus, default: EUserStatus.ACTIVE })
-  status: TUserStatus
+  status: EUserStatus
 
-  @Field()
+  @Field(() => EUserValidationStatus)
   @IsEnum(EUserValidationStatus)
   @IsNotEmpty()
   @Property({
@@ -124,13 +77,13 @@ export class User extends TimeStamps {
     enum: EUserValidationStatus,
     default: EUserValidationStatus.PENDING,
   })
-  validationStatus: TUserValidationStatus
+  validationStatus: EUserValidationStatus
 
-  @Field()
+  @Field(() => ERegistration) 
   @IsEnum(ERegistration)
   @IsNotEmpty()
   @Property({ required: true, enum: ERegistration, default: ERegistration.WEB })
-  registration: TRegistration
+  registration: ERegistration
 
   @Field({ nullable: true })
   @Property()
@@ -180,11 +133,13 @@ export class User extends TimeStamps {
   @Property({ autopopulate: true, ref: 'BusinessCustomer' })
   businessDetail?: Ref<BusinessCustomer>
 
-  @Field(() => IndividualDriver, { nullable: true })
-  @Property({ autopopulate: true, ref: 'IndividualDriver' })
-  individualDriver?: Ref<IndividualDriver>
+  @Field(() => DriverDetail, { nullable: true })
+  @Property({ autopopulate: true, ref: 'DriverDetail' })
+  driverDetail?: Ref<DriverDetail>
 
-  // Business Driver
+  @Field(() => [User], { nullable: true })
+  @Property({ autopopulate: true, ref: 'User' })
+  agents?: Ref<User>[]
 
   @Field(() => File, { nullable: true })
   @Property({ autopopulate: true, ref: 'File' })
@@ -211,7 +166,7 @@ export class User extends TimeStamps {
   @Property({ default: '' })
   fcmToken?: string
 
-  @Field({ nullable: true })
+  @Field(() => EDriverStatus, { nullable: true })
   @Property({ default: EDriverStatus.IDLE, required: false })
   drivingStatus?: EDriverStatus
 
@@ -219,13 +174,17 @@ export class User extends TimeStamps {
   @Property({ default: [], allowMixed: Severity.ALLOW })
   favoriteDrivers?: string[]
 
+  @Field(() => [String], { nullable: true, defaultValue: [] })
+  @Property({ default: [], allowMixed: Severity.ALLOW })
+  parents?: string[]
+
   @Field({ nullable: true })
   get fullname(): string {
     const userRole = get(this, '_doc.userRole', '') || this.userRole || ''
     const userType = get(this, '_doc.userType', '') || this.userType || ''
 
-    if (userRole === 'customer') {
-      if (userType === 'individual') {
+    if (userRole === EUserRole.CUSTOMER) {
+      if (userType === EUserType.INDIVIDUAL) {
         const individualDetail: IndividualCustomer | undefined =
           get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
         if (individualDetail) {
@@ -245,7 +204,7 @@ export class User extends TimeStamps {
           return `${titleName}${firstname} ${lastname}`
         }
         return ''
-      } else if (userType === 'business') {
+      } else if (userType === EUserType.BUSINESS) {
         const businessDetail: BusinessCustomer | undefined =
           get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
         if (businessDetail) {
@@ -259,20 +218,25 @@ export class User extends TimeStamps {
         }
         return ''
       }
-    } else if (userRole === 'driver') {
-      if (userType === 'individual') {
-        const individualDriver: IndividualDriver | undefined =
-          get(this, '_doc.individualDriver', undefined) || this.individualDriver || undefined
-        if (individualDriver) {
-          const title = get(individualDriver, 'title', '')
-          const otherTitle = get(individualDriver, 'otherTitle', '')
-          const firstname = get(individualDriver, 'firstname', '')
-          const lastname = get(individualDriver, 'lastname', '')
-          return `${title === 'อื่นๆ' ? otherTitle : title}${firstname} ${lastname}`
+    } else if (userRole === EUserRole.DRIVER) {
+      const driverDetail: DriverDetail | undefined =
+        get(this, '_doc.driverDetail', undefined) || this.driverDetail || undefined
+      if (driverDetail) {
+        if (!driverDetail.fullname) {
+          const driverTypes = driverDetail.driverType
+          const title = driverDetail.title
+          const otherTitle = driverDetail.otherTitle
+          const titleName = `${title === 'อื่นๆ' ? otherTitle : title}`
+          if (includes(driverTypes, EDriverType.BUSINESS)) {
+            const businessName = driverDetail.businessName
+            return `${titleName}${businessName}`
+          } else {
+            const firstname = driverDetail.firstname
+            const lastname = driverDetail.lastname
+            return `${titleName}${firstname} ${lastname}`
+          }
         }
-        return ''
-      } else if (userType === 'business') {
-        return ''
+        return driverDetail.fullname
       }
     }
     return ''
@@ -280,30 +244,40 @@ export class User extends TimeStamps {
 
   @Field({ nullable: true })
   get email(): string {
+    const userRole = get(this, '_doc.userRole', '') || this.userRole || ''
     const userType = get(this, '_doc.userType', '') || this.userType || ''
-    if (userType === 'individual') {
-      const individualDetail: IndividualCustomer | undefined =
-        get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
-      return individualDetail ? individualDetail.email : ''
-    } else if (userType === 'business') {
-      const businessDetail: BusinessCustomer | undefined =
-        get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
-      return businessDetail ? businessDetail.businessEmail : ''
+    if (userRole === EUserRole.CUSTOMER) {
+      if (userType === EUserType.INDIVIDUAL) {
+        const individualDetail: IndividualCustomer | undefined =
+          get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
+        return individualDetail ? individualDetail.email : ''
+      } else if (userType === EUserType.BUSINESS) {
+        const businessDetail: BusinessCustomer | undefined =
+          get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
+        return businessDetail ? businessDetail.businessEmail : ''
+      }
     }
     return ''
   }
 
   @Field({ nullable: true })
   get contactNumber(): string {
+    const userRole = get(this, '_doc.userRole', '') || this.userRole || ''
     const userType = get(this, '_doc.userType', '') || this.userType || ''
-    if (userType === 'individual') {
-      const individualDetail: IndividualCustomer | undefined =
-        get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
-      return individualDetail ? individualDetail.phoneNumber : ''
-    } else if (userType === 'business') {
-      const businessDetail: BusinessCustomer | undefined =
-        get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
-      return businessDetail ? businessDetail.contactNumber : ''
+    if (userRole === EUserRole.CUSTOMER) {
+      if (userType === EUserType.INDIVIDUAL) {
+        const individualDetail: IndividualCustomer | undefined =
+          get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
+        return individualDetail ? individualDetail.phoneNumber : ''
+      } else if (userType === EUserType.BUSINESS) {
+        const businessDetail: BusinessCustomer | undefined =
+          get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
+        return businessDetail ? businessDetail.contactNumber : ''
+      }
+    } else if (userRole === EUserRole.DRIVER) {
+      const driverDetail: DriverDetail | undefined =
+        get(this, '_doc.driverDetail', undefined) || this.driverDetail || undefined
+      return driverDetail.phoneNumber
     }
     return ''
   }
@@ -325,7 +299,7 @@ export class User extends TimeStamps {
     return user.length > 0 ? user[0] : null
   }
 
-  static async existingEmail(_id: string, email: string, userType: TUserType, userRole: TUserRole): Promise<boolean> {
+  static async existingEmail(_id: string, email: string, userType: EUserType, userRole: EUserRole): Promise<boolean> {
     const exiting = await UserModel.aggregate(EXISTING_USERS(_id, email, userType, userRole))
     return !isEmpty(exiting)
   }

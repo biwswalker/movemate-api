@@ -2,6 +2,7 @@ import { IsEmail } from 'class-validator'
 import { ArgsType, Field, Float, InputType, Int } from 'type-graphql'
 import { FileInput } from './file.input'
 import { EPaymentMethod } from '@enums/payments'
+import { EUserStatus, EUserType } from '@enums/users'
 
 @InputType()
 export class RegisterIndividualInput {
@@ -164,10 +165,10 @@ export class RegisterBusinessInput {
 @InputType()
 export class CutomerIndividualInput {
   @Field()
-  userType: TUserType
+  userType: EUserType
 
   @Field()
-  status: TUserStatus
+  status: EUserStatus
 
   @Field({ nullable: true })
   remark: string
@@ -336,10 +337,10 @@ export class CreditPaymentDetailInput {
 @InputType()
 export class CutomerBusinessInput {
   @Field()
-  userType: TUserType
+  userType: EUserType
 
   @Field()
-  status: TUserStatus
+  status: EUserStatus
 
   @Field({ nullable: true })
   remark: string

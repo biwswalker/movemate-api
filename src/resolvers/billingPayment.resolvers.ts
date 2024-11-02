@@ -21,13 +21,14 @@ import { shipmentNotify } from './shipment.resolvers'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import pubsub, { NOTFICATIONS, SHIPMENTS } from '@configs/pubsub'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
+import { EUserRole } from '@enums/users'
 
 Aigle.mixin(lodash, {})
 
 @Resolver()
 export default class BillingPaymentResolver {
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async approvalCashPayment(@Ctx() ctx: GraphQLContext, @Args() args: ApprovalCashPaymentArgs): Promise<boolean> {
     const user_id = ctx.req.user_id
     const billingCycleModel = await BillingCycleModel.findById(args.billingCycleId).lean()
@@ -68,7 +69,7 @@ export default class BillingPaymentResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async approveCreditPayment(@Ctx() ctx: GraphQLContext, @Args() data: ApproveCreditPaymentArgs): Promise<boolean> {
     const user_id = ctx.req.user_id
     try {

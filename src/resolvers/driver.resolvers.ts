@@ -1,35 +1,49 @@
-import { Resolver, Mutation, Arg, Ctx } from 'type-graphql'
-import UserModel, { EDriverStatus, User } from '@models/user.model'
+import { Resolver, Mutation, Arg, Ctx, UseMiddleware } from 'type-graphql'
+import UserModel, { User } from '@models/user.model'
 import bcrypt from 'bcrypt'
 import { GraphQLContext } from '@configs/graphQL.config'
-import { isEmpty } from 'lodash'
-import { generateId } from '@utils/string.utils'
+import { includes, isEmpty } from 'lodash'
+import { generateId, generateRef } from '@utils/string.utils'
 import FileModel from '@models/file.model'
 import { decryption } from '@utils/encryption'
-import { IndividualDriverDetailInput, IndividualDriverRegisterInput } from '@inputs/driver.input'
-import { IndividualDriverScema } from '@validations/driver.validations'
+import {
+  DriverDetailInput,
+  DriverRegisterInput,
+  EmployeeDetailInput,
+  EmployeeRegisterInput,
+} from '@inputs/driver.input'
+import { BusinessDriverScema, EmployeeDriverScema, IndividualDriverScema } from '@validations/driver.validations'
 import { verifyOTP } from './otp.resolvers'
-import IndividualDriverModel from '@models/driverIndividual.model'
+import DriverDetailModel from '@models/driverDetail.model'
 import DriverDocumentModel from '@models/driverDocument.model'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import { ValidationError } from 'yup'
 import { yupValidationThrow } from '@utils/error.utils'
-import { IndividualDriverDetailVerifyPayload, RegisterPayload } from '@payloads/driver.payloads'
+import { DriverVerifiedPayload, EmployeeDetailPayload, RegisterPayload } from '@payloads/driver.payloads'
 import { GraphQLError } from 'graphql'
+import { EDriverStatus, EDriverType, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
+import { AuthGuard } from '@guards/auth.guards'
 
 @Resolver(User)
 export default class DriverResolver {
-  @Mutation(() => IndividualDriverDetailVerifyPayload)
-  async verifyIndiividualDriverData(
-    @Arg('data') data: IndividualDriverDetailInput,
+  @Mutation(() => DriverVerifiedPayload)
+  async verifyDriverData(
+    @Arg('data') data: DriverDetailInput,
     @Ctx() ctx: GraphQLContext,
-  ): Promise<IndividualDriverDetailVerifyPayload> {
+  ): Promise<DriverVerifiedPayload> {
     try {
       const platform = ctx.req.headers['platform']
       if (isEmpty(platform)) {
         throw new Error('Bad Request: Platform is require')
       }
-      await IndividualDriverScema.validate(data, { abortEarly: false })
+      console.log(JSON.stringify(data, undefined, 2))
+      if (data.driverType === EDriverType.BUSINESS) {
+        await BusinessDriverScema.validate(data, { abortEarly: false })
+      } else if (data.driverType === EDriverType.INDIVIDUAL_DRIVER) {
+        await IndividualDriverScema.validate(data, { abortEarly: false })
+      } else {
+        throw new GraphQLError('ไม่รองรับประเภทคนขับรถนี้')
+      }
       return data
     } catch (error) {
       console.log('error: ', error)
@@ -40,11 +54,40 @@ export default class DriverResolver {
     }
   }
 
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  async addExitingEmployee(@Arg('driverId') driverId: string, @Ctx() ctx: GraphQLContext): Promise<boolean> {
+    try {
+      const userId = ctx.req.user_id
+      const driver = await UserModel.findById(driverId).lean()
+      if (!driver) {
+        const message = 'ไม่พบคนขับ'
+        throw new GraphQLError(message)
+      }
+      const existingParent = await UserModel.findOne({ _id: driverId, parents: { $in: [userId] } })
+      if (existingParent) {
+        const message = 'ท่านได้เพิ่มคนขับคนนี้ไปแล้ว'
+        throw new GraphQLError(message)
+      }
+
+      await UserModel.findByIdAndUpdate(driver._id, {
+        $push: {
+          parents: userId,
+        },
+      })
+
+      return true
+    } catch (error) {
+      console.log('error: ', error)
+      if (error instanceof ValidationError) {
+        throw yupValidationThrow(error)
+      }
+      throw error
+    }
+  }
+
   @Mutation(() => RegisterPayload)
-  async individualDriverRegister(
-    @Arg('data') data: IndividualDriverRegisterInput,
-    @Ctx() ctx: GraphQLContext,
-  ): Promise<RegisterPayload> {
+  async driverRegister(@Arg('data') data: DriverRegisterInput, @Ctx() ctx: GraphQLContext): Promise<RegisterPayload> {
     const { detail, documents, otp } = data
     try {
       // Check if the user already exists
@@ -53,7 +96,13 @@ export default class DriverResolver {
         throw new Error('Bad Request: Platform is require')
       }
 
-      await IndividualDriverScema.validate(detail, { abortEarly: false })
+      if (detail.driverType === EDriverType.BUSINESS) {
+        await BusinessDriverScema.validate(detail, { abortEarly: false })
+      } else if (detail.driverType === EDriverType.INDIVIDUAL_DRIVER) {
+        await IndividualDriverScema.validate(detail, { abortEarly: false })
+      } else {
+        throw new GraphQLError('ไม่รองรับประเภทคนขับรถนี้')
+      }
 
       // 1. OTP Driver checker
       await verifyOTP(otp.phoneNumber, otp.otp, otp.ref)
@@ -78,6 +127,12 @@ export default class DriverResolver {
       const criminalRecordCheckCert = documents.criminalRecordCheckCert
         ? new FileModel({ ...documents.criminalRecordCheckCert })
         : null
+      const businessRegistrationCertificate = documents.businessRegistrationCertificate
+        ? new FileModel({ ...documents.businessRegistrationCertificate })
+        : null
+      const certificateValueAddedTaxRegistration = documents.certificateValueAddedTaxRegistration
+        ? new FileModel({ ...documents.certificateValueAddedTaxRegistration })
+        : null
       frontOfVehicle && (await frontOfVehicle.save())
       backOfVehicle && (await backOfVehicle.save())
       leftOfVehicle && (await leftOfVehicle.save())
@@ -89,7 +144,7 @@ export default class DriverResolver {
       copyHouseRegistration && (await copyHouseRegistration.save())
       insurancePolicy && (await insurancePolicy.save())
       criminalRecordCheckCert && (await criminalRecordCheckCert.save())
-      const driverDetail = new DriverDocumentModel({
+      const driverDocument = new DriverDocumentModel({
         frontOfVehicle,
         backOfVehicle,
         leftOfVehicle,
@@ -101,16 +156,21 @@ export default class DriverResolver {
         copyHouseRegistration,
         insurancePolicy,
         criminalRecordCheckCert,
+        businessRegistrationCertificate,
+        certificateValueAddedTaxRegistration,
       })
-      await driverDetail.save()
+      await driverDocument.save()
 
       // 3. Detail
-      const individualDriverDetail = new IndividualDriverModel({
+      const driverDetailModel = new DriverDetailModel({
+        driverType: [detail.driverType],
         title: detail.title,
         otherTitle: detail.otherTitle,
         firstname: detail.firstname,
         lastname: detail.lastname,
-        taxId: detail.taxId,
+        businessName: detail.businessName,
+        businessBranch: detail.businessBranch,
+        taxNumber: detail.taxNumber,
         phoneNumber: detail.phoneNumber,
         lineId: detail.lineId,
         address: detail.address,
@@ -122,25 +182,25 @@ export default class DriverResolver {
         bankBranch: detail.bankBranch,
         bankName: detail.bankName,
         bankNumber: detail.bankNumber,
-        serviceVehicleType: detail.serviceVehicleType,
-        documents: driverDetail,
+        serviceVehicleTypes: detail.serviceVehicleTypes,
+        documents: driverDocument,
       })
-      await individualDriverDetail.save()
+      await driverDetailModel.save()
 
       // 4. User
       const password_decryption = decryption(detail.password)
       const hashedPassword = await bcrypt.hash(password_decryption, 10)
-      const userNumber = await generateId('MMDI', 'driver')
+      const userNumber = await generateId(detail.driverType === EDriverType.BUSINESS ? 'MMDB' : 'MMDI', 'driver')
 
       const currentDate = new Date()
       const user = new UserModel({
         userNumber: userNumber,
-        userRole: 'driver',
-        userType: 'individual',
+        userRole: EUserRole.DRIVER,
+        userType: detail.driverType === EDriverType.BUSINESS ? EUserType.BUSINESS : EUserType.INDIVIDUAL,
         username: detail.phoneNumber,
         password: hashedPassword,
-        status: 'pending',
-        validationStatus: 'pending',
+        status: EUserStatus.PENDING,
+        validationStatus: EUserValidationStatus.PENDING,
         registration: platform,
         lastestOTP: otp.otp,
         lastestOTPRef: otp.ref,
@@ -148,8 +208,7 @@ export default class DriverResolver {
         isVerifiedPhoneNumber: true,
         acceptPolicyVersion: detail.policyVersion,
         acceptPolicyTime: currentDate.toISOString(),
-
-        individualDriver: individualDriverDetail,
+        driverDetail: driverDetailModel,
         isChangePasswordRequire: false,
         drivingStatus: EDriverStatus.IDLE,
       })
@@ -161,7 +220,7 @@ export default class DriverResolver {
         varient: ENotificationVarient.MASTER,
         title: 'ยินดีต้อนรับเข้าสู่คนขับ Movemate',
         message: [
-          `ยินดีต้อนรับ คุณ ${individualDriverDetail.fullname} เข้าสู่ทีมขับรถของเรา โปรดรอเจ้าหน้าที่ตรวจสอบบัญชีของท่าน`,
+          `ยินดีต้อนรับ คุณ ${driverDetailModel.fullname} เข้าสู่ทีมขับรถของเรา โปรดรอเจ้าหน้าที่ตรวจสอบบัญชีของท่าน`,
         ],
       })
 
@@ -170,7 +229,164 @@ export default class DriverResolver {
         driverType: detail.driverType,
       }
     } catch (error) {
+      console.log('error: ', JSON.stringify(error, undefined, 2))
+      if (error instanceof ValidationError) {
+        throw yupValidationThrow(error)
+      }
+      throw error
+    }
+  }
+
+  @Mutation(() => EmployeeDetailPayload)
+  async verifyEmployeeData(
+    @Arg('data') data: EmployeeDetailInput,
+    @Ctx() ctx: GraphQLContext,
+  ): Promise<EmployeeDetailPayload> {
+    try {
+      const platform = ctx.req.headers['platform']
+      if (isEmpty(platform)) {
+        throw new Error('Bad Request: Platform is require')
+      }
+      console.log(JSON.stringify(data, undefined, 2))
+      await EmployeeDriverScema.validate(data, { abortEarly: false })
+      return data
+    } catch (error) {
       console.log('error: ', error)
+      if (error instanceof ValidationError) {
+        throw yupValidationThrow(error)
+      }
+      throw error
+    }
+  }
+
+  @Mutation(() => RegisterPayload)
+  async employeeRegister(
+    @Arg('data') data: EmployeeRegisterInput,
+    @Ctx() ctx: GraphQLContext,
+  ): Promise<RegisterPayload> {
+    const { detail, documents } = data
+    try {
+      const userId = ctx.req.user_id
+      // Check if the user already exists
+      const platform = ctx.req.headers['platform']
+      if (isEmpty(platform)) {
+        throw new Error('Bad Request: Platform is require')
+      }
+
+      await EmployeeDriverScema.validate(detail, { abortEarly: false })
+
+      // 2. Document
+      const frontOfVehicle = documents.frontOfVehicle ? new FileModel({ ...documents.frontOfVehicle }) : null
+      const backOfVehicle = documents.backOfVehicle ? new FileModel({ ...documents.backOfVehicle }) : null
+      const leftOfVehicle = documents.leftOfVehicle ? new FileModel({ ...documents.leftOfVehicle }) : null
+      const rigthOfVehicle = documents.rigthOfVehicle ? new FileModel({ ...documents.rigthOfVehicle }) : null
+      const copyVehicleRegistration = documents.copyVehicleRegistration
+        ? new FileModel({ ...documents.copyVehicleRegistration })
+        : null
+      const copyIDCard = documents.copyIDCard ? new FileModel({ ...documents.copyIDCard }) : null
+      const copyDrivingLicense = documents.copyDrivingLicense
+        ? new FileModel({ ...documents.copyDrivingLicense })
+        : null
+      const copyBookBank = documents.copyBookBank ? new FileModel({ ...documents.copyBookBank }) : null
+      const copyHouseRegistration = documents.copyHouseRegistration
+        ? new FileModel({ ...documents.copyHouseRegistration })
+        : null
+      const insurancePolicy = documents.insurancePolicy ? new FileModel({ ...documents.insurancePolicy }) : null
+      const criminalRecordCheckCert = documents.criminalRecordCheckCert
+        ? new FileModel({ ...documents.criminalRecordCheckCert })
+        : null
+      const businessRegistrationCertificate = documents.businessRegistrationCertificate
+        ? new FileModel({ ...documents.businessRegistrationCertificate })
+        : null
+      const certificateValueAddedTaxRegistration = documents.certificateValueAddedTaxRegistration
+        ? new FileModel({ ...documents.certificateValueAddedTaxRegistration })
+        : null
+      frontOfVehicle && (await frontOfVehicle.save())
+      backOfVehicle && (await backOfVehicle.save())
+      leftOfVehicle && (await leftOfVehicle.save())
+      rigthOfVehicle && (await rigthOfVehicle.save())
+      copyVehicleRegistration && (await copyVehicleRegistration.save())
+      copyIDCard && (await copyIDCard.save())
+      copyDrivingLicense && (await copyDrivingLicense.save())
+      copyBookBank && (await copyBookBank.save())
+      copyHouseRegistration && (await copyHouseRegistration.save())
+      insurancePolicy && (await insurancePolicy.save())
+      criminalRecordCheckCert && (await criminalRecordCheckCert.save())
+      const driverDocument = new DriverDocumentModel({
+        frontOfVehicle,
+        backOfVehicle,
+        leftOfVehicle,
+        rigthOfVehicle,
+        copyVehicleRegistration,
+        copyIDCard,
+        copyDrivingLicense,
+        copyBookBank,
+        copyHouseRegistration,
+        insurancePolicy,
+        criminalRecordCheckCert,
+        businessRegistrationCertificate,
+        certificateValueAddedTaxRegistration,
+      })
+      await driverDocument.save()
+
+      // 3. Detail
+      const driverDetailModel = new DriverDetailModel({
+        driverType: [EDriverType.BUSINESS_DRIVER],
+        title: detail.title,
+        otherTitle: detail.otherTitle,
+        firstname: detail.firstname,
+        lastname: detail.lastname,
+        taxNumber: detail.taxNumber,
+        phoneNumber: detail.phoneNumber,
+        lineId: detail.lineId,
+        address: detail.address,
+        province: detail.province,
+        district: detail.district,
+        subDistrict: detail.subDistrict,
+        postcode: detail.postcode,
+        documents: driverDocument,
+      })
+      await driverDetailModel.save()
+
+      // 4. User
+      const password_decryption = generateRef(10).toLowerCase()
+      const hashedPassword = await bcrypt.hash(password_decryption, 10)
+      const userNumber = await generateId('MMDI', 'driver')
+
+      const user = new UserModel({
+        userNumber: userNumber,
+        userRole: EUserRole.DRIVER,
+        userType: EUserType.INDIVIDUAL,
+        username: detail.phoneNumber,
+        password: hashedPassword,
+        status: EUserStatus.PENDING,
+        validationStatus: EUserValidationStatus.PENDING,
+        registration: platform,
+        isVerifiedEmail: true, // Set true becuase Driver no email property
+        isVerifiedPhoneNumber: false,
+        driverDetail: driverDetailModel,
+        isChangePasswordRequire: true,
+        drivingStatus: EDriverStatus.IDLE,
+        parents: [userId],
+      })
+      await user.save()
+
+      // Notification
+      await NotificationModel.sendNotification({
+        userId: user._id,
+        varient: ENotificationVarient.MASTER,
+        title: 'ยินดีต้อนรับเข้าสู่คนขับ Movemate',
+        message: [
+          `ยินดีต้อนรับ คุณ ${driverDetailModel.fullname} เข้าสู่ทีมขับรถของเรา โปรดรอเจ้าหน้าที่ตรวจสอบบัญชีของท่าน`,
+        ],
+      })
+
+      return {
+        phoneNumber: detail.phoneNumber,
+        driverType: EDriverType.BUSINESS_DRIVER,
+      }
+    } catch (error) {
+      console.log('error: ', JSON.stringify(error, undefined, 2))
       if (error instanceof ValidationError) {
         throw yupValidationThrow(error)
       }

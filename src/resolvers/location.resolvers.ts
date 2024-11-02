@@ -13,9 +13,10 @@ import { DirectionsResultPayload } from '@payloads/direction.payloads'
 import { ELimiterType, getLatestCount, rateLimiter } from '@configs/rateLimit'
 import { LocationRequestLimitPayload } from '@payloads/location.payloads'
 import pubsub, { LOCATIONS } from '@configs/pubsub'
-import UserModel, { EUserType } from '@models/user.model'
+import UserModel from '@models/user.model'
 import { RequestLimiterGuard } from '@guards/limiter.guards'
 import { Repeater } from '@graphql-yoga/subscription'
+import { EUserType } from '@enums/users'
 
 const handlePlaceError = (error: any, apiName: string) => {
   if (error instanceof AxiosError) {
@@ -137,7 +138,10 @@ export default class LocationResolver {
       return Repeater.merge([repeater, pubsub.subscribe(LOCATIONS.REQUEST_LIMIT)])
     },
   } as any)
-  listenLocationLimitCount(@Root() payload: LocationRequestLimitPayload, @Ctx() ctx: AuthContext): LocationRequestLimitPayload {
+  listenLocationLimitCount(
+    @Root() payload: LocationRequestLimitPayload,
+    @Ctx() ctx: AuthContext,
+  ): LocationRequestLimitPayload {
     console.log('listenLocationLimitCount payload', payload)
     return payload
   }

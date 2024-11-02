@@ -10,7 +10,7 @@ import { File } from "./file.model";
 import autopopulate from 'mongoose-autopopulate'
 import { IsEnum, IsNotEmpty } from "class-validator";
 
-enum EBilledType {
+export enum EBilledType {
   DEFAULT = 'default',
   DATES = 'dates'
 }

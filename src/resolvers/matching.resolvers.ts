@@ -3,9 +3,9 @@ import { LoadmoreArgs } from '@inputs/query.input'
 import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
-import UserModel, { EDriverStatus, EUserType } from '@models/user.model'
-import { get, head, isEqual, reduce, tail, uniq } from 'lodash'
-import IndividualDriverModel, { IndividualDriver } from '@models/driverIndividual.model'
+import UserModel from '@models/user.model'
+import { find, get, head, includes, isEmpty, map, reduce, tail, uniq } from 'lodash'
+import DriverDetailModel, { DriverDetail } from '@models/driverDetail.model'
 import { GraphQLError } from 'graphql'
 import { FilterQuery, Types } from 'mongoose'
 import { Ref } from '@typegoose/typegoose'
@@ -17,43 +17,49 @@ import {
   NextShipmentStepInput,
   SentPODDocumentShipmentStepInput,
 } from '@inputs/matching.input'
-import { addDays, format } from 'date-fns'
+import { addDays, addMilliseconds, addSeconds, format } from 'date-fns'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { Repeater } from '@graphql-yoga/subscription'
 import BillingCycleModel from '@models/billingCycle.model'
 import addEmailQueue from '@utils/email.utils'
 import { EPaymentMethod } from '@enums/payments'
 import { EDriverAcceptanceStatus, EShipmentMatchingCriteria, EShipmentStatus } from '@enums/shipments'
+import { EDriverStatus, EUserRole, EUserType } from '@enums/users'
 
 @Resolver()
 export default class MatchingResolver {
-  generateQuery(status: EShipmentMatchingCriteria, userId: string, vehicleId: Ref<VehicleType>) {
-    const currentDate = new Date()
-    const threeDayAfter = addDays(currentDate, 3)
+  async generateQuery(status: EShipmentMatchingCriteria, userId: string, vehicleIds: Ref<VehicleType>[]) {
+    const existingShipments = await ShipmentModel.find({
+      driver: new Types.ObjectId(userId),
+      status: EShipmentStatus.PROGRESSING,
+      driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
+    }).lean()
+
+    const ignoreShipments = map(existingShipments, (shipment) => {
+      const start = shipment.bookingDateTime
+      const end = addMilliseconds(shipment.bookingDateTime, shipment.displayTime)
+      return { bookingDateTime: { $gte: start, $lt: end } }
+      /**
+       * $expr เป็น operator ที่อนุญาตให้คุณใช้การคำนวณเชิงนิพจน์ (aggregation expressions) ภายใน query ปกติได้
+       * โดยช่วยให้คุณสามารถใช้ operator อื่น ๆ ในการคำนวณหรือเปรียบเทียบระหว่างฟิลด์ต่าง ๆ (เช่น $lt, $gte, $add เป็นต้น)
+       * ในการประเมินค่าของฟิลด์โดยตรงใน query
+       *  { $expr: { $lt: [{ $add: ['$bookingDateTime', '$displayTime'] }, new Date(start)] } },
+       */
+    })
+
     const statusQuery: FilterQuery<Shipment> =
       status === EShipmentMatchingCriteria.NEW
         ? {
             status: EShipmentStatus.IDLE,
             driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
-            vehicleId,
+            vehicleId: { $in: vehicleIds },
             $or: [
               { requestedDriver: { $exists: false } }, // ไม่มี requestedDriver
               { requestedDriver: null }, // requestedDriver เป็น null
               { requestedDriver: userId }, // requestedDriver ตรงกับ userId
               { requestedDriver: { $ne: userId } }, // requestedDriver ไม่ตรงกับ userId
             ],
-            $nor: [
-              {
-                driver: new Types.ObjectId(userId), // คนขับคนเดิม
-                // bookingDateTime: {
-                //   $exists: true,
-                //   $ne: null,
-                //   // งานใหม่ห้ามทับซ้อนกับเวลางานเก่าที่ driver ทำอยู่ + 3 วัน
-                //   $gte: currentDate, // งานใหม่ต้องเกิดขึ้นหลังจากปัจจุบัน
-                //   $lte: threeDayAfter, // เวลาจบของงานเก่าต้องไม่น้อยกว่า 3 วันนับจากเวลาที่ทำงาน
-                // },
-              },
-            ],
+            $nor: ignoreShipments,
           }
         : status === EShipmentMatchingCriteria.PROGRESSING // Status progressing
         ? {
@@ -95,16 +101,53 @@ export default class MatchingResolver {
   } as any)
   async listenAvailableShipment(@Root() payload: Shipment[], @Ctx() ctx: AuthContext): Promise<Shipment[]> {
     console.log('ListenAvailableShipment:', ctx.user_id)
-    const user = await UserModel.findById(ctx.user_id).lean()
-    if (user?.drivingStatus !== EDriverStatus.IDLE) return []
-    const individualDriver = await IndividualDriverModel.findById(user.individualDriver).lean()
-    const userPayload = payload.filter((item) => {
-      const vehicleId = get(item, 'vehicleId._id', '')
-      const isMatchedService = isEqual(vehicleId, individualDriver.serviceVehicleType)
-      console.log('isMatchedService: ', isMatchedService, vehicleId, individualDriver.serviceVehicleType)
-      return isMatchedService
-    })
-    return userPayload
+    try {
+      const user = await UserModel.findById(ctx.user_id).lean()
+
+      if (user) {
+        const isBusinessDriver = user.userType === EUserType.BUSINESS
+        if (isBusinessDriver) {
+          const childrens = await UserModel.find({ parents: { $in: [ctx.user_id] } }).lean()
+          if (isEmpty(childrens)) {
+            return []
+          }
+        }
+        if (user?.drivingStatus === EDriverStatus.BUSY) return []
+        let ignoreShipmets = []
+        if (isBusinessDriver) {
+          const existingShipments = await ShipmentModel.find({
+            agentDriver: user._id,
+            status: EShipmentStatus.PROGRESSING,
+            driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
+          }).lean()
+          const ignoreTimeRange = map(existingShipments, (shipment) => {
+            const start = shipment.bookingDateTime
+            const end = addSeconds(shipment.bookingDateTime, shipment.displayTime)
+            return { bookingDateTime: { $gte: start, $lt: end } }
+          })
+          if (!isEmpty(ignoreTimeRange)) {
+            ignoreShipmets = await ShipmentModel.find({ $or: ignoreTimeRange }).lean()
+          }
+        }
+
+        const driverDetail = await DriverDetailModel.findById(user.driverDetail).lean()
+
+        const userPayload = payload.filter((item) => {
+          const isIgnoreShipment = find(ignoreShipmets, ['_id', item._id])
+          if (isIgnoreShipment) {
+            return false
+          }
+          const vehicleId = get(item, 'vehicleId._id', '')
+          const isMatchedService = includes(driverDetail.serviceVehicleTypes, vehicleId)
+          console.log('isMatchedService: ', isMatchedService, vehicleId, driverDetail.serviceVehicleTypes)
+          return isMatchedService
+        })
+        return userPayload
+      }
+      return []
+    } catch (error) {
+      console.log('error: ', error)
+    }
   }
 
   /**
@@ -119,10 +162,10 @@ export default class MatchingResolver {
   }
 
   @Query(() => [Shipment])
-  @UseMiddleware(AuthGuard(['driver']))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async getAvailableShipment(
     @Ctx() ctx: GraphQLContext,
-    @Arg('status') status: EShipmentMatchingCriteria,
+    @Arg('status', () => EShipmentMatchingCriteria) status: EShipmentMatchingCriteria,
     @Args() { skip, limit, ...loadmore }: LoadmoreArgs,
   ): Promise<Shipment[]> {
     const userId = ctx.req.user_id
@@ -131,24 +174,24 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    const user = await UserModel.findById(userId).populate('individualDriver').lean()
-    const individualDriver = get(user, 'individualDriver', undefined) as IndividualDriver | undefined
+    const user = await UserModel.findById(userId).populate('driverDetail').lean()
+    const driverDetail = get(user, 'driverDetail', undefined) as DriverDetail | undefined
 
-    if (!individualDriver) {
+    if (!driverDetail) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    const query = this.generateQuery(status, userId, individualDriver.serviceVehicleType)
+    const query = await this.generateQuery(status, userId, driverDetail.serviceVehicleTypes)
 
     console.log('-----getAvailableShipment query-----', JSON.stringify(query))
-    const shipments = await ShipmentModel.find(query).skip(skip).limit(limit).sort({ bookingDateTime: -1 }).exec()
+    const shipments = await ShipmentModel.find(query).skip(skip).limit(limit).sort({ bookingDateTime: 1 }).exec()
 
     return shipments
   }
 
   @Query(() => Shipment)
-  @UseMiddleware(AuthGuard(['driver']))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async getAvailableShipmentByTrackingNumber(
     @Ctx() ctx: GraphQLContext,
     @Arg('tracking') trackingNumber: string,
@@ -167,30 +210,33 @@ export default class MatchingResolver {
   }
 
   @Query(() => Int)
-  @UseMiddleware(AuthGuard(['driver']))
-  async totalAvailableShipment(@Ctx() ctx: GraphQLContext, @Arg('status') status: EShipmentMatchingCriteria): Promise<number> {
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  async totalAvailableShipment(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('status', () => EShipmentMatchingCriteria) status: EShipmentMatchingCriteria,
+  ): Promise<number> {
     const userId = ctx.req.user_id
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    const user = await UserModel.findById(userId).populate('individualDriver').lean()
-    const individualDriver = get(user, 'individualDriver', undefined) as IndividualDriver | undefined
+    const user = await UserModel.findById(userId).populate('driverDetail').lean()
+    const driverDetail = get(user, 'driverDetail', undefined) as DriverDetail | undefined
 
-    if (!individualDriver) {
+    if (!driverDetail) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    const query = this.generateQuery(status, userId, individualDriver.serviceVehicleType)
+    const query = await this.generateQuery(status, userId, driverDetail.serviceVehicleTypes)
 
     const shipmentCount = await ShipmentModel.countDocuments(query)
     return shipmentCount
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['driver']))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async acceptShipment(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
     const userId = ctx.req.user_id
     if (!userId) {
@@ -242,7 +288,7 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['driver']))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async confirmShipmentDatetime(
     @Ctx() ctx: GraphQLContext,
     @Arg('data') data: ConfirmShipmentDateInput,
@@ -268,7 +314,7 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['driver']))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async nextShipmentStep(@Ctx() ctx: GraphQLContext, @Arg('data') data: NextShipmentStepInput): Promise<boolean> {
     const userId = ctx.req.user_id
     if (!userId) {
@@ -287,7 +333,7 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['driver']))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async sentPODDocument(
     @Ctx() ctx: GraphQLContext,
     @Arg('data') data: SentPODDocumentShipmentStepInput,
@@ -308,7 +354,7 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['driver']))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async markAsFinish(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
     const userId = ctx.req.user_id
     if (!userId) {
@@ -357,7 +403,7 @@ export default class MatchingResolver {
                 fullname: customerModel.fullname,
                 phone_number: customerModel.contactNumber,
                 email: customerModel.email,
-                customer_type: customerModel.userType === 'individual' ? 'ส่วนบุคคล' : 'บริษัท/องค์กร',
+                customer_type: customerModel.userType === EUserType.INDIVIDUAL ? 'ส่วนบุคคล' : 'บริษัท/องค์กร',
                 pickup,
                 dropoffs,
                 tracking_link,
@@ -381,7 +427,7 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['driver']))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async markAsCancelled(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
     const userId = ctx.req.user_id
     if (!userId) {

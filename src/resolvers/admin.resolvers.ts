@@ -9,11 +9,12 @@ import { GraphQLError } from 'graphql'
 import AdminModel from '@models/admin.model'
 import { AddAdminInput } from '@inputs/admin.input'
 import { generateExpToken } from '@utils/encryption'
+import { ERegistration, EUserRole, EUserType } from '@enums/users'
 
 @Resolver(User)
 export default class AdminResolver {
   @Mutation(() => User)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async addAdmin(@Arg('data') data: AddAdminInput, @Ctx() ctx: GraphQLContext): Promise<User> {
     const { email, status } = data
     try {
@@ -50,13 +51,13 @@ export default class AdminResolver {
       await admin.save()
 
       const user = new UserModel({
-        userRole: 'admin',
+        userRole: EUserRole.ADMIN,
         userNumber,
         status,
-        userType: 'individual',
+        userType: EUserType.INDIVIDUAL,
         username: userNumber,
         password: hashedPassword,
-        registration: 'web',
+        registration: ERegistration.WEB,
         isVerifiedEmail: false,
         isVerifiedPhoneNumber: false,
         acceptPolicyVersion: 99,

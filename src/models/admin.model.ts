@@ -2,12 +2,7 @@ import { ObjectType, Field, ID } from "type-graphql";
 import { prop as Property, getModelForClass } from "@typegoose/typegoose";
 import { IsEmail, IsEnum, IsNotEmpty, IsString, Length } from "class-validator";
 import { get } from "lodash";
-
-enum EAdminPermission {
-  ADMIN = 'admin',
-  SUPERVISOR = 'supervisor',
-  OWNER = 'owner',
-}
+import { EAdminPermission } from "@enums/users";
 
 @ObjectType()
 export class Admin {
@@ -20,11 +15,11 @@ export class Admin {
   @Property({ required: true, unique: true })
   userNumber: string;
 
-  @Field()
+  @Field(() => EAdminPermission)
   @IsEnum(EAdminPermission)
   @IsNotEmpty()
   @Property({ enum: EAdminPermission, default: EAdminPermission.ADMIN, required: true })
-  permission: TAdminPermission;
+  permission: EAdminPermission;
 
   @Field()
   @IsEmail()

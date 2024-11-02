@@ -26,6 +26,7 @@ registerEnumType(EAdminAcceptanceStatus, {
 
 export enum EDriverAcceptanceStatus {
   IDLE = 'IDLE',
+  ASSIGN = 'ASSIGN',
   PENDING = 'PENDING',
   ACCEPTED = 'ACCEPTED',
   UNINTERESTED = 'UNINTERESTED',

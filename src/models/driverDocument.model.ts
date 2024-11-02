@@ -1,13 +1,13 @@
-import { ObjectType, Field, ID } from "type-graphql";
-import { prop as Property, Ref, getModelForClass, plugin } from "@typegoose/typegoose";
-import mongooseAutoPopulate from "mongoose-autopopulate";
-import { File } from "./file.model";
+import { ObjectType, Field, ID } from 'type-graphql'
+import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
+import mongooseAutoPopulate from 'mongoose-autopopulate'
+import { File } from './file.model'
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()
 export class DriverDocument {
   @Field(() => ID)
-  readonly _id: string;
+  readonly _id: string
 
   @Field(() => File, { nullable: true })
   @Property({ ref: () => File, autopopulate: true })
@@ -52,8 +52,30 @@ export class DriverDocument {
   @Field(() => File, { nullable: true })
   @Property({ ref: () => File, autopopulate: true })
   criminalRecordCheckCert?: Ref<File>
+
+  /**
+   * Business
+   */
+
+  // - หนังสือรับรองบริษัท (บังคับ)
+  @Field(() => File, { nullable: true })
+  @Property({ ref: () => File, autopopulate: true })
+  businessRegistrationCertificate?: Ref<File>
+
+  // - ภพ20
+  @Field(() => File, { nullable: true })
+  @Property({ ref: () => File, autopopulate: true })
+  certificateValueAddedTaxRegistration?: Ref<File>
+
+  // - สำเนาบัตรประชาชน  (บังคับ) ✔️
+  // - สำเนาใบขับขี่ ✔️
+  // - สำเนาหน้าบัญชีธนาคาร ✔️
+  // - สำเนาทะเบียนบ้าน ✔️
+  // - รูปถ่ายรถยนต์ ✔️
+  // - กรมธรรม์ประกันรถ ✔️
+  // - หนังสือรับรองการตรวจประวัติอาชญากรรม ✔️
 }
 
-const DriverDocumentModel = getModelForClass(DriverDocument);
+const DriverDocumentModel = getModelForClass(DriverDocument)
 
-export default DriverDocumentModel;
+export default DriverDocumentModel

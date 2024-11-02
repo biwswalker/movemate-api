@@ -15,6 +15,7 @@ import { VehicleType } from '@models/vehicleType.model'
 import { Payment } from '@models/payment.model'
 import { BillingReceipt } from '@models/billingReceipt.model'
 import { EPaymentMethod } from '@enums/payments'
+import { EUserType } from '@enums/users'
 
 const sarabunThin = path.join(__dirname, '..', 'assets/fonts/Sarabun-Thin.ttf')
 const sarabunExtraLight = path.join(__dirname, '..', 'assets/fonts/Sarabun-ExtraLight.ttf')
@@ -143,7 +144,7 @@ export async function generateReceipt(billingCycle: BillingCycle, filname?: stri
       }
     }
 
-    const isBusiness = user.userType === 'business'
+    const isBusiness = user.userType === EUserType.BUSINESS
     const businessBranch = get(user, 'businessDetail.businessBranch', '-')
     const taxId = isBusiness ? get(user, 'businessDetail.taxNumber', '-') : get(user, 'individualDetail.taxId', '-')
     // Customer detail

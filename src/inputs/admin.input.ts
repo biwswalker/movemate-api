@@ -1,30 +1,31 @@
-import { Field, InputType } from "type-graphql";
-import { IsEmail } from "class-validator";
+import { Field, InputType } from 'type-graphql'
+import { IsEmail } from 'class-validator'
+import { EUserStatus } from '@enums/users'
 
 @InputType()
 export class AddAdminInput {
-    @Field()
-    permission: TAdminPermission
+  @Field()
+  permission: TAdminPermission
 
-    @Field()
-    status: TUserStatus;
+  @Field()
+  status: EUserStatus
 
-    @Field()
-    @IsEmail()
-    email: string;
+  @Field()
+  @IsEmail()
+  email: string
 
-    @Field()
-    firstname: string;
+  @Field()
+  firstname: string
 
-    @Field()
-    lastname: string;
+  @Field()
+  lastname: string
 
-    @Field()
-    phoneNumber: string;
+  @Field()
+  phoneNumber: string
 
-    @Field({ nullable: true })
-    taxId: string;
+  @Field({ nullable: true })
+  taxId: string
 
-    @Field({ nullable: true })
-    address: string;
+  @Field({ nullable: true })
+  address: string
 }

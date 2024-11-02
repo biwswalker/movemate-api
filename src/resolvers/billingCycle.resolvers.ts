@@ -22,11 +22,12 @@ import { getAdminMenuNotificationCount } from './notification.resolvers'
 import { generateReceipt } from 'reports/receipt'
 import { generateReceiptCashWithNonTax } from 'reports/receiptWithCashNonTax'
 import { EPaymentMethod } from '@enums/payments'
+import { EUserRole, EUserType } from '@enums/users'
 
 @Resolver(BillingCycle)
 export default class BillingCycleResolver {
   @Query(() => BillingCyclePaginationAggregatePayload)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async billingCycleList(
     @Args() query: GetBillingCycleArgs,
     @Args() paginate: PaginationArgs,
@@ -53,7 +54,7 @@ export default class BillingCycleResolver {
   }
 
   @Query(() => [TotalBillingRecordPayload])
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async statusBillingCount(
     @Arg('type', () => EPaymentMethod) type: EPaymentMethod,
     @Arg('customerId', { nullable: true }) customerId: string,
@@ -124,7 +125,7 @@ export default class BillingCycleResolver {
   }
 
   @Query(() => [String])
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async allBillingCycleIds(@Args() query: GetBillingCycleArgs): Promise<string[]> {
     try {
       const filterQuery = omitBy(query, isEmpty)
@@ -138,14 +139,14 @@ export default class BillingCycleResolver {
   }
 
   @Query(() => BillingCycle)
-  @UseMiddleware(AuthGuard(['admin', 'customer']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.CUSTOMER]))
   async billingCycle(@Ctx() ctx: GraphQLContext, @Arg('billingNumber') billingNumber: string): Promise<BillingCycle> {
     const user_id = ctx.req.user_id
     const user_role = ctx.req.user_role
     try {
       const billingCycle = await BillingCycleModel.findOne({
         billingNumber,
-        ...(user_role === 'customer' ? { user: user_id } : {}),
+        ...(user_role === EUserRole.CUSTOMER ? { user: user_id } : {}),
       })
       if (!billingCycle) {
         const message = `ไม่สามารถเรียกข้อมูลใบแจ้งหนี้`
@@ -159,7 +160,7 @@ export default class BillingCycleResolver {
   }
 
   @Query(() => String)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async billingNumberByShipment(@Arg('trackingNumber') trackingNumber: string): Promise<string> {
     try {
       const shipment = await ShipmentModel.findOne({ trackingNumber })
@@ -172,7 +173,7 @@ export default class BillingCycleResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async refund(@Ctx() ctx: GraphQLContext, @Args() data: BillingCycleRefundArgs): Promise<boolean> {
     const user_id = ctx.req.user_id
     try {
@@ -197,7 +198,7 @@ export default class BillingCycleResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async norefund(
     @Ctx() ctx: GraphQLContext,
     @Arg('billingCycleId') billingCycleId: string,
@@ -216,7 +217,7 @@ export default class BillingCycleResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async confirmInvoiceSent(
     @Ctx() ctx: GraphQLContext,
     @Arg('billingCycleId') billingCycleId: string,
@@ -240,7 +241,7 @@ export default class BillingCycleResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async confirmReceiptSent(
     @Ctx() ctx: GraphQLContext,
     @Arg('billingCycleId') billingCycleId: string,
@@ -264,7 +265,7 @@ export default class BillingCycleResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async confirmReceiveWHT(@Ctx() ctx: GraphQLContext, @Arg('billingCycleId') billingCycleId: string): Promise<boolean> {
     try {
       await BillingCycleModel.findByIdAndUpdate(billingCycleId, { receivedWHTDocumentTime: new Date() })
@@ -276,7 +277,7 @@ export default class BillingCycleResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async resentInvoiceToEmail(
     @Ctx() ctx: GraphQLContext,
     @Arg('billingCycleId') billingCycleId: string,
@@ -318,7 +319,7 @@ export default class BillingCycleResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async resentReceiptToEmail(
     @Ctx() ctx: GraphQLContext,
     @Arg('billingCycleId') billingCycleId: string,
@@ -341,7 +342,7 @@ export default class BillingCycleResolver {
             business_name: customerModel.fullname,
             business_contact_number: businessContactNumber,
             business_email: customerModel.email,
-            customer_type: customerModel.userType === 'individual' ? 'ส่วนบุคคล' : 'บริษัท/องค์กร',
+            customer_type: customerModel.userType === EUserType.INDIVIDUAL ? 'ส่วนบุคคล' : 'บริษัท/องค์กร',
             financial_email: 'acc@movematethailand.com',
             contact_number: '02-xxx-xxxx',
             movemate_link: `https://www.movematethailand.com`,
@@ -360,7 +361,7 @@ export default class BillingCycleResolver {
 
   // Integrated this
   @Query(() => Boolean)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'customer']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.CUSTOMER]))
   async isNearbyDuedate(@Ctx() ctx: GraphQLContext): Promise<boolean> {
     const user_id = ctx.req.user_id
     try {
@@ -383,7 +384,7 @@ export default class BillingCycleResolver {
   }
 
   @Query(() => [BillingCycle])
-  @UseMiddleware(AuthGuard(['customer', 'admin']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN]))
   async monthBilling(
     @Ctx() ctx: GraphQLContext,
     @Arg('monthofyear') monthofyear: string,
@@ -412,7 +413,7 @@ export default class BillingCycleResolver {
     }
   }
   @Query(() => Int)
-  @UseMiddleware(AuthGuard(['customer', 'admin']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN]))
   async totalMonthBilling(@Ctx() ctx: GraphQLContext, @Arg('monthofyear') monthofyear: string): Promise<number> {
     const userId = ctx.req.user_id
     if (userId) {
@@ -430,7 +431,7 @@ export default class BillingCycleResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async regenerateReceipt(@Arg('billingCycleId') billingCycleId: string): Promise<boolean> {
     const billing = await BillingCycleModel.findById(billingCycleId)
     const generateCashReceiptNonTax =

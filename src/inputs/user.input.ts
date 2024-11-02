@@ -1,128 +1,128 @@
-import { ArgsType, Field, InputType, Int } from "type-graphql";
-import { RegisterBusinessInput, RegisterIndividualInput } from "./customer.input";
-import { IsEmail } from "class-validator";
+import { ArgsType, Field, InputType, Int } from 'type-graphql'
+import { RegisterBusinessInput, RegisterIndividualInput } from './customer.input'
+import { ERegistration, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 
 @InputType()
 export class RegisterInput {
-  @Field()
-  userType: TUserType;
+  @Field(() => EUserType)
+  userType: EUserType
 
   @Field()
-  password: string;
+  password: string
 
   @Field({ nullable: true })
-  remark: string;
+  remark: string
 
-  @Field(type => Int)
-  acceptPolicyVersion: number;
+  @Field((type) => Int)
+  acceptPolicyVersion: number
 
   @Field()
-  acceptPolicyTime: Date;
+  acceptPolicyTime: Date
 
   @Field(() => RegisterIndividualInput, { nullable: true })
-  individualDetail: RegisterIndividualInput;
+  individualDetail: RegisterIndividualInput
 
   @Field(() => RegisterBusinessInput, { nullable: true })
-  businessDetail: RegisterBusinessInput;
+  businessDetail: RegisterBusinessInput
 }
 
 @InputType()
 export class UpdateBusinessDetailInput {
   @Field()
-  userNumber: string;
+  userNumber: string
 
   @Field()
-  transportSupervisorPhoneNumber: string;
+  transportSupervisorPhoneNumber: string
 
   @Field()
-  transportSupervisorEmail: string;
+  transportSupervisorEmail: string
 
   @Field()
-  accountingPhoneNumber: string;
+  accountingPhoneNumber: string
 
   @Field()
-  accountingEmail: string;
+  accountingEmail: string
 
   @Field()
-  accountingAddress: string;
+  accountingAddress: string
 
   @Field({ nullable: true })
-  accountingCountry: string;
+  accountingCountry: string
 
   @Field()
-  accountingProvince: string;
+  accountingProvince: string
 
   @Field()
-  accountingDistrict: string;
+  accountingDistrict: string
 
   @Field()
-  accountingSubDiatrict: string;
+  accountingSubDiatrict: string
 
   @Field()
-  accountingPostcode: string;
+  accountingPostcode: string
 
   @Field()
-  creditTerm: boolean;
+  creditTerm: boolean
 
   @Field({ nullable: true })
-  creditLimit: string;
+  creditLimit: string
 
   @Field({ nullable: true })
-  creditAmount: string;
+  creditAmount: string
 
   @Field({ nullable: true })
-  billedType: string;
+  billedType: string
 
   @Field({ nullable: true })
-  dateOfBilled: string;
+  dateOfBilled: string
 
   @Field({ nullable: true })
-  paymentDuedateType: string;
+  paymentDuedateType: string
 
   @Field({ nullable: true })
-  dateOfPaymentDuedate: string;
+  dateOfPaymentDuedate: string
 
   @Field()
-  isAcceptEDocuments: boolean;
+  isAcceptEDocuments: boolean
 }
 
 @ArgsType()
 export class GetUserArgs {
   @Field({ nullable: true })
-  _id?: string;
+  _id?: string
 
   @Field({ nullable: true })
-  userNumber: string;
+  userNumber: string
+
+  @Field(() => EUserRole, { nullable: true })
+  userRole: EUserRole
+
+  @Field(() => EUserType, { nullable: true })
+  userType: EUserType
 
   @Field({ nullable: true })
-  userRole: TUserRole;
+  username: string
+
+  @Field(() => EUserStatus, { nullable: true })
+  status: EUserStatus
+
+  @Field(() => EUserValidationStatus, { nullable: true })
+  validationStatus: EUserValidationStatus
+
+  @Field(() => ERegistration, { nullable: true })
+  registration: ERegistration
 
   @Field({ nullable: true })
-  userType: TUserType;
+  lastestOTP: string
 
   @Field({ nullable: true })
-  username: string;
+  lastestOTPRef: string
 
   @Field({ nullable: true })
-  status: TUserStatus;
+  isVerifiedEmail: boolean
 
   @Field({ nullable: true })
-  validationStatus: TUserValidationStatus;
-
-  @Field({ nullable: true })
-  registration: TRegistration;
-
-  @Field({ nullable: true })
-  lastestOTP: string;
-
-  @Field({ nullable: true })
-  lastestOTPRef: string;
-
-  @Field({ nullable: true })
-  isVerifiedEmail: boolean;
-
-  @Field({ nullable: true })
-  isVerifiedPhoneNumber: boolean;
+  isVerifiedPhoneNumber: boolean
 
   // Other
   @Field({ nullable: true })
@@ -141,6 +141,9 @@ export class GetUserArgs {
   @Field({ nullable: true })
   lineId: string
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   serviceVehicleType: string
+
+  @Field(() => String, { nullable: true })
+  parentId?: string
 }

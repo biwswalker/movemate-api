@@ -15,11 +15,12 @@ import { AnyBulkWriteOperation, PaginateOptions, Types, PaginateResult } from "m
 import { get, isArray, map, reduce } from "lodash";
 import { PaginationArgs } from "@inputs/query.input";
 import { AdditionalServicePaginationPayload } from "@payloads/additionalService.payloads";
+import { EUserRole } from "@enums/users";
 
 @Resolver(AdditionalService)
 export default class AdditionalServiceResolver {
   @Mutation(() => AdditionalService)
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async addAdditionalService(
     @Arg("data") data: AdditionalServiceInput
   ): Promise<AdditionalService> {
@@ -63,7 +64,7 @@ export default class AdditionalServiceResolver {
     }
   }
   @Mutation(() => AdditionalService)
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async updateAdditionalService(
     @Arg("id") id: string,
     @Arg("data") data: AdditionalServiceInput
@@ -114,7 +115,7 @@ export default class AdditionalServiceResolver {
   }
 
   @Query(() => AdditionalServicePaginationPayload)
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getAdditionalServices(
     @Args() { name, ...query }: AdditionalServiceQueryArgs,
     @Args() { sortField, sortAscending, ...paginationArgs }: PaginationArgs
@@ -150,7 +151,7 @@ export default class AdditionalServiceResolver {
     }
   }
   @Query(() => AdditionalService)
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getAdditionalService(
     @Arg("name") name: string
   ): Promise<AdditionalService> {
@@ -169,7 +170,7 @@ export default class AdditionalServiceResolver {
     }
   }
   @Query(() => [AdditionalService])
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getAdditionalServicesByVehicleType(
     @Arg("id") id: string
   ): Promise<AdditionalService[]> {

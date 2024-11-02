@@ -4,7 +4,7 @@ import { GetShipmentArgs, ShipmentInput } from '@inputs/shipment.input'
 import PaymentModel, { CashDetail } from '@models/payment.model'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import ShipmentAdditionalServicePriceModel from '@models/shipmentAdditionalServicePrice.model'
-import UserModel, { EDriverStatus, EUserRole, EUserStatus, EUserValidationStatus, User } from '@models/user.model'
+import UserModel, { User } from '@models/user.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
@@ -68,6 +68,7 @@ import {
   EShipmentStatus,
   EShipmentStatusCriteria,
 } from '@enums/shipments'
+import { EDriverStatus, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 
 Aigle.mixin(lodash, {})
 
@@ -328,7 +329,7 @@ export default class ShipmentResolver {
     const user_role = ctx.req.user_role
     const user_id = ctx.req.user_id
     if (user_id) {
-      if (user_role === 'admin') {
+      if (user_role === EUserRole.ADMIN) {
         const customerFilter = args.customerId ? { customer: args.customerId } : {}
         const all = await ShipmentModel.countDocuments({ ...customerFilter })
         const paymentVerify = await ShipmentModel.countDocuments({
@@ -495,7 +496,7 @@ export default class ShipmentResolver {
           isRounded: data.isRoundedReturn,
           serviceIds: additionalServices,
           discountId: discountId,
-          isBusinessCashPayment: customer.userType === 'business' && isCashPaymentMethod,
+          isBusinessCashPayment: customer.userType === EUserType.BUSINESS && isCashPaymentMethod,
         },
         true,
       )
@@ -670,9 +671,6 @@ export default class ShipmentResolver {
       // Remark: Create billing cycle and billing payment
       if (isCashPaymentMethod && cashDetail) {
         const today = new Date()
-        const _monthyear = format(today, 'yyMM')
-        const _billingNumber = await generateTrackingNumber(`IV${_monthyear}`, 'invoice')
-
         const paydate = format(cashDetail.paymentDate, 'ddMMyyyy')
         const paytime = format(cashDetail.paymentTime, 'HH:mm')
         const paymentDate = parse(`${paydate}-${paytime}`, 'ddMMyyyy-HH:mm', new Date(), { locale: th })
@@ -684,10 +682,9 @@ export default class ShipmentResolver {
           0,
         )
 
-        // TODO: Recheck with business customer to show in billing pages
         const _billingCycle = new BillingCycleModel({
           user: user_id,
-          billingNumber: _billingNumber,
+          billingNumber: _trackingNumber, // Using tracking number instead; cause cash payment no need invoice
           issueDate: today,
           billingStartDate: today,
           billingEndDate: today,
@@ -761,15 +758,15 @@ export default class ShipmentResolver {
       const movemate_link = `https://www.movematethailand.com`
       // Email sender
       const email =
-        customer.userType === 'individual'
+        customer.userType === EUserType.INDIVIDUAL
           ? get(customer, 'individualDetail.email', '')
-          : customer.userType === 'business'
+          : customer.userType === EUserType.BUSINESS
           ? get(customer, 'businessDetail.businessEmail', '')
           : ''
       const fullname =
-        customer.userType === 'individual'
+        customer.userType === EUserType.INDIVIDUAL
           ? get(customer, 'individualDetail.fullname', '')
-          : customer.userType === 'business'
+          : customer.userType === EUserType.BUSINESS
           ? get(customer, 'businessDetail.businessName', '')
           : ''
 

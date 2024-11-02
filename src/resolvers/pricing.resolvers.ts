@@ -53,13 +53,14 @@ import {
   PricingCalculationMethodPayload,
   VehicleCostCalculationPayload,
 } from "@payloads/pricing.payloads";
+import { EUserRole } from "@enums/users";
 
 Aigle.mixin(lodash, {});
 
 @Resolver()
 export default class PricingResolver {
   @Query(() => VehicleCost)
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getVehicleCost(
     @Arg("vehicleTypeId") vehicleTypeId: string,
   ): Promise<VehicleCost> {
@@ -134,7 +135,7 @@ export default class PricingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async updateAdditionalServiceCost(
     @Arg("id") id: string,
     @Arg("data", () => [AdditionalServiceCostInput])
@@ -190,7 +191,7 @@ export default class PricingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async updateDistanceCost(
     @Arg("id") id: string,
     @Arg("data", () => [DistanceCostPricingInput])
@@ -303,7 +304,7 @@ export default class PricingResolver {
   }
 
   @Mutation(() => String)
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async initialVehicleCost(
     @Arg("vehicleTypeId") vehicleTypeId: string,
     @Arg("withAdditionalService", { nullable: true })
@@ -377,7 +378,7 @@ export default class PricingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async initialAdditionalService(
     @Arg("vehicleCostId") vehicleCostId: string,
   ): Promise<boolean> {
@@ -544,7 +545,7 @@ export default class PricingResolver {
   }
 
   @Query(() => [VehicleCost])
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getVehicleCosts(): Promise<VehicleCost[]> {
     try {
       const vehicleCosts = await VehicleCostModel.findByAvailableConfig();
@@ -564,7 +565,7 @@ export default class PricingResolver {
   }
 
   @Query(() => PricingCalculationMethodPayload)
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getPricingCalculationMethod(
     @Arg("vehicleCostId") vehicleCostId: string,
     @Args() data: PricingCalculationMethodArgs,
@@ -594,7 +595,7 @@ export default class PricingResolver {
   }
 
   @Query(() => [VehicleCostCalculationPayload])
-  @UseMiddleware(AuthGuard(["admin"]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getPricingCalculationMethodAvailableVehicle(
     @Args() data: PricingCalculationMethodArgs,
   ): Promise<VehicleCostCalculationPayload[]> {

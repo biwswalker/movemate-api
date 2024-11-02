@@ -1,4 +1,5 @@
 import { GraphQLContext } from "@configs/graphQL.config";
+import { EUserRole } from "@enums/users";
 import { AuthGuard } from "@guards/auth.guards";
 import { SettingBusinessTypeInput, SettingContactUsInput, SettingFAQInput, SettingInstructionInput } from "@inputs/settings.input";
 import SettingAboutusModel, { SettingAboutus } from "@models/settingAboutus.mode";
@@ -22,7 +23,7 @@ import { ValidationError } from "yup";
 @Resolver()
 export default class SettingsResolver {
     @Mutation(() => Boolean)
-    @UseMiddleware(AuthGuard(['admin']))
+    @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
     async updateContactus(
         @Arg("data") data: SettingContactUsInput,
         @Ctx() ctx: GraphQLContext
@@ -83,7 +84,7 @@ export default class SettingsResolver {
     }
 
     @Mutation(() => Boolean)
-    @UseMiddleware(AuthGuard(['admin']))
+    @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
     async updateAboutus(
         @Arg("data") data: string,
         @Ctx() ctx: GraphQLContext
@@ -143,7 +144,7 @@ export default class SettingsResolver {
     }
 
     @Mutation(() => Boolean)
-    @UseMiddleware(AuthGuard(['admin']))
+    @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
     async updateCustomerPolicies(
         @Arg("data") data: string,
         @Ctx() ctx: GraphQLContext
@@ -208,7 +209,7 @@ export default class SettingsResolver {
     }
 
     @Mutation(() => Boolean)
-    @UseMiddleware(AuthGuard(['admin']))
+    @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
     async updateCustomerTerms(
         @Arg("data") data: string,
         @Ctx() ctx: GraphQLContext
@@ -273,7 +274,7 @@ export default class SettingsResolver {
     }
 
     @Mutation(() => Boolean)
-    @UseMiddleware(AuthGuard(['admin']))
+    @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
     async updateDriverPolicies(
         @Arg("data") data: string,
         @Ctx() ctx: GraphQLContext
@@ -339,7 +340,7 @@ export default class SettingsResolver {
     }
 
     @Mutation(() => Boolean)
-    @UseMiddleware(AuthGuard(['admin']))
+    @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
     async updateDriverTerms(
         @Arg("data") data: string,
         @Ctx() ctx: GraphQLContext
@@ -405,7 +406,7 @@ export default class SettingsResolver {
     }
 
     @Mutation(() => Boolean)
-    @UseMiddleware(AuthGuard(['admin']))
+    @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
     async updateBusinessType(
         @Arg("data", () => [SettingBusinessTypeInput]) data: SettingBusinessTypeInput[],
         @Ctx() ctx: GraphQLContext
@@ -444,7 +445,7 @@ export default class SettingsResolver {
     }
 
     @Mutation(() => Boolean)
-    @UseMiddleware(AuthGuard(['admin']))
+    @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
     async updateFAQ(
         @Arg("data", () => [SettingFAQInput]) data: SettingFAQInput[],
         @Ctx() ctx: GraphQLContext
@@ -481,7 +482,7 @@ export default class SettingsResolver {
     }
 
     @Mutation(() => Boolean)
-    @UseMiddleware(AuthGuard(['admin']))
+    @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
     async updateInstruction(
         @Arg("data", () => [SettingInstructionInput]) data: SettingInstructionInput[],
         @Ctx() ctx: GraphQLContext

@@ -9,11 +9,12 @@ import { yupValidationThrow } from '@utils/error.utils'
 import { GraphQLError } from 'graphql'
 import { VehicleTypeConfigureStatusPayload } from '@payloads/vehicleType.payloads'
 import { GET_VEHICLE_CONFIG } from '@pipelines/vehicletype.pipeline'
+import { EUserRole } from '@enums/users'
 
 @Resolver(VehicleType)
 export default class VehicleTypeResolver {
   @Mutation(() => VehicleType)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async addVehicleType(@Arg('data') data: VehicleTypeInput): Promise<VehicleType> {
     const { image, ...values } = data
     try {
@@ -38,7 +39,7 @@ export default class VehicleTypeResolver {
     }
   }
   @Mutation(() => VehicleType)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async updateVehicleType(@Arg('id') id: string, @Arg('data') data: VehicleTypeInput): Promise<VehicleType> {
     const { image, ...values } = data
     try {
@@ -66,7 +67,7 @@ export default class VehicleTypeResolver {
     }
   }
   @Query(() => [VehicleType])
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getVehicleTypes(): Promise<VehicleType[]> {
     try {
       const vehicleTypes = await VehicleTypeModel.find()
@@ -83,7 +84,7 @@ export default class VehicleTypeResolver {
     }
   }
   @Query(() => VehicleType)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getVehicleType(@Arg('name') name: string): Promise<VehicleType> {
     try {
       const vehicleType = await VehicleTypeModel.findOne({ name })
@@ -139,7 +140,7 @@ export default class VehicleTypeResolver {
     }
   }
   @Query(() => [VehicleTypeConfigureStatusPayload])
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getVehicleTypeConfigs(): Promise<VehicleTypeConfigureStatusPayload[]> {
     try {
       const vehicleTypes = await VehicleTypeModel.aggregate(GET_VEHICLE_CONFIG)

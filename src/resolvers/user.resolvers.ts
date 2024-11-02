@@ -12,7 +12,7 @@ import {
   SubscribeResolverData,
   Root,
 } from 'type-graphql'
-import UserModel, { EUserStatus, EUserValidationStatus, User } from '@models/user.model'
+import UserModel, { User } from '@models/user.model'
 import { GetUserArgs } from '@inputs/user.input'
 import { AuthGuard } from '@guards/auth.guards'
 import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
@@ -50,16 +50,17 @@ import NotificationModel, {
   NOTIFICATION_TITLE,
 } from '@models/notification.model'
 import { fDateTime } from '@utils/formatTime'
-import { IndividualDriver } from '@models/driverIndividual.model'
+import DriverDetailModel, { DriverDetail } from '@models/driverDetail.model'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import pubsub, { NOTFICATIONS, USERS } from '@configs/pubsub'
 import { FileInput } from '@inputs/file.input'
 import { EPaymentMethod } from '@enums/payments'
+import { EDriverType, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 
 @Resolver(User)
 export default class UserResolver {
   @Query(() => UserPaginationAggregatePayload)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async users(
     @Args() query: GetUserArgs,
     @Args() { sortField, sortAscending, ...paginationArgs }: PaginationArgs,
@@ -82,6 +83,7 @@ export default class UserResolver {
 
       const filterQuery = omitBy(query, isEmpty)
       const aggregate = UserModel.aggregate(GET_USERS(filterQuery))
+      console.log('aggregate: ', JSON.stringify(aggregate, undefined, 2))
       const users = (await UserModel.aggregatePaginate(aggregate, pagination)) as UserPaginationAggregatePayload
 
       return users
@@ -92,7 +94,7 @@ export default class UserResolver {
   }
 
   @Query(() => [String])
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async alluserIds(@Args() query: GetUserArgs): Promise<string[]> {
     try {
       const filterQuery = omitBy(query, isEmpty)
@@ -106,7 +108,7 @@ export default class UserResolver {
   }
 
   @Query(() => User)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async getUserByUsername(@Arg('username') username: string): Promise<User> {
     try {
       const user = await UserModel.findByUsername(username)
@@ -122,8 +124,52 @@ export default class UserResolver {
     }
   }
 
+  @Query(() => User, { nullable: true })
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.DRIVER]))
+  async lookupDriverByPhonenumber(@Arg('phonenumber') phonenumber: string): Promise<User | null> {
+    try {
+      // Check existing business agent
+      const businessAgent = await DriverDetailModel.findOne({
+        phoneNumber: phonenumber,
+        driverType: { $in: [EDriverType.BUSINESS] },
+      })
+      console.log('1.-businessAgent-----> ')
+      if (businessAgent) {
+        console.log('2.-businessAgent-----> ')
+        const message = `เบอร์นี้ผู้ใช้แล้ว`
+        throw new GraphQLError(message, {
+          extensions: { code: 'EXISTING_DRIVER_PHONENUMBER', errors: [{ message }] },
+        })
+      }
+
+      const driverDetail = await DriverDetailModel.findOne({
+        phoneNumber: phonenumber,
+        $or: [
+          { driverType: { $in: [EDriverType.INDIVIDUAL_DRIVER] } },
+          { driverType: { $in: [EDriverType.BUSINESS_DRIVER] } },
+        ],
+      })
+      if (!driverDetail) {
+        const message = `ไม่พบผู้ใช้ ${phonenumber}`
+        throw new GraphQLError(message, {
+          extensions: { code: 'NOT_FOUND', errors: [{ message }] },
+        })
+      }
+      const user = await UserModel.findOne({ userRole: EUserRole.DRIVER, driverDetail })
+      if (!user) {
+        const message = `ไม่พบผู้ใช้ ${phonenumber}`
+        throw new GraphQLError(message, {
+          extensions: { code: 'NOT_FOUND', errors: [{ message }] },
+        })
+      }
+      return user
+    } catch (error) {
+      throw error
+    }
+  }
+
   @Query(() => User)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async getUser(@Args() data: GetUserArgs): Promise<User> {
     try {
       const filter = pick(data, [
@@ -154,7 +200,7 @@ export default class UserResolver {
   }
 
   @Query(() => User)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async me(@Ctx() ctx: GraphQLContext): Promise<User> {
     try {
       const userId = ctx.req.user_id
@@ -173,7 +219,7 @@ export default class UserResolver {
   }
 
   @Query(() => RequireDataBeforePayload)
-  @UseMiddleware(AuthGuard(['customer', 'admin', 'driver']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async requireBeforeSignin(@Ctx() ctx: GraphQLContext): Promise<RequireDataBeforePayload> {
     try {
       const userId = ctx.req.user_id
@@ -187,7 +233,7 @@ export default class UserResolver {
 
       // Check policy
       let requireAcceptedPolicy = true
-      if (user.userRole === 'customer') {
+      if (user.userRole === EUserRole.CUSTOMER) {
         const settingCustomerPolicies = await SettingCustomerPoliciesModel.find()
         const policyVersion = get(settingCustomerPolicies, '0.version', 0)
         if (user.acceptPolicyVersion >= policyVersion) {
@@ -195,7 +241,7 @@ export default class UserResolver {
         } else {
           requireAcceptedPolicy = true
         }
-      } else if (user.userRole === 'driver') {
+      } else if (user.userRole === EUserRole.DRIVER) {
         const settingDriverPolicies = await SettingDriverPoliciesModel.find()
         const policyVersion = get(settingDriverPolicies, '0.version', 0)
         if (user.acceptPolicyVersion >= policyVersion) {
@@ -215,7 +261,7 @@ export default class UserResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin', 'customer']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.CUSTOMER]))
   async updateIndividualCustomer(
     @Arg('id') id: string,
     @Arg('data') data: CutomerIndividualInput,
@@ -284,7 +330,7 @@ export default class UserResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin', 'customer']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.CUSTOMER]))
   async updateBusinessCustomer(
     @Arg('id') id: string,
     @Arg('data') data: CutomerBusinessInput,
@@ -413,10 +459,10 @@ export default class UserResolver {
   }
 
   @Mutation(() => User)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async approvalUser(
     @Arg('id') id: string,
-    @Arg('result') result: TUserValidationStatus,
+    @Arg('result') result: EUserValidationStatus,
     @Ctx() ctx: GraphQLContext,
   ): Promise<User> {
     try {
@@ -430,27 +476,27 @@ export default class UserResolver {
       }
 
       // Check pending status
-      if (user.validationStatus !== 'pending') {
+      if (user.validationStatus !== EUserValidationStatus.PENDING) {
         throw new GraphQLError('ผู้ใช้ท่านนี้มีการอนุมัติเรียบร้อยแล้ว')
       }
       // Check approval status
-      if (!includes(['approve', 'denied'], result)) {
+      if (!includes([EUserValidationStatus.APPROVE, EUserValidationStatus.DENIED], result)) {
         throw new InvalidDirectiveError('สถานะไม่ถูกต้อง')
       }
 
       // ===== CUSTOMER ROLE
-      if (user.userRole === 'customer') {
+      if (user.userRole === EUserRole.CUSTOMER) {
         const individualDetail: IndividualCustomer | null = get(user, 'individualDetail', null)
         const businessDetail: BusinessCustomer | null = get(user, 'businessDetail', null)
         const upgradeRequest: BusinessCustomer | null = get(user, 'upgradeRequest', null)
-        const businesData: BusinessCustomer | null = user.userType === 'individual' ? upgradeRequest : businessDetail
+        const businesData: BusinessCustomer | null = user.userType === EUserType.INDIVIDUAL ? upgradeRequest : businessDetail
 
         // Check Business Detail
         if (typeof businesData !== 'object') {
           throw new InvalidDirectiveError('ไม่พบข้อมูลธุระกิจ')
         }
 
-        const status = result === 'approve' ? 'active' : 'denied'
+        const status = result === EUserValidationStatus.APPROVE ? EUserStatus.ACTIVE : EUserStatus.DENIED
         // Title name
         const BUSINESS_TITLE_NAME_OPTIONS = [
           { value: 'Co', label: 'บจก.' },
@@ -460,16 +506,16 @@ export default class UserResolver {
 
         const businessTitleName = find(BUSINESS_TITLE_NAME_OPTIONS, ['value', businesData.businessTitle])
 
-        if (result === 'approve') {
+        if (result === EUserValidationStatus.APPROVE) {
           const rawPassword = generateRandomNumberPattern('MMPWD########').toLowerCase()
           const hashedPassword = await bcrypt.hash(rawPassword, 10)
 
-          if (user.userType === 'individual') {
+          if (user.userType === EUserType.INDIVIDUAL) {
             const userNumber = await generateId('MMBU', 'business')
             const newBusinessDetail = {
               userNumber,
               username: userNumber,
-              userType: 'business',
+              userType: EUserType.BUSINESS,
               businessDetail: businesData,
               upgradeRequest: null,
               isChangePasswordRequire: true,
@@ -521,7 +567,7 @@ export default class UserResolver {
         } else {
           // Update user
           const newBusinessDetail =
-            user.userType === 'individual'
+            user.userType === EUserType.INDIVIDUAL
               ? {
                   upgradeRequest: null,
                   validationStatus: EUserValidationStatus.PENDING,
@@ -529,7 +575,7 @@ export default class UserResolver {
                 }
               : {}
 
-          const sentemail = user.userType === 'individual' ? individualDetail.email : businesData.businessEmail
+          const sentemail = user.userType === EUserType.INDIVIDUAL ? individualDetail.email : businesData.businessEmail
 
           await user.updateOne({ status, validationStatus: result, ...newBusinessDetail })
           await addEmailQueue({
@@ -544,7 +590,7 @@ export default class UserResolver {
             },
           })
 
-          if (user.userType === 'individual') {
+          if (user.userType === EUserType.INDIVIDUAL) {
             await NotificationModel.sendNotification({
               userId: user._id,
               varient: ENotificationVarient.ERROR,
@@ -555,44 +601,39 @@ export default class UserResolver {
             })
           }
         }
-      } else if (user.userRole === 'driver') {
+      } else if (user.userRole === EUserRole.DRIVER) {
         // ===== DRIVER ROLE
-        const status = result === 'approve' ? EUserStatus.ACTIVE : EUserStatus.DENIED
-        const individualDriver: IndividualDriver | null = get(user, 'individualDriver', null)
-        if (user.userType === 'individual') {
-          await user.updateOne({ status, validationStatus: result })
-          const title = result === 'approve' ? 'บัญชีของท่านได้รับการอนุมัติ' : 'บัญชีของท่านไม่ผ่านการอนุมัติ'
-          const messages =
-            result === 'approve'
-              ? ['ขอแสดงความยินดีด้วย', 'บัญชีของท่านได้รับการอนุมัติเป็นคนขับของ Movemate หากมีข้อสงสัยโปรดติดต่อเรา']
-              : [`บัญชี ${individualDriver.fullname} ไม่ผ่านพิจารณาคนขับ Movemvate หากมีข้อสงสัยโปรดติดต่อเรา`]
-          await NotificationModel.sendNotification({
-            userId: user._id,
-            varient: result === 'approve' ? ENotificationVarient.SUCCESS : ENotificationVarient.ERROR,
-            title: title,
-            message: messages,
-          })
+        const status = result === EUserValidationStatus.APPROVE ? EUserStatus.ACTIVE : EUserStatus.DENIED
+        const driverDetail: DriverDetail | null = get(user, 'driverDetail', null)
+        await user.updateOne({ status, validationStatus: result })
+        const title =
+          result === EUserValidationStatus.APPROVE ? 'บัญชีของท่านได้รับการอนุมัติ' : 'บัญชีของท่านไม่ผ่านการอนุมัติ'
+        const messages =
+          result === EUserValidationStatus.APPROVE
+            ? ['ขอแสดงความยินดีด้วย', 'บัญชีของท่านได้รับการอนุมัติเป็นคนขับของ Movemate หากมีข้อสงสัยโปรดติดต่อเรา']
+            : [`บัญชี ${driverDetail.fullname} ไม่ผ่านพิจารณาคนขับ Movemvate หากมีข้อสงสัยโปรดติดต่อเรา`]
+        await NotificationModel.sendNotification({
+          userId: user._id,
+          varient: result === EUserValidationStatus.APPROVE ? ENotificationVarient.SUCCESS : ENotificationVarient.ERROR,
+          title: title,
+          message: messages,
+        })
 
-          if (
-            user.fcmToken &&
-            includes([EUserStatus.ACTIVE, EUserStatus.BANNED, EUserStatus.DENIED, EUserStatus.INACTIVE], status)
-          )
-            await NotificationModel.sendFCMNotification({
-              token: user.fcmToken,
-              data: { navigation: ENavigationType.NOTIFICATION },
-              notification: {
-                title: NOTIFICATION_TITLE,
-                body:
-                  result === 'approve'
-                    ? 'ขอแสดงความยินดีด้วย บัญชีของท่านได้รับการอนุมัติเป็นคนขับของ Movemate'
-                    : `บัญชี ${individualDriver.fullname} ไม่ผ่านพิจารณาคนขับ Movemvate หากมีข้อสงสัยโปรดติดต่อเรา`,
-              },
-            })
-        } else if (user.userType === 'business') {
-          // TODO: BUSINESS
-        } else {
-          throw new InvalidDirectiveError('ไม่พบประเภทคนขับรถ')
-        }
+        if (
+          user.fcmToken &&
+          includes([EUserStatus.ACTIVE, EUserStatus.BANNED, EUserStatus.DENIED, EUserStatus.INACTIVE], status)
+        )
+          await NotificationModel.sendFCMNotification({
+            token: user.fcmToken,
+            data: { navigation: ENavigationType.NOTIFICATION },
+            notification: {
+              title: NOTIFICATION_TITLE,
+              body:
+                result === EUserValidationStatus.APPROVE
+                  ? 'ขอแสดงความยินดีด้วย บัญชีของท่านได้รับการอนุมัติเป็นคนขับของ Movemate'
+                  : `บัญชี ${driverDetail.fullname} ไม่ผ่านพิจารณาคนขับ Movemvate หากมีข้อสงสัยโปรดติดต่อเรา`,
+            },
+          })
         await pubsub.publish(USERS.STATUS, user._id, status)
       }
 
@@ -606,7 +647,7 @@ export default class UserResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin', 'customer']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.CUSTOMER]))
   async upgradeAccount(
     @Arg('id') id: string,
     @Arg('data') data: CutomerBusinessInput,
@@ -634,7 +675,7 @@ export default class UserResolver {
           })
         }
 
-        if (userModel.userType === 'business' || userModel.businessDetail) {
+        if (userModel.userType === EUserType.BUSINESS || userModel.businessDetail) {
           const message = 'ไม่สามารถอัพเกรดได้ เนื่องจากเป็นสมาชิกรูปแบบ Business อยู่แล้ว'
           throw new GraphQLError(message)
         }
@@ -718,7 +759,7 @@ export default class UserResolver {
         await customer.save()
 
         await userModel.updateOne({
-          validationStatus: 'pending',
+          validationStatus: EUserValidationStatus.PENDING,
           upgradeRequest: customer,
         })
 
@@ -741,7 +782,7 @@ export default class UserResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['customer']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   async acceptedPolicy(@Arg('data') data: AcceptedPolicyInput, @Ctx() ctx: GraphQLContext): Promise<boolean> {
     try {
       const userId = ctx.req.user_id
@@ -803,9 +844,9 @@ export default class UserResolver {
         const email = isAdminWeb
           ? get(user, 'adminDetail.email', '')
           : isCustomerWeb
-          ? userType === 'individual'
+          ? userType === EUserType.INDIVIDUAL
             ? get(user, 'individualDetail.email', '')
-            : userType === 'business'
+            : userType === EUserType.BUSINESS
             ? get(user, 'businessDetail.businessEmail', '')
             : ''
           : ''
@@ -935,7 +976,7 @@ export default class UserResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['driver']))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async storeFCM(@Ctx() ctx: GraphQLContext, @Arg('fcmToken') fcmToken: string): Promise<boolean> {
     try {
       const userId = ctx.req.user_id
@@ -972,7 +1013,7 @@ export default class UserResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['driver']))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async removeFCM(@Ctx() ctx: GraphQLContext): Promise<boolean> {
     try {
       const userId = ctx.req.user_id
@@ -1005,7 +1046,7 @@ export default class UserResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['driver', 'customer', 'admin']))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER, EUserRole.CUSTOMER, EUserRole.ADMIN]))
   async updateProfileImage(
     @Ctx() ctx: GraphQLContext,
     @Arg('fileDetail') fileDetail: FileInput,
@@ -1047,7 +1088,7 @@ export default class UserResolver {
     topics: USERS.STATUS,
     topicId: ({ context }: SubscribeResolverData<number, any, AuthContext>) => context.user_id,
   })
-  listenUserStatus(@Root() payload: TUserStatus): TUserStatus {
+  listenUserStatus(@Root() payload: EUserStatus): EUserStatus {
     return payload
   }
 }

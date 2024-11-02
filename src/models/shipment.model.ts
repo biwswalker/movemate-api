@@ -1,6 +1,6 @@
 import { Field, Float, ID, Int, ObjectType } from 'type-graphql'
 import { prop as Property, getModelForClass, Ref, Severity, plugin } from '@typegoose/typegoose'
-import UserModel, { EDriverStatus, User } from './user.model'
+import UserModel, { User } from './user.model'
 import { IsEnum } from 'class-validator'
 import PrivilegeModel, { Privilege } from './privilege.model'
 import { VehicleType } from './vehicleType.model'
@@ -22,6 +22,7 @@ import lodash, {
   flatten,
   get,
   head,
+  isEmpty,
   isEqual,
   last,
   map,
@@ -56,7 +57,7 @@ import TransactionModel, {
   ETransactionType,
   MOVEMATE_OWNER_ID,
 } from './transaction.model'
-import IndividualDriverModel from './driverIndividual.model'
+import DriverDetailModel from './driverDetail.model'
 import { EPaymentMethod } from '@enums/payments'
 import {
   EShipmentStatus,
@@ -64,6 +65,8 @@ import {
   EDriverAcceptanceStatus,
   EShipmentCancellationReason,
 } from '@enums/shipments'
+import { addSeconds } from 'date-fns'
+import { EDriverStatus, EUserType } from '@enums/users'
 
 Aigle.mixin(lodash, {})
 
@@ -182,6 +185,10 @@ export class Shipment extends TimeStamps {
   @Field(() => User, { nullable: true })
   @Property({ ref: () => User, required: false, autopopulate: true })
   driver: Ref<User>
+
+  @Field(() => User, { nullable: true })
+  @Property({ ref: () => User, required: false, autopopulate: true })
+  agentDriver: Ref<User>
 
   @Field(() => [Destination])
   @Property({ allowMixed: Severity.ALLOW })
@@ -788,7 +795,7 @@ export class Shipment extends TimeStamps {
         // Update balance
         const driver = await UserModel.findById(driverId).lean()
         if (driver) {
-          const driverDetail = await IndividualDriverModel.findById(driver.individualDriver)
+          const driverDetail = await DriverDetailModel.findById(driver.driverDetail)
           await driverDetail.updateBalance()
         }
 
@@ -1022,35 +1029,56 @@ export class Shipment extends TimeStamps {
   }
 
   static async getNewAllAvailableShipmentForDriver(driverId?: string) {
-    let vehicleId = null
+    let vehicleIds = null
+    let ignoreShipments = []
     if (driverId) {
       const user = await UserModel.findById(driverId).lean()
       if (user) {
-        if (user?.drivingStatus !== EDriverStatus.IDLE) return []
-        const individualDriver = await IndividualDriverModel.findById(user.individualDriver).lean()
-        if (individualDriver.serviceVehicleType) {
-          vehicleId = individualDriver.serviceVehicleType
+        const isBusinessDriver = user.userType === EUserType.BUSINESS
+        if (isBusinessDriver) {
+          const childrens = await UserModel.find({ parents: { $in: [driverId] } }).lean()
+          if (isEmpty(childrens)) {
+            return []
+          }
         }
+        if (user?.drivingStatus === EDriverStatus.BUSY) return []
+        const driverDetail = await DriverDetailModel.findById(user.driverDetail).lean()
+        if (driverDetail.serviceVehicleTypes) {
+          vehicleIds = driverDetail.serviceVehicleTypes
+        }
+        const existingShipments = await ShipmentModel.find({
+          ...(isBusinessDriver ? { agentDriver: user._id } : { driver: user._id }),
+          status: EShipmentStatus.PROGRESSING,
+          driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
+        }).lean()
+        ignoreShipments = isBusinessDriver
+          ? []
+          : map(existingShipments, (shipment) => {
+              const start = shipment.bookingDateTime
+              const end = addSeconds(shipment.bookingDateTime, shipment.displayTime)
+              return { bookingDateTime: { $gte: start, $lt: end } }
+            })
       }
     }
+
     const query = {
       status: EShipmentStatus.IDLE,
       driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
-      ...(vehicleId ? { vehicleId } : {}),
+      ...(!isEmpty(vehicleIds) ? { vehicleId: { $in: vehicleIds } } : {}),
       $or: [
         { requestedDriver: { $exists: false } }, // ไม่มี requestedDriver
         { requestedDriver: null }, // requestedDriver เป็น null
         ...(driverId
           ? [
-              { requestedDriver: driverId }, // requestedDriver ตรงกับ userId
-              { requestedDriver: { $ne: driverId } }, // requestedDriver ไม่ตรงกับ userId
+              { requestedDriver: new Types.ObjectId(driverId) }, // requestedDriver ตรงกับ userId
+              { requestedDriver: { $ne: new Types.ObjectId(driverId) } }, // requestedDriver ไม่ตรงกับ userId
             ]
           : []),
       ],
-      ...(driverId ? { $nor: [{ driver: new Types.ObjectId(driverId) }] } : {}),
+      ...(driverId && !isEmpty(ignoreShipments) ? { $nor: ignoreShipments } : {}),
     }
 
-    const shipments = await ShipmentModel.find(query).sort({ bookingDateTime: -1 }).exec()
+    const shipments = await ShipmentModel.find(query).sort({ bookingDateTime: 1 }).exec()
     if (!shipments) {
       return []
     }

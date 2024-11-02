@@ -9,6 +9,7 @@ import { BusinessCustomer } from '@models/customerBusiness.model'
 import { BusinessCustomerCreditPayment } from '@models/customerBusinessCreditPayment.model'
 import { IndividualCustomer } from '@models/customerIndividual.model'
 import { EPaymentMethod } from '@enums/payments'
+import { EUserType } from '@enums/users'
 
 export function HeaderComponent(
   doc: PDFDocument,
@@ -180,7 +181,7 @@ export function HeaderComponent(
     }
   }
 
-  const isBusiness = user.userType === 'business'
+  const isBusiness = user.userType === EUserType.BUSINESS
   const businessBranch = get(user, 'businessDetail.businessBranch', '-')
   const taxId = isBusiness ? get(user, 'businessDetail.taxNumber', '-') : get(user, 'individualDetail.taxId', '-')
   // Customer detail

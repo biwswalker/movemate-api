@@ -1,3 +1,4 @@
+import { EUserStatus } from '@enums/users'
 import { createPubSub } from '@graphql-yoga/subscription'
 import { Shipment } from '@models/shipment.model'
 import { LocationRequestLimitPayload } from '@payloads/location.payloads'
@@ -27,5 +28,5 @@ export default createPubSub<{
   [NOTFICATIONS.GET_MENU_BADGE_COUNT]: [AdminNotificationCountPayload]
   [LOCATIONS.REQUEST_LIMIT]: [LocationRequestLimitPayload]
   [SHIPMENTS.GET_MATCHING_SHIPMENT]: [Shipment[]]
-  [USERS.STATUS]: [string, TUserStatus]
+  [USERS.STATUS]: [string, EUserStatus]
 }>()

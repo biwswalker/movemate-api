@@ -8,13 +8,14 @@ import { FavoriteDriverPayload } from '@payloads/favoriteDriver.payloads'
 import Aigle from 'aigle'
 import ShipmentModel from '@models/shipment.model'
 import { EShipmentStatus } from '@enums/shipments'
+import { EUserRole } from '@enums/users'
 
 Aigle.mixin(lodash, {})
 
 @Resolver()
 export default class FvoariteDriverResolver {
   @Query(() => [FavoriteDriverPayload])
-  @UseMiddleware(AuthGuard(['customer', 'admin']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN]))
   async getFavoriteDrivers(
     @Ctx() ctx: GraphQLContext,
     @Arg('uid', { nullable: true }) uid: string,
@@ -46,7 +47,7 @@ export default class FvoariteDriverResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['customer']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   async makeFavoriteDriver(
     @Ctx() ctx: GraphQLContext,
     @Arg('driverId') driverId: string,
@@ -78,7 +79,7 @@ export default class FvoariteDriverResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['customer']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   async removeFavoriteDriver(
     @Ctx() ctx: GraphQLContext,
     @Arg('driverId') driverId: string,

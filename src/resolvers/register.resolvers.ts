@@ -1,5 +1,5 @@
 import { Resolver, Mutation, Arg, Ctx, UseMiddleware } from 'type-graphql'
-import UserModel, { EUserRole, EUserStatus, EUserType, EUserValidationStatus, User } from '@models/user.model'
+import UserModel, { User } from '@models/user.model'
 import CustomerIndividualModel from '@models/customerIndividual.model'
 import BusinessCustomerModel from '@models/customerBusiness.model'
 import BusinessCustomerCashPaymentModel from '@models/customerBusinessCashPayment.model'
@@ -19,6 +19,7 @@ import { BusinessCustomerSchema, IndividualCustomerSchema } from '@validations/c
 import { ValidationError } from 'yup'
 import { yupValidationThrow } from '@utils/error.utils'
 import { EPaymentMethod } from '@enums/payments'
+import { EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 
 @Resolver(User)
 export default class RegisterResolver {
@@ -78,7 +79,7 @@ export default class RegisterResolver {
 
       const email = isEqual(userType, EUserType.INDIVIDUAL)
         ? get(individualDetail, 'email', '')
-        : isEqual(userType, 'business')
+        : isEqual(userType, EUserType.BUSINESS)
         ? get(businessDetail, 'businessEmail', '')
         : ''
       const emailFieldName = userType === EUserType.INDIVIDUAL ? 'email' : 'businessEmail'
@@ -106,7 +107,7 @@ export default class RegisterResolver {
       // TODO: Refactor
       const email = isEqual(userType, EUserType.INDIVIDUAL)
         ? get(individualDetail, 'email', '')
-        : isEqual(userType, 'business')
+        : isEqual(userType, EUserType.BUSINESS)
         ? get(businessDetail, 'businessEmail', '')
         : ''
       const emailFieldName = userType === EUserType.INDIVIDUAL ? 'email' : 'businessEmail'
@@ -172,7 +173,7 @@ export default class RegisterResolver {
       /**
        * Business Customer Register
        */
-      if (userType === 'business' && businessDetail) {
+      if (userType === EUserType.BUSINESS && businessDetail) {
         if (!businessDetail) {
           throw new Error('ข้อมูลไม่สมบูรณ์')
         }
@@ -369,7 +370,7 @@ export default class RegisterResolver {
   }
 
   @Mutation(() => User)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async addIndividualCustomer(@Arg('data') data: CutomerIndividualInput, @Ctx() ctx: GraphQLContext): Promise<User> {
     const { email, profileImage, status, ...formValue } = data
     try {
@@ -399,9 +400,9 @@ export default class RegisterResolver {
 
       const user = new UserModel({
         ...formValue,
-        userRole: 'customer',
-        userType: 'individual',
-        validationStatus: 'approve',
+        userRole: EUserRole.CUSTOMER,
+        userType: EUserType.INDIVIDUAL,
+        validationStatus: EUserValidationStatus.APPROVE,
         status,
         userNumber,
         username: data.email,
@@ -443,7 +444,7 @@ export default class RegisterResolver {
   }
 
   @Mutation(() => User)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async addBusinessCustomer(@Arg('data') data: CutomerBusinessInput, @Ctx() ctx: GraphQLContext): Promise<User> {
     const { businessEmail, profileImage, creditPayment, cashPayment, ...formValue } = data
     try {
@@ -525,9 +526,9 @@ export default class RegisterResolver {
 
       const user = new UserModel({
         ...formValue,
-        userRole: 'customer',
-        userType: 'business',
-        validationStatus: 'approve',
+        userRole: EUserRole.CUSTOMER,
+        userType: EUserType.BUSINESS,
+        validationStatus: EUserValidationStatus.APPROVE,
         userNumber,
         username: userNumber,
         password: hashedPassword,

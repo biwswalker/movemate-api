@@ -1,4 +1,5 @@
 import { GraphQLContext } from '@configs/graphQL.config'
+import { EUserRole } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
 import { PaginationArgs } from '@inputs/query.input'
 import BusinessCustomerModel from '@models/customerBusiness.model'
@@ -15,7 +16,7 @@ import { Arg, Args, Ctx, Query, Resolver, UseMiddleware } from 'type-graphql'
 @Resolver(SearchHistory)
 export default class SearchHistoryResolver {
   @Query(() => SearchHistoryPaginationPayload)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async searchHistorys(
     @Ctx() ctx: GraphQLContext,
     @Arg('search', { nullable: true }) search: string,

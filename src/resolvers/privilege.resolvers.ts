@@ -1,4 +1,5 @@
 import { GraphQLContext } from '@configs/graphQL.config'
+import { EUserRole } from '@enums/users'
 import { AllowGuard, AuthGuard } from '@guards/auth.guards'
 import { GetPrivilegesArgs, PrivilegeInput } from '@inputs/privilege.input'
 import { PaginationArgs } from '@inputs/query.input'
@@ -16,7 +17,7 @@ import { ValidationError } from 'yup'
 @Resolver()
 export default class PrivilegeResolver {
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async addPrivilege(@Arg('data') data: PrivilegeInput): Promise<boolean> {
     try {
       await PrivilegeSchema().validate(data, { abortEarly: false })
@@ -32,7 +33,7 @@ export default class PrivilegeResolver {
     }
   }
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async updatePrivilege(@Arg('id') id: string, @Arg('data') data: PrivilegeInput): Promise<boolean> {
     try {
       await PrivilegeSchema(id).validate(data, { abortEarly: false })
@@ -47,7 +48,7 @@ export default class PrivilegeResolver {
     }
   }
   @Query(() => PrivilegePaginationPayload)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getPrivileges(
     @Args() query: GetPrivilegesArgs,
     @Args() paginate: PaginationArgs,
@@ -75,7 +76,7 @@ export default class PrivilegeResolver {
     }
   }
   @Query(() => Privilege)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getPrivilege(@Arg('name') name: string): Promise<Privilege> {
     try {
       const privilege = await PrivilegeModel.findOne({ name })
@@ -90,7 +91,7 @@ export default class PrivilegeResolver {
     }
   }
   @Query(() => Privilege)
-  @UseMiddleware(AuthGuard(['admin', 'customer']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.CUSTOMER]))
   async getPrivilegeById(@Arg('id') id: string): Promise<Privilege> {
     try {
       const privilege = await PrivilegeModel.findById(id)
@@ -107,7 +108,7 @@ export default class PrivilegeResolver {
     }
   }
   @Query(() => Privilege)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getPrivilegeByCode(@Arg('code') code: string): Promise<Privilege> {
     try {
       const privilege = await PrivilegeModel.findOne({ code: code })

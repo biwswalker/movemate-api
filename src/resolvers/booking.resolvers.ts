@@ -13,6 +13,7 @@ import ShipmentModel from '@models/shipment.model'
 import SearchHistoryModel from '@models/searchHistory.model'
 import { ELimiterType, getLatestCount } from '@configs/rateLimit'
 import { EPaymentMethod } from '@enums/payments'
+import { EUserRole, EUserType } from '@enums/users'
 
 @Resolver()
 export default class BookingResolver {
@@ -31,7 +32,7 @@ export default class BookingResolver {
             faveriteDrivers = drivers
           }
         }
-        if (user && user.userType === 'business') {
+        if (user && user.userType === EUserType.BUSINESS) {
           const businessCustomer = user.businessDetail as BusinessCustomer | undefined
           const isCredit = businessCustomer.paymentMethod === EPaymentMethod.CREDIT
           isBusinessCreditUser = isCredit
@@ -72,7 +73,7 @@ export default class BookingResolver {
   }
 
   @Mutation(() => String)
-  @UseMiddleware(AuthGuard(['customer']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   async addPODAddress(@Ctx() ctx: GraphQLContext, @Arg('data') { _id, ...data }: PODAddressInput): Promise<string> {
     try {
       const address = new PODAddressModel({ ...data, user: ctx.req.user_id })
@@ -84,7 +85,7 @@ export default class BookingResolver {
   }
 
   @Query(() => [PODAddress])
-  @UseMiddleware(AuthGuard(['customer']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   async getPODAddress(@Ctx() ctx: GraphQLContext): Promise<PODAddress[]> {
     const user_id = ctx.req.user_id
     try {
@@ -96,7 +97,7 @@ export default class BookingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['customer']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   async removePODAddress(@Ctx() ctx: GraphQLContext, @Arg('id') id: string): Promise<boolean> {
     const user_id = ctx.req.user_id
     try {

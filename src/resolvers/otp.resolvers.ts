@@ -10,6 +10,7 @@ import { OTPPaginationPayload } from '@payloads/otp.payloads'
 import { FilterQuery, PaginateOptions } from 'mongoose'
 import { reformPaginate } from '@utils/pagination.utils'
 import { credit, sendSMS } from '@services/sms/thaibulk'
+import { EUserRole } from '@enums/users'
 
 const DEFUALT_OTP_DURATION = 2
 const DEFUALT_OTP_EXPIRE = 20
@@ -157,7 +158,7 @@ export default class OTPRequestResolver {
   }
 
   @Query(() => OTPRequst)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getLatestOtp(@Arg('phoneNumber') phoneNumber: string): Promise<OTPRequst> {
     try {
       const otps = await OTPRequstModel.findOne({ phoneNumber }).sort({ createdAt: -1 })
@@ -172,7 +173,7 @@ export default class OTPRequestResolver {
   }
 
   @Query(() => OTPPaginationPayload)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getOtps(@Args() query: GetOTPArgs, @Args() paginate: PaginationArgs): Promise<OTPPaginationPayload> {
     try {
       const VERIFY_PHONE = /^(0[689]{1})+([0-9]{8})+$/

@@ -1,3 +1,4 @@
+import { EUserRole } from '@enums/users'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import UserModel from '@models/user.model'
 import { verifyExpToken } from '@utils/encryption'
@@ -10,7 +11,7 @@ activate_api.get('/customer/:user_number', async (req, res) => {
     const rawUserNumber = req.params.user_number
     const userToken = verifyExpToken<{ userNumber }>(rawUserNumber)
     if (userToken.userNumber) {
-      const user = await UserModel.findOne({ userNumber: userToken.userNumber, userRole: 'customer' })
+      const user = await UserModel.findOne({ userNumber: userToken.userNumber, userRole: EUserRole.CUSTOMER })
       if (!user) {
         throw Error('ไม่พบผู้ใช้')
       }

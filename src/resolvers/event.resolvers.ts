@@ -1,3 +1,4 @@
+import { EUserRole } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
 import { EventInput } from '@inputs/event.input'
 import EventModel, { Event } from '@models/event.model'
@@ -12,7 +13,7 @@ import { ValidationError } from 'yup'
 @Resolver(Event)
 export default class EventResolver {
   @Query(() => [Event])
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async events(@Arg('date') date: Date): Promise<Event[]> {
     const som = startOfMonth(date)
     const eom = endOfMonth(date)
@@ -25,14 +26,14 @@ export default class EventResolver {
   }
 
   @Query(() => Event)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async event(@Arg('eventName') eventName: string): Promise<Event> {
     const event = await EventModel.findOne({ title: eventName })
     return event
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async saveEvent(@Arg('data') { _id, ...data }: EventInput): Promise<boolean> {
     try {
       await EventSchema.validate({ id: _id, ...data }, { abortEarly: false })
@@ -56,7 +57,7 @@ export default class EventResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async removeEvent(@Arg('eventId') eventId: string): Promise<boolean> {
     await EventModel.findByIdAndDelete(eventId)
     return true

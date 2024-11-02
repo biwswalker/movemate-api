@@ -1,6 +1,7 @@
 import { GraphQLContext } from "@configs/graphQL.config";
 import { ELimiterType, verifyRequestLimiter } from "@configs/rateLimit";
-import UserModel, { EUserStatus, EUserType } from "@models/user.model";
+import { EUserStatus, EUserType } from "@enums/users";
+import UserModel from "@models/user.model";
 import { REPONSE_NAME } from "constants/status";
 import { GraphQLError } from "graphql";
 import { MiddlewareFn } from "type-graphql";

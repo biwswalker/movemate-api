@@ -17,7 +17,7 @@ import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { AdminNotificationCountPayload, UnreadCountPayload } from '@payloads/notification.payloads'
 import ShipmentModel from '@models/shipment.model'
-import UserModel, { EUserRole } from '@models/user.model'
+import UserModel from '@models/user.model'
 import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 import { sum } from 'lodash'
@@ -25,27 +25,28 @@ import { decryption } from '@utils/encryption'
 import { Repeater } from '@graphql-yoga/subscription'
 import { EPaymentMethod } from '@enums/payments'
 import { EShipmentStatus } from '@enums/shipments'
+import { EUserRole, EUserStatus, EUserType } from '@enums/users'
 
 export async function getAdminMenuNotificationCount(): Promise<AdminNotificationCountPayload> {
   const individualCustomer = await UserModel.countDocuments({
-    status: 'pending',
-    userType: 'individual',
-    userRole: 'customer',
+    status: EUserStatus.PENDING,
+    userType: EUserType.INDIVIDUAL,
+    userRole: EUserRole.CUSTOMER,
   }).catch(() => 0)
   const businessCustomer = await UserModel.countDocuments({
-    status: 'pending',
-    userType: 'business',
-    userRole: 'customer',
+    status: EUserStatus.PENDING,
+    userType: EUserType.BUSINESS,
+    userRole: EUserRole.CUSTOMER,
   }).catch(() => 0)
   const individualDriver = await UserModel.countDocuments({
-    status: 'pending',
-    userType: 'individual',
-    userRole: 'driver',
+    status: EUserStatus.PENDING,
+    userType: EUserType.INDIVIDUAL,
+    userRole: EUserRole.DRIVER,
   }).catch(() => 0)
   const businessDriver = await UserModel.countDocuments({
-    status: 'pending',
-    userType: 'business',
-    userRole: 'driver',
+    status: EUserStatus.PENDING,
+    userType: EUserType.BUSINESS,
+    userRole: EUserRole.DRIVER,
   }).catch(() => 0)
   const shipment = await ShipmentModel.countDocuments({
     $or: [{ status: EShipmentStatus.IDLE }, { status: EShipmentStatus.REFUND }],
@@ -133,7 +134,7 @@ export default class NotificationResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['admin']))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async triggerAdminMenuNotificationCount(): Promise<boolean> {
     const payload = await getAdminMenuNotificationCount()
     await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, payload)
@@ -160,6 +161,10 @@ export default class NotificationResolver {
     return payload
   }
 
+  /**
+   * TEST
+   * @returns
+   */
   @Mutation(() => Boolean)
   async sentTextDriverNotification(): Promise<boolean> {
     const driver = await UserModel.findOne({ userRole: EUserRole.DRIVER })

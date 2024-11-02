@@ -1,7 +1,7 @@
 import { Field, Float, ID, ObjectType, registerEnumType } from 'type-graphql'
 import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
-import UserModel, { EUserRole, EUserStatus, EUserType, User } from './user.model'
+import UserModel, { User } from './user.model'
 import ShipmentModel, { Shipment } from './shipment.model'
 import BillingPaymentModel, { BillingPayment, EBillingPaymentStatus } from './billingPayment.model'
 import { BusinessCustomer } from './customerBusiness.model'
@@ -63,6 +63,7 @@ import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { generateReceiptCashWithNonTax } from 'reports/receiptWithCashNonTax'
 import { EPaymentMethod, EPaymentRejectionReason, EPaymentStatus } from '@enums/payments'
 import { EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
+import { EUserRole, EUserStatus, EUserType } from '@enums/users'
 
 Aigle.mixin(lodash, {})
 
@@ -991,7 +992,7 @@ export class BillingCycle extends TimeStamps {
             fullname: customerModel.fullname,
             phone_number: customerModel.contactNumber,
             email: customerModel.email,
-            customer_type: customerModel.userType === 'individual' ? 'ส่วนบุคคล' : 'บริษัท/องค์กร',
+            customer_type: customerModel.userType === EUserType.INDIVIDUAL ? 'ส่วนบุคคล' : 'บริษัท/องค์กร',
             pickup,
             dropoffs,
             tracking_link,

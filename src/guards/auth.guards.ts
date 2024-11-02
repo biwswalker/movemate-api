@@ -1,108 +1,94 @@
-import { AuthenticationError, MiddlewareFn } from "type-graphql";
-import { verifyAccessToken } from "@utils/auth.utils";
-import { GraphQLContext } from "@configs/graphQL.config";
-import UserModel, { EUserType } from "@models/user.model";
-import { NextFunction, Request, Response } from "express";
-import { TokenExpiredError } from "jsonwebtoken";
-import { get, includes } from "lodash";
+import { AuthenticationError, MiddlewareFn } from 'type-graphql'
+import { verifyAccessToken } from '@utils/auth.utils'
+import { GraphQLContext } from '@configs/graphQL.config'
+import UserModel from '@models/user.model'
+import { NextFunction, Request, Response } from 'express'
+import { TokenExpiredError } from 'jsonwebtoken'
+import { includes } from 'lodash'
+import { EUserRole, EUserType } from '@enums/users'
 
-export const AuthGuard: (roles?: TUserRole[]) => MiddlewareFn<GraphQLContext> =
-  (roles = ["customer"]) =>
-    async ({ context }, next) => {
-      const { req } = context;
+export const AuthGuard: (roles?: EUserRole[]) => MiddlewareFn<GraphQLContext> =
+  (roles = [EUserRole.CUSTOMER]) =>
+  async ({ context }, next) => {
+    const { req } = context
 
-      const authorization = req.headers["authorization"];
-      if (!authorization || !authorization.startsWith("Bearer ")) {
-        throw new AuthenticationError("รหัสระบุตัวตนไม่สมบูรณ์");
+    const authorization = req.headers['authorization']
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      throw new AuthenticationError('รหัสระบุตัวตนไม่สมบูรณ์')
+    }
+
+    try {
+      const token = authorization.split(' ')[1]
+      const decodedToken = verifyAccessToken(token)
+      if (!decodedToken) {
+        throw new AuthenticationError('รหัสระบุตัวตนไม่สมบูรณ์หรือหมดอายุ')
+      }
+      const user_id = decodedToken.user_id
+      const user_role = decodedToken.user_role
+      const user = await UserModel.findById(user_id).lean()
+
+      if (!user) {
+        throw new AuthenticationError('ไม่พบผู้ใช้')
       }
 
-      try {
-        const token = authorization.split(" ")[1];
-        const decodedToken = verifyAccessToken(token);
-        if (!decodedToken) {
-          throw new AuthenticationError("รหัสระบุตัวตนไม่สมบูรณ์หรือหมดอายุ");
-        }
-        const user_id = decodedToken.user_id;
-        const user_role = decodedToken.user_role;
-        const user = await UserModel.findById(user_id).lean()
-
-        if (!user) {
-          throw new AuthenticationError("ไม่พบผู้ใช้");
-        }
-
-        if (!includes(roles, user_role)) {
-          throw new AuthenticationError(
-            "ไม่สามารถใช้งานฟังก์ชั้นนี้ได้ เนื่องจากจำกัดสิทธิ์การเข้าถึง"
-          );
-        }
-
-        const limit = user.userType === EUserType.BUSINESS
-          ? Infinity
-          : user.userType === EUserType.INDIVIDUAL
-            ? 20 : 10
-        req.user_id = user_id;
-        req.user_role = user_role;
-        req.limit = limit
-      } catch (error) {
-        if (error instanceof TokenExpiredError) {
-          throw new AuthenticationError("เซสชั่นหมดอายุ");
-        }
-        throw error;
+      if (!includes(roles, user_role)) {
+        throw new AuthenticationError('ไม่สามารถใช้งานฟังก์ชั้นนี้ได้ เนื่องจากจำกัดสิทธิ์การเข้าถึง')
       }
 
-      return next();
-    };
+      const limit = user.userType === EUserType.BUSINESS ? Infinity : user.userType === EUserType.INDIVIDUAL ? 20 : 10
+      req.user_id = user_id
+      req.user_role = user_role
+      req.limit = limit
+    } catch (error) {
+      if (error instanceof TokenExpiredError) {
+        throw new AuthenticationError('เซสชั่นหมดอายุ')
+      }
+      throw error
+    }
 
-export const AllowGuard: MiddlewareFn<GraphQLContext> = async (
-  { context },
-  next
-) => {
-  const { req } = context;
+    return next()
+  }
 
-  const authorization = req.headers["authorization"];
+export const AllowGuard: MiddlewareFn<GraphQLContext> = async ({ context }, next) => {
+  const { req } = context
+
+  const authorization = req.headers['authorization']
 
   try {
     if (authorization) {
-      if (!authorization.startsWith("Bearer ")) {
-        throw new AuthenticationError("รหัสระบุตัวตนไม่สมบูรณ์");
+      if (!authorization.startsWith('Bearer ')) {
+        throw new AuthenticationError('รหัสระบุตัวตนไม่สมบูรณ์')
       }
-      const token = authorization.split(" ")[1];
-      const decodedToken = verifyAccessToken(token);
+      const token = authorization.split(' ')[1]
+      const decodedToken = verifyAccessToken(token)
       if (decodedToken) {
-        const user_id = decodedToken.user_id;
-        const user_role = decodedToken.user_role;
+        const user_id = decodedToken.user_id
+        const user_role = decodedToken.user_role
         const user = await UserModel.findById(user_id).lean()
 
-        const limit = user.userType === EUserType.BUSINESS
-          ? Infinity
-          : user.userType === EUserType.INDIVIDUAL
-            ? 20 : 10
-        req.user_id = user_id;
-        req.user_role = user_role;
+        const limit = user.userType === EUserType.BUSINESS ? Infinity : user.userType === EUserType.INDIVIDUAL ? 20 : 10
+        req.user_id = user_id
+        req.user_role = user_role
         req.limit = limit
 
         return next()
       }
     }
     req.limit = 10
-    return next();
+    return next()
   } catch (error) {
-    console.log("error: ", error);
+    console.log('error: ', error)
     // if (error instanceof TokenExpiredError) {
     //   return next();
     // }
     // throw error;
-    req.limit = 10;
+    req.limit = 10
     return next()
   }
-};
+}
 
-export const authenticateTokenAccessImage = async (
-  request: Request,
-  response: Response,
-  next: NextFunction
-) => {
-  next();
+export const authenticateTokenAccessImage = async (request: Request, response: Response, next: NextFunction) => {
+  next()
   // const authorization = request.headers['authorization']
 
   // if (!authorization || !authorization.startsWith('Bearer ') || authorization === undefined || authorization === null) {
@@ -128,4 +114,4 @@ export const authenticateTokenAccessImage = async (
   //     // console.log(error)
   //     return response.sendStatus(403)
   // }
-};
+}

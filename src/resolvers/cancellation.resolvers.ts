@@ -1,4 +1,5 @@
 import { GraphQLContext } from '@configs/graphQL.config'
+import { EUserRole } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
 import BillingCycleModel from '@models/billingCycle.model'
 import { REPONSE_NAME } from 'constants/status'
@@ -8,7 +9,7 @@ import { Arg, Ctx, Mutation, Resolver, UseMiddleware } from 'type-graphql'
 @Resolver()
 export default class CancellationResolver {
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['customer']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   async makeCancellation(
     @Ctx() ctx: GraphQLContext,
     @Arg('shipmentId') shipmentId: string,
@@ -27,7 +28,7 @@ export default class CancellationResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard(['customer']))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   async driverCalcellation(
     @Ctx() ctx: GraphQLContext,
     @Arg('shipmentId') shipmentId: string,
