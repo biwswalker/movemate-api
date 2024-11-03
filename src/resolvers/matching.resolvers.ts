@@ -7,9 +7,6 @@ import UserModel from '@models/user.model'
 import { find, get, head, includes, isEmpty, map, reduce, tail, uniq } from 'lodash'
 import DriverDetailModel, { DriverDetail } from '@models/driverDetail.model'
 import { GraphQLError } from 'graphql'
-import { FilterQuery, Types } from 'mongoose'
-import { Ref } from '@typegoose/typegoose'
-import { VehicleType } from '@models/vehicleType.model'
 import { REPONSE_NAME } from 'constants/status'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import {
@@ -17,73 +14,17 @@ import {
   NextShipmentStepInput,
   SentPODDocumentShipmentStepInput,
 } from '@inputs/matching.input'
-import { addDays, addMilliseconds, addSeconds, format } from 'date-fns'
+import { addSeconds, format } from 'date-fns'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { Repeater } from '@graphql-yoga/subscription'
 import BillingCycleModel from '@models/billingCycle.model'
 import addEmailQueue from '@utils/email.utils'
 import { EPaymentMethod } from '@enums/payments'
 import { EDriverAcceptanceStatus, EShipmentMatchingCriteria, EShipmentStatus } from '@enums/shipments'
-import { EDriverStatus, EUserRole, EUserType } from '@enums/users'
+import { EDriverStatus, EUserRole, EUserStatus, EUserType } from '@enums/users'
 
 @Resolver()
 export default class MatchingResolver {
-  async generateQuery(status: EShipmentMatchingCriteria, userId: string, vehicleIds: Ref<VehicleType>[]) {
-    const existingShipments = await ShipmentModel.find({
-      driver: new Types.ObjectId(userId),
-      status: EShipmentStatus.PROGRESSING,
-      driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
-    }).lean()
-
-    const ignoreShipments = map(existingShipments, (shipment) => {
-      const start = shipment.bookingDateTime
-      const end = addMilliseconds(shipment.bookingDateTime, shipment.displayTime)
-      return { bookingDateTime: { $gte: start, $lt: end } }
-      /**
-       * $expr เป็น operator ที่อนุญาตให้คุณใช้การคำนวณเชิงนิพจน์ (aggregation expressions) ภายใน query ปกติได้
-       * โดยช่วยให้คุณสามารถใช้ operator อื่น ๆ ในการคำนวณหรือเปรียบเทียบระหว่างฟิลด์ต่าง ๆ (เช่น $lt, $gte, $add เป็นต้น)
-       * ในการประเมินค่าของฟิลด์โดยตรงใน query
-       *  { $expr: { $lt: [{ $add: ['$bookingDateTime', '$displayTime'] }, new Date(start)] } },
-       */
-    })
-
-    const statusQuery: FilterQuery<Shipment> =
-      status === EShipmentMatchingCriteria.NEW
-        ? {
-            status: EShipmentStatus.IDLE,
-            driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
-            vehicleId: { $in: vehicleIds },
-            $or: [
-              { requestedDriver: { $exists: false } }, // ไม่มี requestedDriver
-              { requestedDriver: null }, // requestedDriver เป็น null
-              { requestedDriver: userId }, // requestedDriver ตรงกับ userId
-              { requestedDriver: { $ne: userId } }, // requestedDriver ไม่ตรงกับ userId
-            ],
-            $nor: ignoreShipments,
-          }
-        : status === EShipmentMatchingCriteria.PROGRESSING // Status progressing
-        ? {
-            status: EShipmentMatchingCriteria.PROGRESSING,
-            driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
-            driver: new Types.ObjectId(userId),
-          }
-        : status === EShipmentMatchingCriteria.CANCELLED // Status cancelled
-        ? {
-            driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
-            driver: new Types.ObjectId(userId),
-            $or: [{ status: EShipmentMatchingCriteria.CANCELLED }, { status: 'refund' }],
-          }
-        : status === EShipmentMatchingCriteria.DELIVERED // Status complete
-        ? {
-            status: EShipmentMatchingCriteria.DELIVERED,
-            driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
-            driver: new Types.ObjectId(userId),
-          }
-        : { _id: 'none' } // Not Included status
-
-    return statusQuery
-  }
-
   @Subscription(() => [Shipment], {
     topics: SHIPMENTS.GET_MATCHING_SHIPMENT,
     subscribe: async ({ context }) => {
@@ -114,7 +55,7 @@ export default class MatchingResolver {
         }
         if (user?.drivingStatus === EDriverStatus.BUSY) return []
         let ignoreShipmets = []
-        if (isBusinessDriver) {
+        if (!isBusinessDriver) {
           const existingShipments = await ShipmentModel.find({
             agentDriver: user._id,
             status: EShipmentStatus.PROGRESSING,
@@ -138,8 +79,9 @@ export default class MatchingResolver {
             return false
           }
           const vehicleId = get(item, 'vehicleId._id', '')
-          const isMatchedService = includes(driverDetail.serviceVehicleTypes, vehicleId)
-          console.log('isMatchedService: ', isMatchedService, vehicleId, driverDetail.serviceVehicleTypes)
+          const normalizeVehicleTypes = map(driverDetail.serviceVehicleTypes, (type) => type.toString())
+          const isMatchedService = includes(normalizeVehicleTypes, vehicleId.toString())
+          console.log('isMatchedService: ', isMatchedService, vehicleId, normalizeVehicleTypes)
           return isMatchedService
         })
         return userPayload
@@ -182,11 +124,13 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    const query = await this.generateQuery(status, userId, driverDetail.serviceVehicleTypes)
+    if (status && status !== EShipmentMatchingCriteria.NEW) {
+      const query = await ShipmentModel.getAcceptedShipmentForDriverQuery(status, userId)
+      const shipments = await ShipmentModel.find(query, undefined, { skip, limit })
+      return shipments
+    }
 
-    console.log('-----getAvailableShipment query-----', JSON.stringify(query))
-    const shipments = await ShipmentModel.find(query).skip(skip).limit(limit).sort({ bookingDateTime: 1 }).exec()
-
+    const shipments = await ShipmentModel.getNewAllAvailableShipmentForDriver(userId, { skip, limit })
     return shipments
   }
 
@@ -229,8 +173,12 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    const query = await this.generateQuery(status, userId, driverDetail.serviceVehicleTypes)
-
+    if (status && status !== EShipmentMatchingCriteria.NEW) {
+      const query = await ShipmentModel.getAcceptedShipmentForDriverQuery(status, userId)
+      const shipmentCount = await ShipmentModel.countDocuments(query)
+      return shipmentCount
+    }
+    const query = await ShipmentModel.getNewAllAvailableShipmentForDriverQuery(userId)
     const shipmentCount = await ShipmentModel.countDocuments(query)
     return shipmentCount
   }
@@ -240,6 +188,11 @@ export default class MatchingResolver {
   async acceptShipment(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
     const userId = ctx.req.user_id
     if (!userId) {
+      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    const user = await UserModel.findById(userId).lean()
+    if (!user) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
@@ -253,28 +206,28 @@ export default class MatchingResolver {
       shipment.status === EShipmentStatus.IDLE &&
       shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING
     ) {
-      await shipment.nextStep()
+      const isBusinessUser = user.userType === EUserType.BUSINESS
       await ShipmentModel.findByIdAndUpdate(shipmentId, {
         status: EShipmentStatus.PROGRESSING,
         driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
-        driver: userId,
+        ...(isBusinessUser ? { agentDriver: userId } : { driver: userId }),
       })
-      await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.WORKING })
-
-      // Notification
-      const customerId = get(shipment, 'customer._id', '')
-      if (customerId) {
-        await NotificationModel.sendNotification({
-          userId: customerId,
-          varient: ENotificationVarient.MASTER,
-          title: `${shipment.trackingNumber} คนขับตอบรับแล้ว`,
-          message: [
-            `งานขนส่งเลขที่ ${shipment.trackingNumber} ได้รับการตอบรับจากคนขับแล้ว คนขับจะติดต่อหาท่านเพื่อนัดหมาย`,
-          ],
-        })
+      if (!isBusinessUser) {
+        await shipment.nextStep()
+        await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.WORKING })
+        // Notification
+        const customerId = get(shipment, 'customer._id', '')
+        if (customerId) {
+          await NotificationModel.sendNotification({
+            userId: customerId,
+            varient: ENotificationVarient.MASTER,
+            title: `${shipment.trackingNumber} คนขับตอบรับแล้ว`,
+            message: [
+              `งานขนส่งเลขที่ ${shipment.trackingNumber} ได้รับการตอบรับจากคนขับแล้ว คนขับจะติดต่อหาท่านเพื่อนัดหมาย`,
+            ],
+          })
+        }
       }
-
-      // await removeMonitorShipmentJob(shipment._id)
 
       const newShipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
       await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
@@ -443,5 +396,71 @@ export default class MatchingResolver {
     // await shipment.cancelledJobByDriver()
     await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.IDLE })
     return true
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  async assignShipment(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('shipmentId') shipmentId: string,
+    @Arg('driverId') driverId: string,
+  ): Promise<boolean> {
+    const userId = ctx.req.user_id
+    if (!userId) {
+      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    const user = await UserModel.findById(userId).lean()
+    if (!user) {
+      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    const shipment = await ShipmentModel.findById(shipmentId)
+    if (!shipment) {
+      const message = 'ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+
+    const driver = await UserModel.findById(driverId).lean()
+    if (!driver) {
+      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    if (driver.status !== EUserStatus.ACTIVE || driver.driverDetail === EDriverStatus.BUSY) {
+      const message = 'คนขับไม่อยู่ในสถานะที่จะรับงานได้'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+
+    if (
+      !shipment.driver &&
+      shipment.status === EShipmentStatus.PROGRESSING &&
+      shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.ACCEPTED
+    ) {
+      const isBusinessUser = user.userType === EUserType.BUSINESS
+      if (isBusinessUser) {
+        await ShipmentModel.findByIdAndUpdate(shipmentId, { driver: driverId })
+        await shipment.nextStep()
+        await UserModel.findByIdAndUpdate(driverId, { drivingStatus: EDriverStatus.WORKING })
+        const customerId = get(shipment, 'customer._id', '')
+        if (customerId) {
+          await NotificationModel.sendNotification({
+            userId: customerId,
+            varient: ENotificationVarient.MASTER,
+            title: `${shipment.trackingNumber} คนขับตอบรับแล้ว`,
+            message: [
+              `งานขนส่งเลขที่ ${shipment.trackingNumber} ได้รับการตอบรับจากคนขับแล้ว คนขับจะติดต่อหาท่านเพื่อนัดหมาย`,
+            ],
+          })
+        }
+      }
+      const newShipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
+      await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
+
+      return true
+    }
+    const message = 'ไม่สามารถรับงานขนส่งนี้ได้ เนื่องจากงานขนส่งดังกล่าวมีผู้รับไปแล้ว'
+    throw new GraphQLError(message, {
+      extensions: { code: REPONSE_NAME.EXISTING_SHIPMENT_DRIVER, errors: [{ message }] },
+    })
   }
 }

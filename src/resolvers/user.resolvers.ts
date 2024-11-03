@@ -489,7 +489,8 @@ export default class UserResolver {
         const individualDetail: IndividualCustomer | null = get(user, 'individualDetail', null)
         const businessDetail: BusinessCustomer | null = get(user, 'businessDetail', null)
         const upgradeRequest: BusinessCustomer | null = get(user, 'upgradeRequest', null)
-        const businesData: BusinessCustomer | null = user.userType === EUserType.INDIVIDUAL ? upgradeRequest : businessDetail
+        const businesData: BusinessCustomer | null =
+          user.userType === EUserType.INDIVIDUAL ? upgradeRequest : businessDetail
 
         // Check Business Detail
         if (typeof businesData !== 'object') {

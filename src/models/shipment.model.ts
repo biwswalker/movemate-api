@@ -5,7 +5,7 @@ import { IsEnum } from 'class-validator'
 import PrivilegeModel, { Privilege } from './privilege.model'
 import { VehicleType } from './vehicleType.model'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
-import mongoose, { Schema, Types } from 'mongoose'
+import mongoose, { FilterQuery, Schema, Types } from 'mongoose'
 import FileModel, { File } from './file.model'
 import { Location } from './location.model'
 import { ShipmentAdditionalServicePrice } from './shipmentAdditionalServicePrice.model'
@@ -64,6 +64,7 @@ import {
   EAdminAcceptanceStatus,
   EDriverAcceptanceStatus,
   EShipmentCancellationReason,
+  EShipmentMatchingCriteria,
 } from '@enums/shipments'
 import { addSeconds } from 'date-fns'
 import { EDriverStatus, EUserType } from '@enums/users'
@@ -710,17 +711,17 @@ export class Shipment extends TimeStamps {
         })
         const nextStep = find(this.steps, ['seq', this.currentStepSeq + 1])
         const nextStepId = get(nextStep, '_id', '')
+        const shipmentModel = await ShipmentModel.findById(this._id)
         if (nextStepId) {
           const nextStepDefinitionModel = await StepDefinitionModel.findById(nextStepId)
           await nextStepDefinitionModel.updateOne({ stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() })
-          const shipmentModel = await ShipmentModel.findById(this._id)
           await shipmentModel.updateOne({
             currentStepSeq: nextStepDefinitionModel.seq,
-            podDetail: {
-              ...shipmentModel.podDetail,
-              trackingNumber,
-              provider,
-            },
+            podDetail: Object.assign(shipmentModel.podDetail, { trackingNumber, provider }),
+          })
+        } else {
+          await shipmentModel.updateOne({
+            podDetail: Object.assign(shipmentModel.podDetail, { trackingNumber, provider }),
           })
         }
         return true
@@ -755,7 +756,7 @@ export class Shipment extends TimeStamps {
 
         const pickup = head(this.destinations)
         const dropoffs = tail(this.destinations)
-        const description = `ค่าขนส่งจาก ${pickup.name} ไปยัง ${reduce(
+        const description = `${this.trackingNumber} ค่าขนส่งจาก ${pickup.name} ไปยัง ${reduce(
           dropoffs,
           (prev, curr) => (prev ? curr.name : `${prev}, ${curr.name}`),
           '',
@@ -766,11 +767,13 @@ export class Shipment extends TimeStamps {
          */
         const amountCost = get(this, 'payment.invoice.totalCost', 0)
         const amountPrice = get(this, 'payment.invoice.totalPrice', 0)
-        const driverId = get(this, 'driver._id', '')
+        const isAgentDriver = !isEmpty(this.agentDriver)
+        const ownerDriverId = isAgentDriver ? get(this, 'agentDriver._id', '') : get(this, 'driver._id', '')
+
         // For Driver transaction
         const driverTransaction = new TransactionModel({
           amount: amountCost,
-          ownerId: driverId,
+          ownerId: ownerDriverId,
           ownerType: ETransactionOwner.DRIVER,
           description: description,
           refId: this._id,
@@ -793,7 +796,7 @@ export class Shipment extends TimeStamps {
         await movemateTransaction.save()
 
         // Update balance
-        const driver = await UserModel.findById(driverId).lean()
+        const driver = await UserModel.findById(ownerDriverId).lean()
         if (driver) {
           const driverDetail = await DriverDetailModel.findById(driver.driverDetail)
           await driverDetail.updateBalance()
@@ -1028,7 +1031,38 @@ export class Shipment extends TimeStamps {
     })
   }
 
-  static async getNewAllAvailableShipmentForDriver(driverId?: string) {
+  static async getAcceptedShipmentForDriverQuery(status: EShipmentMatchingCriteria, userId: string) {
+    const user = await UserModel.findById(userId)
+    const isBusinessDriver = user.userType === EUserType.BUSINESS
+    const driver = isBusinessDriver
+      ? { agentDriver: new Types.ObjectId(userId) }
+      : { driver: new Types.ObjectId(userId) }
+
+    const statusQuery: FilterQuery<Shipment> =
+      status === EShipmentMatchingCriteria.PROGRESSING // Status progressing
+        ? {
+            status: EShipmentMatchingCriteria.PROGRESSING,
+            driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
+            ...driver,
+          }
+        : status === EShipmentMatchingCriteria.CANCELLED // Status cancelled
+        ? {
+            driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
+            ...driver,
+            $or: [{ status: EShipmentMatchingCriteria.CANCELLED }, { status: 'refund' }],
+          }
+        : status === EShipmentMatchingCriteria.DELIVERED // Status complete
+        ? {
+            status: EShipmentMatchingCriteria.DELIVERED,
+            driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
+            ...driver,
+          }
+        : { _id: 'none' } // Not Included status
+
+    return statusQuery
+  }
+
+  static async getNewAllAvailableShipmentForDriverQuery(driverId?: string) {
     let vehicleIds = null
     let ignoreShipments = []
     if (driverId) {
@@ -1078,7 +1112,13 @@ export class Shipment extends TimeStamps {
       ...(driverId && !isEmpty(ignoreShipments) ? { $nor: ignoreShipments } : {}),
     }
 
-    const shipments = await ShipmentModel.find(query).sort({ bookingDateTime: 1 }).exec()
+    return query
+  }
+
+  static async getNewAllAvailableShipmentForDriver(driverId?: string, options: any = {}) {
+    const query = await this.getNewAllAvailableShipmentForDriverQuery(driverId)
+    const queryOptions = Object.assign(options, { sort: { bookingDateTime: 1 } })
+    const shipments = await ShipmentModel.find(query, undefined, queryOptions).exec()
     if (!shipments) {
       return []
     }

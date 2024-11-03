@@ -3,6 +3,7 @@ import { prop as Property, getModelForClass } from '@typegoose/typegoose'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import { LoadmoreArgs } from '@inputs/query.input'
 import { TransactionPayload } from '@payloads/transaction.payloads'
+import { endOfMonth, startOfYear } from 'date-fns'
 
 export enum ETransactionType {
   INCOME = 'income',
@@ -120,6 +121,17 @@ export class Transaction extends TimeStamps {
       totalOutcome,
       totalOverall,
     }
+  }
+
+  static async calculateMonthlyTransaction(ownerId: string, date: Date): Promise<number> {
+    const startMonthDay = startOfYear(date)
+    const endMonthDay = endOfMonth(date)
+    const transactions = await TransactionModel.aggregate([
+      { $match: { ownerId, createdAt: { $gt: startMonthDay, $lt: endMonthDay }, status: ETransactionStatus.PENDING } },
+      { $group: { _id: '$transactionType', totalAmount: { $sum: '$amount' } } },
+    ])
+    const totalPending = transactions.length > 0 ? transactions[0]?.totalAmount : 0
+    return totalPending
   }
 
   static async calculateProfit(startDate: Date, endDate: Date): Promise<TransactionPayload> {

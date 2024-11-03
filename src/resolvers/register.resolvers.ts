@@ -119,7 +119,7 @@ export default class RegisterResolver {
       if (userType === EUserType.INDIVIDUAL && individualDetail) {
         const password_decryption = decryption(password)
         const hashedPassword = await bcrypt.hash(password_decryption, 10)
-        const userNumber = await generateId('MMIN', userType)
+        const userNumber = await generateId('MMIN', 'individual')
 
         const individualCustomer = new CustomerIndividualModel({
           userNumber,
@@ -178,7 +178,7 @@ export default class RegisterResolver {
           throw new Error('ข้อมูลไม่สมบูรณ์')
         }
 
-        const userNumber = await generateId('MMBU', userType)
+        const userNumber = await generateId('MMBU', 'business')
         const generatedPassword = generateRandomNumberPattern('MM########').toLowerCase()
         const hashedPassword = await bcrypt.hash(generatedPassword, 10)
 

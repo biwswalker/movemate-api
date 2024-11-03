@@ -1,9 +1,9 @@
 import { registerEnumType } from 'type-graphql'
 
 export enum EUserRole {
-  CUSTOMER = 'customer',
-  ADMIN = 'admin',
-  DRIVER = 'driver',
+  CUSTOMER = 'CUSTOMER',
+  ADMIN = 'ADMIN',
+  DRIVER = 'DRIVER',
 }
 registerEnumType(EUserRole, {
   name: 'EUserRole',
@@ -11,8 +11,8 @@ registerEnumType(EUserRole, {
 })
 
 export enum EUserType {
-  INDIVIDUAL = 'individual',
-  BUSINESS = 'business',
+  INDIVIDUAL = 'INDIVIDUAL',
+  BUSINESS = 'BUSINESS',
 }
 registerEnumType(EUserType, {
   name: 'EUserType',
@@ -20,11 +20,11 @@ registerEnumType(EUserType, {
 })
 
 export enum EUserStatus {
-  PENDING = 'pending', // Need to Verify
-  ACTIVE = 'active',
-  INACTIVE = 'inactive',
-  BANNED = 'banned',
-  DENIED = 'denied',
+  PENDING = 'PENDING',
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  BANNED = 'BANNED',
+  DENIED = 'DENIED',
 }
 registerEnumType(EUserStatus, {
   name: 'EUserStatus',
@@ -32,9 +32,9 @@ registerEnumType(EUserStatus, {
 })
 
 export enum EUserValidationStatus {
-  PENDING = 'pending',
-  APPROVE = 'approve',
-  DENIED = 'denied',
+  PENDING = 'PENDING',
+  APPROVE = 'APPROVE',
+  DENIED = 'DENIED',
 }
 registerEnumType(EUserValidationStatus, {
   name: 'EUserValidationStatus',
@@ -42,8 +42,8 @@ registerEnumType(EUserValidationStatus, {
 })
 
 export enum ERegistration {
-  WEB = 'web',
-  APP = 'app',
+  WEB = 'WEB',
+  APP = 'APP',
 }
 registerEnumType(ERegistration, {
   name: 'ERegistration',
@@ -51,9 +51,9 @@ registerEnumType(ERegistration, {
 })
 
 export enum EDriverStatus {
-  IDLE = 'idle',
-  BUSY = 'busy',
-  WORKING = 'working',
+  IDLE = 'IDLE',
+  BUSY = 'BUSY',
+  WORKING = 'WORKING',
 }
 registerEnumType(EDriverStatus, {
   name: 'EDriverStatus',
@@ -72,9 +72,9 @@ registerEnumType(EDriverType, {
 })
 
 export enum EAdminPermission {
-  ADMIN = 'admin',
-  SUPERVISOR = 'supervisor',
-  OWNER = 'owner',
+  ADMIN = 'ADMIN',
+  SUPERVISOR = 'SUPERVISOR',
+  OWNER = 'OWNER',
 }
 registerEnumType(EAdminPermission, {
   name: 'EAdminPermission',

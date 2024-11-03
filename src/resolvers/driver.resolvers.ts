@@ -1,8 +1,8 @@
-import { Resolver, Mutation, Arg, Ctx, UseMiddleware } from 'type-graphql'
+import { Resolver, Mutation, Arg, Ctx, UseMiddleware, Query } from 'type-graphql'
 import UserModel, { User } from '@models/user.model'
 import bcrypt from 'bcrypt'
 import { GraphQLContext } from '@configs/graphQL.config'
-import { includes, isEmpty } from 'lodash'
+import { isEmpty } from 'lodash'
 import { generateId, generateRef } from '@utils/string.utils'
 import FileModel from '@models/file.model'
 import { decryption } from '@utils/encryption'
@@ -23,6 +23,9 @@ import { DriverVerifiedPayload, EmployeeDetailPayload, RegisterPayload } from '@
 import { GraphQLError } from 'graphql'
 import { EDriverStatus, EDriverType, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
+import ShipmentModel from '@models/shipment.model'
+import { REPONSE_NAME } from 'constants/status'
+import { addSeconds } from 'date-fns'
 
 @Resolver(User)
 export default class DriverResolver {
@@ -423,5 +426,43 @@ export default class DriverResolver {
       console.log('error: ', errors)
       throw errors
     }
+  }
+
+  @Query(() => [User])
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  async getAvailableDrivers(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<User[]> {
+    const userId = ctx.req.user_id
+
+    const employeeIds = await UserModel.find({ parents: { $in: [userId] } }).distinct('_id')
+    console.log('=> employeeIds :', employeeIds)
+    const shipment = await ShipmentModel.findById(shipmentId).lean()
+    if (!shipment) {
+      const message = 'ไม่สามารถหาข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+
+    const startDatetime = shipment.bookingDateTime
+    const endDatetime = addSeconds(startDatetime, shipment.displayTime)
+
+    const unavailableDriverIds = await ShipmentModel.find({
+      $or: [
+        {
+          bookingDateTime: { $lt: endDatetime },
+          $expr: {
+            $gt: [{ $add: ['$bookingDateTime', { $multiply: ['$displayTime', 1000] }] }, startDatetime],
+          },
+        },
+      ],
+    }).distinct('driver')
+
+    // ค้นหา driver ที่ไม่มีงานช่วงเวลาซ้อนทับ
+    const availableDrivers = await UserModel.find({
+      _id: { $nin: unavailableDriverIds },
+      parents: { $in: [userId] },
+      status: EUserStatus.ACTIVE,
+      drivingStatus: { $in: [EDriverStatus.IDLE, EDriverStatus.WORKING] },
+    })
+
+    return availableDrivers
   }
 }

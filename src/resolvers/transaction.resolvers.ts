@@ -6,7 +6,7 @@ import TransactionModel, { ETransactionOwner, Transaction } from '@models/transa
 import { TransactionPayload } from '@payloads/transaction.payloads'
 import { REPONSE_NAME } from 'constants/status'
 import { GraphQLError } from 'graphql'
-import { Args, Ctx, Int, Query, Resolver, UseMiddleware } from 'type-graphql'
+import { Arg, Args, Ctx, Float, Int, Query, Resolver, UseMiddleware } from 'type-graphql'
 
 @Resolver(Transaction)
 export default class TransactionResolver {
@@ -42,6 +42,18 @@ export default class TransactionResolver {
     const transactions = await TransactionModel.calculateTransaction(userId)
 
     return transactions
+  }
+
+  @Query(() => Float)
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  async calculateMonthlyTransaction(@Ctx() ctx: GraphQLContext, @Arg('date') date: Date): Promise<number> {
+    const userId = ctx.req.user_id
+    if (!userId) {
+      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    const totalMonthly = await TransactionModel.calculateMonthlyTransaction(userId, date)
+    return totalMonthly
   }
 
   @Query(() => Int)
