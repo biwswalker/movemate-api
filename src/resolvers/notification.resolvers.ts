@@ -11,7 +11,7 @@ import {
   Root,
   SubscribeResolverData,
 } from 'type-graphql'
-import NotificationModel, { ENavigationType, Notification } from '@models/notification.model'
+import NotificationModel, { Notification } from '@models/notification.model'
 import { LoadmoreArgs } from '@inputs/query.input'
 import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
@@ -21,7 +21,6 @@ import UserModel from '@models/user.model'
 import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 import { sum } from 'lodash'
-import { decryption } from '@utils/encryption'
 import { Repeater } from '@graphql-yoga/subscription'
 import { EPaymentMethod } from '@enums/payments'
 import { EShipmentStatus } from '@enums/shipments'
@@ -102,15 +101,19 @@ export default class NotificationResolver {
   @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async unreadCount(@Ctx() ctx: GraphQLContext): Promise<UnreadCountPayload> {
     const userId = ctx.req.user_id
+    const userRole = ctx.req.user_role
     if (userId) {
       const notification = await NotificationModel.countDocuments({ userId, read: false })
       await pubsub.publish(NOTFICATIONS.COUNT, userId, notification)
-      const shipment = await ShipmentModel.countDocuments({
-        customer: userId,
-        status: { $in: [EShipmentStatus.IDLE, EShipmentStatus.PROGRESSING, EShipmentStatus.REFUND] },
-      })
-      await pubsub.publish(NOTFICATIONS.PROGRESSING_SHIPMENT, userId, shipment)
-      return { notification, shipment }
+      if (userRole === EUserRole.CUSTOMER) {
+        const shipment = await ShipmentModel.countDocuments({
+          customer: userId,
+          status: { $in: [EShipmentStatus.IDLE, EShipmentStatus.PROGRESSING, EShipmentStatus.REFUND] },
+        })
+        await pubsub.publish(NOTFICATIONS.PROGRESSING_SHIPMENT, userId, shipment)
+        return { notification, shipment }
+      }
+      return { notification, shipment: 0 }
     }
     return { notification: 0, shipment: 0 }
   }
@@ -159,31 +162,6 @@ export default class NotificationResolver {
   } as any)
   getAdminNotificationCount(@Root() payload: AdminNotificationCountPayload): AdminNotificationCountPayload {
     return payload
-  }
-
-  /**
-   * TEST
-   * @returns
-   */
-  @Mutation(() => Boolean)
-  async sentTextDriverNotification(): Promise<boolean> {
-    const driver = await UserModel.findOne({ userRole: EUserRole.DRIVER })
-    if (driver && driver.fcmToken) {
-      const token = decryption(driver.fcmToken)
-      console.log('decrypt token', token)
-      await NotificationModel.sendFCMNotification({
-        token,
-        data: {
-          navigation: ENavigationType.SHIPMENT,
-          trackingNumber: 'xxxxxTESTxxxxxx',
-        },
-        notification: {
-          title: 'MovemateTH',
-          body: '📦 มีงานขนส่งใหม่เฉพาะคุณ',
-        },
-      })
-    }
-    return true
   }
 
   @Subscription({

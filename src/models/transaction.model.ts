@@ -6,8 +6,8 @@ import { TransactionPayload } from '@payloads/transaction.payloads'
 import { endOfMonth, startOfYear } from 'date-fns'
 
 export enum ETransactionType {
-  INCOME = 'income',
-  OUTCOME = 'outcome',
+  INCOME = 'INCOME',
+  OUTCOME = 'OUTCOME',
 }
 registerEnumType(ETransactionType, {
   name: 'ETransactionType',
@@ -15,8 +15,8 @@ registerEnumType(ETransactionType, {
 })
 
 export enum ETransactionStatus {
-  COMPLETE = 'complete',
-  PENDING = 'pending',
+  COMPLETE = 'COMPLETE',
+  PENDING = 'PENDING',
 }
 registerEnumType(ETransactionStatus, {
   name: 'ETransactionStatus',
@@ -24,8 +24,9 @@ registerEnumType(ETransactionStatus, {
 })
 
 export enum ETransactionOwner {
-  MOVEMATE = 'movemate',
-  DRIVER = 'driver',
+  MOVEMATE = 'MOVEMATE',
+  DRIVER = 'DRIVER',
+  BUSINESS_DRIVER = 'BUSINESS_DRIVER',
 }
 registerEnumType(ETransactionOwner, {
   name: 'ETransactionOwner',
@@ -33,8 +34,8 @@ registerEnumType(ETransactionOwner, {
 })
 
 export enum ERefType {
-  SHIPMENT = 'shipment',
-  BILLING = 'billing',
+  SHIPMENT = 'SHIPMENT',
+  BILLING = 'BILLING',
 }
 registerEnumType(ERefType, {
   name: 'ERefType',
@@ -56,7 +57,7 @@ export class Transaction extends TimeStamps {
   @Property({ required: true })
   ownerId: string
 
-  @Field()
+  @Field(() => ETransactionOwner)
   @Property({ required: true })
   ownerType: ETransactionOwner
 
@@ -64,7 +65,7 @@ export class Transaction extends TimeStamps {
   @Property({ required: false })
   refId: string
 
-  @Field()
+  @Field(() => ERefType)
   @Property({ required: false })
   refType: ERefType
 
@@ -72,7 +73,7 @@ export class Transaction extends TimeStamps {
   @Property({ required: true })
   amount: number
 
-  @Field()
+  @Field(() => ETransactionType)
   @Property({ required: true })
   transactionType: ETransactionType
 
@@ -80,7 +81,7 @@ export class Transaction extends TimeStamps {
   @Property({ required: true })
   description: string
 
-  @Field()
+  @Field(() => ETransactionStatus)
   @Property({ required: true, default: ETransactionStatus.PENDING })
   status: ETransactionStatus
 

@@ -5,16 +5,7 @@ import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import mongoose from 'mongoose'
 import mongoosePagination from 'mongoose-paginate-v2'
 import { User } from './user.model'
-
-enum EPrivilegeDiscountUnit {
-  PERCENTAGE = 'percentage',
-  CURRENCY = 'currency',
-}
-
-enum EPrivilegeStatus {
-  INACTIVE = 'inactive',
-  ACTIVE = 'active',
-}
+import { EPrivilegeDiscountUnit, EPrivilegeStatus } from '@enums/privilege'
 
 @plugin(mongoosePagination)
 @ObjectType()
@@ -22,10 +13,10 @@ export class Privilege extends TimeStamps {
   @Field(() => ID)
   readonly _id: string
 
-  @Field()
+  @Field(() => EPrivilegeStatus)
   @IsEnum(EPrivilegeStatus)
   @Property({ enum: EPrivilegeStatus, default: EPrivilegeStatus.ACTIVE })
-  status: TPrivilegeStatus
+  status: EPrivilegeStatus
 
   @Field()
   @Property({ required: true, unique: true })
@@ -47,10 +38,10 @@ export class Privilege extends TimeStamps {
   @Property({ required: true })
   discount: number
 
-  @Field()
+  @Field(() => EPrivilegeDiscountUnit)
   @IsEnum(EPrivilegeDiscountUnit)
   @Property({ enum: EPrivilegeDiscountUnit, required: true })
-  unit: TPrivilegeDiscountUnit
+  unit: EPrivilegeDiscountUnit
 
   @Field({ nullable: true })
   @Property()

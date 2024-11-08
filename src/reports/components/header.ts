@@ -24,11 +24,10 @@ export function HeaderComponent(
   const maxWidth = doc.page.width - marginRight
   const isCreditPayment = billingCycle.paymentMethod === EPaymentMethod.CREDIT
   // Logo
-  // Logo
   doc.image(ASSETS.LOGO, doc.page.margins.left, 60, { width: 80 })
 
   // Company Movemate info
-  doc.font(FONTS.SARABUN_MEDIUM).fontSize(8).text('บริษัท เทพพรชัย เอ็นเทอร์ไพรส์ จํากัด', 110)
+  doc.font(FONTS.SARABUN_MEDIUM).fontSize(8).text('บริษัท เทพพรชัย เอ็นเทอร์ไพรส์ จํากัด', 110, 60)
   doc.font(FONTS.SARABUN_LIGHT).fontSize(7)
   doc.text('สาขา : (สำนักงานใหญ่)', 280, 61)
   doc.moveDown(0.8)

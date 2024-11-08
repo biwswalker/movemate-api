@@ -1,10 +1,11 @@
 import PrivilegeModel from '@models/privilege.model'
 import Yup from './yup'
 import { isEmpty } from 'lodash'
+import { EPrivilegeStatus } from '@enums/privilege'
 
 export const PrivilegeSchema = (_id?: string) =>
   Yup.object().shape({
-    status: Yup.string().required('ระบุสถานะ').oneOf(['active', 'inactive'], 'ไม่มีระบุสถานะนี้'),
+    status: Yup.string().required('ระบุสถานะ').oneOf([EPrivilegeStatus.ACTIVE, EPrivilegeStatus.INACTIVE], 'ระบุสถานะ'),
     name: Yup.string()
       .required('ระบุชื่อโปรโมชั่น/ส่วนลด*')
       .matches(/^[a-zA-Z0-9ก-๙\s]+$/g, 'ไม่อนุญาตมีอักษรพิเศษและภาษาอังกฤษตัวใหญ่เท่านั้น')

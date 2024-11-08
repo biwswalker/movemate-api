@@ -10,6 +10,7 @@ import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 
 export enum ENavigationType {
   SHIPMENT = 'shipment',
+  SHIPMENT_WORK = 'shipment-work',
   FINANCE = 'finance',
   NOTIFICATION = 'notification',
 }

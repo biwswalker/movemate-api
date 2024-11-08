@@ -68,6 +68,7 @@ import {
 } from '@enums/shipments'
 import { addSeconds } from 'date-fns'
 import { EDriverStatus, EUserType } from '@enums/users'
+import { EPrivilegeDiscountUnit } from '@enums/privilege'
 
 Aigle.mixin(lodash, {})
 
@@ -374,7 +375,7 @@ export class Shipment extends TimeStamps {
         if (privilege) {
           const { unit, discount, minPrice, maxDiscountPrice } = privilege
           const subTotal = sum([calculated.totalPrice, additionalservices.price])
-          const isPercent = unit === 'percentage'
+          const isPercent = unit === EPrivilegeDiscountUnit.PERCENTAGE
           if (subTotal >= minPrice) {
             if (isPercent) {
               const discountAsBath = (discount / 100) * subTotal
@@ -387,7 +388,11 @@ export class Shipment extends TimeStamps {
             totalDiscount = 0
           }
           discountName = `${privilege.name} (${privilege.discount}${
-            privilege.unit === 'currency' ? ' บาท' : privilege.unit === 'percentage' ? '%' : ''
+            privilege.unit === EPrivilegeDiscountUnit.CURRENCY
+              ? ' บาท'
+              : privilege.unit === EPrivilegeDiscountUnit.PERCENTAGE
+              ? '%'
+              : ''
           })`
         }
       }
@@ -770,7 +775,26 @@ export class Shipment extends TimeStamps {
         const isAgentDriver = !isEmpty(this.agentDriver)
         const ownerDriverId = isAgentDriver ? get(this, 'agentDriver._id', '') : get(this, 'driver._id', '')
 
-        // For Driver transaction
+        const driver = await UserModel.findById(ownerDriverId)
+        if (isAgentDriver && get(this, 'driver._id', '')) {
+          /**
+           * Update employee transaction
+           */
+          const employeeTransaction = new TransactionModel({
+            amount: 0,
+            ownerId: get(this, 'driver._id', ''),
+            ownerType: ETransactionOwner.BUSINESS_DRIVER,
+            description: `${this.trackingNumber} งานจาก ${driver.fullname}`,
+            refId: this._id,
+            refType: ERefType.SHIPMENT,
+            transactionType: ETransactionType.INCOME,
+            status: ETransactionStatus.COMPLETE,
+          })
+          await employeeTransaction.save()
+        }
+        /**
+         * Add transaction for shipment driver owner
+         */
         const driverTransaction = new TransactionModel({
           amount: amountCost,
           ownerId: ownerDriverId,
@@ -782,7 +806,10 @@ export class Shipment extends TimeStamps {
           status: ETransactionStatus.PENDING,
         })
         await driverTransaction.save()
-        // For Movemate transaction
+
+        /**
+         * Add transaction for Movemate Thailand
+         */
         const movemateTransaction = new TransactionModel({
           amount: amountPrice,
           ownerId: MOVEMATE_OWNER_ID,
@@ -796,7 +823,6 @@ export class Shipment extends TimeStamps {
         await movemateTransaction.save()
 
         // Update balance
-        const driver = await UserModel.findById(ownerDriverId).lean()
         if (driver) {
           const driverDetail = await DriverDetailModel.findById(driver.driverDetail)
           await driverDetail.updateBalance()

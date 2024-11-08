@@ -8,7 +8,11 @@ import { find, get, head, includes, isEmpty, map, reduce, tail, uniq } from 'lod
 import DriverDetailModel, { DriverDetail } from '@models/driverDetail.model'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
-import NotificationModel, { ENotificationVarient } from '@models/notification.model'
+import NotificationModel, {
+  ENavigationType,
+  ENotificationVarient,
+  NOTIFICATION_TITLE,
+} from '@models/notification.model'
 import {
   ConfirmShipmentDateInput,
   NextShipmentStepInput,
@@ -22,6 +26,8 @@ import addEmailQueue from '@utils/email.utils'
 import { EPaymentMethod } from '@enums/payments'
 import { EDriverAcceptanceStatus, EShipmentMatchingCriteria, EShipmentStatus } from '@enums/shipments'
 import { EDriverStatus, EUserRole, EUserStatus, EUserType } from '@enums/users'
+import { decryption } from '@utils/encryption'
+import { th } from 'date-fns/locale'
 
 @Resolver()
 export default class MatchingResolver {
@@ -129,7 +135,6 @@ export default class MatchingResolver {
       const shipments = await ShipmentModel.find(query, undefined, { skip, limit })
       return shipments
     }
-
     const shipments = await ShipmentModel.getNewAllAvailableShipmentForDriver(userId, { skip, limit })
     return shipments
   }
@@ -442,6 +447,23 @@ export default class MatchingResolver {
         await shipment.nextStep()
         await UserModel.findByIdAndUpdate(driverId, { drivingStatus: EDriverStatus.WORKING })
         const customerId = get(shipment, 'customer._id', '')
+        if (driver.fcmToken) {
+          const token = decryption(driver.fcmToken)
+          const dateText = format(shipment.bookingDateTime, 'dd MMM HH:mm', { locale: th })
+          const vehicleText = get(shipment, 'vehicleId.name', '')
+          const pickup = head(shipment.destinations)
+          const pickupText = pickup.name
+          const dropoffs = tail(shipment.destinations)
+          const firstDropoff = head(dropoffs)
+          const dropoffsText = `${firstDropoff.name}${dropoffs.length > 1 ? `และอีก ${dropoffs.length - 1} จุด` : ''}`
+          // Sent app Notiification to Driver
+          const message = `🔔 งานใหม่จากนายหน้า! ${dateText} ${vehicleText} 📦 ${pickupText} 📍 ${dropoffsText}`
+          await NotificationModel.sendFCMNotification({
+            token,
+            data: { navigation: ENavigationType.SHIPMENT_WORK, trackingNumber: shipment.trackingNumber },
+            notification: { title: NOTIFICATION_TITLE, body: message },
+          })
+        }
         if (customerId) {
           await NotificationModel.sendNotification({
             userId: customerId,

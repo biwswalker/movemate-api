@@ -21,7 +21,11 @@ import FileModel from '@models/file.model'
 import VehicleTypeModel from '@models/vehicleType.model'
 import { DistanceCostPricing } from '@models/distanceCostPricing.model'
 import addEmailQueue from '@utils/email.utils'
-import NotificationModel, { ENavigationType, ENotificationVarient } from '@models/notification.model'
+import NotificationModel, {
+  ENavigationType,
+  ENotificationVarient,
+  NOTIFICATION_TITLE,
+} from '@models/notification.model'
 import {
   ShipmentPaginationAggregatePayload,
   ShipmentPaginationPayload,
@@ -1104,7 +1108,7 @@ export const sendNewShipmentNotification = async (
                 navigation: ENavigationType.SHIPMENT,
                 trackingNumber: shipment.trackingNumber,
               },
-              notification: { title: 'MovemateTH', body: message },
+              notification: { title: NOTIFICATION_TITLE, body: message },
             })
             return { notify: true, driver: true }
           }
@@ -1163,7 +1167,7 @@ export const sendNewShipmentNotification = async (
                   navigation: ENavigationType.SHIPMENT,
                   trackingNumber: shipment.trackingNumber,
                 },
-                notification: { title: 'MovemateTH', body: message },
+                notification: { title: NOTIFICATION_TITLE, body: message },
               }
             }
             return

@@ -1,4 +1,4 @@
-import {
+import BillingCycleModel, {
   checkBillingStatus,
   issueBillingCycle,
   issueEmailToCustomer,
@@ -9,6 +9,7 @@ import {
   notifyOverdue,
 } from '@models/billingCycle.model'
 import cron from 'node-cron'
+import { generateReceiptCashWithNonTax } from 'reports/receiptWithCashNonTax'
 
 export default async function configureCronjob() {
   cron.schedule(
@@ -49,7 +50,8 @@ export default async function configureCronjob() {
   // await notifyIssueEmailToCustomer()
   // await BillingCycleModel.createBillingCycleForUser("66cdac28ae254a56f48c843e")
   // await issueEmailToCustomer()
-  // const biili = await BillingCycleModel.findOne({ billingNumber: 'IV082567000007' })
+  const biili = await BillingCycleModel.findOne({ billingNumber: 'MMTH000037' })
+  const { fileName } = await generateReceiptCashWithNonTax(biili, biili.issueReceiptFilename)
   // const { fileName } = await generateInvoice(biili)
-  // console.log('fileName: ', fileName)
+  console.log('fileName: ', fileName)
 }

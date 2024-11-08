@@ -22,7 +22,10 @@ export default class TransactionResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    const transactions = await TransactionModel.find({ ownerId: userId, ownerType: ETransactionOwner.DRIVER })
+    const transactions = await TransactionModel.find({
+      ownerId: userId,
+      ownerType: { $in: [ETransactionOwner.DRIVER, ETransactionOwner.BUSINESS_DRIVER] },
+    })
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: 1 })

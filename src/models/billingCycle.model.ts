@@ -1190,7 +1190,7 @@ export async function issueEmailToCustomer() {
   const startRange = currentDate.setHours(0, 0, 0, 0)
   const endRange = currentDate.setHours(23, 59, 59, 999)
 
-  const billingCycles = await BillingCycleModel.find({ createdAt: { $gte: startRange, $lt: endRange } })
+  const billingCycles = await BillingCycleModel.find({ createdAt: { $gte: startRange, $lt: endRange }, paymentMethod: EPaymentMethod.CREDIT })
 
   await Aigle.forEach(billingCycles, async (billingCycle) => {
     const customer = await UserModel.findById(billingCycle.user)

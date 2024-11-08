@@ -1,15 +1,16 @@
 import { GraphQLContext } from '@configs/graphQL.config'
+import { EPrivilegeStatus } from '@enums/privilege'
 import { EUserRole } from '@enums/users'
 import { AllowGuard, AuthGuard } from '@guards/auth.guards'
 import { GetPrivilegesArgs, PrivilegeInput } from '@inputs/privilege.input'
-import { PaginationArgs } from '@inputs/query.input'
+import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
 import PrivilegeModel, { Privilege } from '@models/privilege.model'
 import { PrivilegePaginationPayload, PrivilegeUsedPayload } from '@payloads/privilege.payloads'
 import { yupValidationThrow } from '@utils/error.utils'
 import { reformPaginate } from '@utils/pagination.utils'
 import { PrivilegeSchema } from '@validations/privilege.validations'
 import { GraphQLError } from 'graphql'
-import { filter, isEmpty, isEqual, map, omitBy } from 'lodash'
+import { filter, includes, isEmpty, isEqual, map, omitBy } from 'lodash'
 import { FilterQuery, PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { ValidationError } from 'yup'
@@ -45,6 +46,30 @@ export default class PrivilegeResolver {
         throw yupValidationThrow(errors)
       }
       throw errors
+    }
+  }
+  @Query(() => [Privilege])
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
+  async privileges(
+    @Args() query: GetPrivilegesArgs,
+    @Args() { skip, limit, ...paginate }: LoadmoreArgs,
+  ): Promise<Privilege[]> {
+    try {
+      // Pagination
+      const pagination: PaginateOptions = reformPaginate(paginate)
+      // Filter
+      const filterEmptyQuery = omitBy(query, isEmpty)
+      const filterQuery: FilterQuery<typeof Privilege> = {
+        ...filterEmptyQuery,
+        ...(query.name ? { name: { $regex: query.name, $options: 'i' } } : {}),
+        ...(query.code ? { code: query.code } : { defaultShow: true }),
+      }
+
+      const privileges = await PrivilegeModel.find(filterQuery).skip(skip).limit(limit)
+      return privileges
+    } catch (error) {
+      console.log('error: ', error)
+      throw new GraphQLError('ไม่สามารถเรียกข้อมูลส่วนลดได้ โปรดลองอีกครั้ง')
     }
   }
   @Query(() => PrivilegePaginationPayload)
@@ -129,7 +154,11 @@ export default class PrivilegeResolver {
   async searchPrivilegeByCode(@Arg('code') code: string, @Ctx() ctx: GraphQLContext): Promise<PrivilegeUsedPayload[]> {
     const user_id = ctx.req.user_id
     try {
-      const privileges = await PrivilegeModel.find({ code: (code || '').toUpperCase(), status: 'active' }).lean()
+      const searchedCode = (code || '').toUpperCase()
+      const privileges = await PrivilegeModel.find({
+        ...(searchedCode ? { code: searchedCode } : { defaultShow: true }),
+        status: EPrivilegeStatus.ACTIVE,
+      }).lean()
       if (!privileges) {
         const message = `ไม่สามารถเรียกข้อมูลส่วนลดได้`
         throw new GraphQLError(message, {
@@ -137,8 +166,9 @@ export default class PrivilegeResolver {
         })
       }
       const privilegePayload = map<Privilege, PrivilegeUsedPayload>(privileges, (privilege) => {
-        const filteredUsedUser = filter(privilege.usedUser, (usedUserId) => isEqual(usedUserId?.toString(), user_id))
-        return ({ ...privilege, used: filteredUsedUser.length > 0 })
+        const usedUser = map(privilege.usedUser, user => user.toString())
+        const isUsed = includes(usedUser, user_id)
+        return { ...privilege, used: isUsed }
       })
       return privilegePayload
     } catch (error) {

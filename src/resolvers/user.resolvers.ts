@@ -32,7 +32,7 @@ import FileModel from '@models/file.model'
 import BusinessCustomerModel, { BusinessCustomer } from '@models/customerBusiness.model'
 import BusinessCustomerCreditPaymentModel from '@models/customerBusinessCreditPayment.model'
 import addEmailQueue from '@utils/email.utils'
-import { generateId, generateOTP, generateRandomNumberPattern, getCurrentHost } from '@utils/string.utils'
+import { generateId, generateOTP, generateRandomNumberPattern, generateRef, getCurrentHost } from '@utils/string.utils'
 import bcrypt from 'bcrypt'
 import { GET_USERS } from '@pipelines/user.pipeline'
 import { BusinessCustomerSchema, IndividualCustomerSchema } from '@validations/customer.validations'
@@ -56,6 +56,7 @@ import pubsub, { NOTFICATIONS, USERS } from '@configs/pubsub'
 import { FileInput } from '@inputs/file.input'
 import { EPaymentMethod } from '@enums/payments'
 import { EDriverType, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
+import { credit, sendSMS } from '@services/sms/thaibulk'
 
 @Resolver(User)
 export default class UserResolver {
@@ -604,18 +605,50 @@ export default class UserResolver {
         }
       } else if (user.userRole === EUserRole.DRIVER) {
         // ===== DRIVER ROLE
-        const status = result === EUserValidationStatus.APPROVE ? EUserStatus.ACTIVE : EUserStatus.DENIED
+        const isApproved = result === EUserValidationStatus.APPROVE
+        const status = isApproved ? EUserStatus.ACTIVE : EUserStatus.DENIED
         const driverDetail: DriverDetail | null = get(user, 'driverDetail', null)
-        await user.updateOne({ status, validationStatus: result })
-        const title =
-          result === EUserValidationStatus.APPROVE ? 'บัญชีของท่านได้รับการอนุมัติ' : 'บัญชีของท่านไม่ผ่านการอนุมัติ'
-        const messages =
-          result === EUserValidationStatus.APPROVE
-            ? ['ขอแสดงความยินดีด้วย', 'บัญชีของท่านได้รับการอนุมัติเป็นคนขับของ Movemate หากมีข้อสงสัยโปรดติดต่อเรา']
-            : [`บัญชี ${driverDetail.fullname} ไม่ผ่านพิจารณาคนขับ Movemvate หากมีข้อสงสัยโปรดติดต่อเรา`]
+        if (includes(driverDetail.driverType, EDriverType.BUSINESS_DRIVER)) {
+          // Business driver
+          // New driver and notify
+          const password_decryption = generateRef(10).toLowerCase()
+          const hashedPassword = await bcrypt.hash(password_decryption, 10)
+          await user.updateOne({
+            status,
+            validationStatus: result,
+            password: hashedPassword,
+            isChangePasswordRequire: true,
+          })
+
+          // Sent password
+          const smsMessage = `รหัสสำหรับเข้าสู่ระบบของ Movemate Driver ของคุณคือ ${password_decryption}`
+
+          // Request to thai bulk sms
+          if (process.env.NODE_ENV === 'production') {
+            const smscredit = await credit().catch((error) => {
+              console.log('credit error: ', error)
+            })
+            console.log('ThaiBulk Credit Remaining: ', smscredit)
+            await sendSMS({
+              message: smsMessage,
+              msisdn: driverDetail.phoneNumber,
+            }).catch((error) => {
+              console.log('sendSMS error: ', error)
+            })
+          } else if (process.env.NODE_ENV === 'development') {
+            console.log('OTP message: ', smsMessage)
+          }
+        } else {
+          await user.updateOne({ status, validationStatus: result })
+        }
+
+        const title = isApproved ? 'บัญชีของท่านได้รับการอนุมัติ' : 'บัญชีของท่านไม่ผ่านการอนุมัติ'
+        const messages = isApproved
+          ? ['ขอแสดงความยินดีด้วย', 'บัญชีของท่านได้รับการอนุมัติเป็นคนขับของ Movemate หากมีข้อสงสัยโปรดติดต่อเรา']
+          : [`บัญชี ${driverDetail.fullname} ไม่ผ่านพิจารณาคนขับ Movemvate หากมีข้อสงสัยโปรดติดต่อเรา`]
         await NotificationModel.sendNotification({
           userId: user._id,
-          varient: result === EUserValidationStatus.APPROVE ? ENotificationVarient.SUCCESS : ENotificationVarient.ERROR,
+          varient: isApproved ? ENotificationVarient.SUCCESS : ENotificationVarient.ERROR,
           title: title,
           message: messages,
         })
@@ -629,10 +662,9 @@ export default class UserResolver {
             data: { navigation: ENavigationType.NOTIFICATION },
             notification: {
               title: NOTIFICATION_TITLE,
-              body:
-                result === EUserValidationStatus.APPROVE
-                  ? 'ขอแสดงความยินดีด้วย บัญชีของท่านได้รับการอนุมัติเป็นคนขับของ Movemate'
-                  : `บัญชี ${driverDetail.fullname} ไม่ผ่านพิจารณาคนขับ Movemvate หากมีข้อสงสัยโปรดติดต่อเรา`,
+              body: isApproved
+                ? 'ขอแสดงความยินดีด้วย บัญชีของท่านได้รับการอนุมัติเป็นคนขับของ Movemate'
+                : `บัญชี ${driverDetail.fullname} ไม่ผ่านพิจารณาคนขับ Movemvate หากมีข้อสงสัยโปรดติดต่อเรา`,
             },
           })
         await pubsub.publish(USERS.STATUS, user._id, status)
@@ -783,7 +815,7 @@ export default class UserResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.DRIVER]))
   async acceptedPolicy(@Arg('data') data: AcceptedPolicyInput, @Ctx() ctx: GraphQLContext): Promise<boolean> {
     try {
       const userId = ctx.req.user_id
@@ -830,14 +862,46 @@ export default class UserResolver {
       if (username) {
         const isAdminWeb = original === 'movemate-admin'
         const isCustomerWeb = original === 'movemate-th'
-        const user = isAdminWeb
-          ? await UserModel.findByUsername(username)
-          : isCustomerWeb
-          ? await UserModel.findCustomerByEmail(username)
-          : null
+        const isDriver = original === 'movemate-driver'
+        const user =
+          isAdminWeb || isDriver
+            ? await UserModel.findByUsername(username)
+            : isCustomerWeb
+            ? await UserModel.findCustomerByEmail(username)
+            : null
         if (!user) {
-          const message = 'ไม่สามารถเรียกข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
+          const message = 'ไม่สามารถเรียกข้อมูลผู้ใช้ได้ เนื่องจากไม่พบผู้ใช้งาน'
           throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
+        }
+
+        if (isDriver) {
+          const ref = generateRef()
+          const otp = generateOTP()
+          const currentDate = new Date()
+          const resend_countdown = addSeconds(currentDate, 90)
+          const reset_time = addMinutes(currentDate, 30)
+          const verifyLast = `${otp} คือ รหัสเพื่อเปลี่ยนรหัสผ่าน Movemate Thailand ของคุณ (Ref:${ref})`
+          await UserModel.findByIdAndUpdate(user._id, { resetPasswordCode: otp, lastestResetPassword: reset_time })
+          const phoneNumber = username
+          // Request to thai bulk sms
+          if (process.env.NODE_ENV === 'production') {
+            const smscredit = await credit().catch((error) => {
+              console.log('credit error: ', error)
+            })
+            console.log('ThaiBulk Credit Remaining: ', smscredit)
+            await sendSMS({
+              message: verifyLast,
+              msisdn: phoneNumber,
+            }).catch((error) => {
+              console.log('sendSMS error: ', error)
+            })
+          } else if (process.env.NODE_ENV === 'development') {
+            console.log('OTP message: ', verifyLast)
+          }
+          return {
+            countdown: resend_countdown,
+            duration: '90s',
+          }
         }
 
         const userType = user.userType
@@ -898,11 +962,13 @@ export default class UserResolver {
     try {
       const isAdminWeb = original === 'movemate-admin'
       const isCustomerWeb = original === 'movemate-th'
-      const user = isAdminWeb
-        ? await UserModel.findByUsername(data.username)
-        : isCustomerWeb
-        ? await UserModel.findCustomerByEmail(data.username)
-        : null
+      const isDriver = original === 'movemate-driver'
+      const user =
+        isAdminWeb || isDriver
+          ? await UserModel.findByUsername(data.username)
+          : isCustomerWeb
+          ? await UserModel.findCustomerByEmail(data.username)
+          : null
       if (!user) {
         const message = 'ไม่สามารถเรียกข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
         throw new GraphQLError(message, {
@@ -942,10 +1008,13 @@ export default class UserResolver {
         const password_decryption = decryption(data.password)
         const hashedPassword = await bcrypt.hash(password_decryption, 10)
         // Get user email
-        const email = original === 'movemate-admin' ? get(user, 'adminDetail.email', '') : data.username
+        const email = isAdminWeb ? get(user, 'adminDetail.email', '') : data.username
         if (email) {
           // Save password and return
           await UserModel.findByIdAndUpdate(user._id, { password: hashedPassword, resetPasswordCode: null })
+          if (isDriver) {
+            return true
+          }
           // Email sender
           const movemate_link = `https://www.movematethailand.com`
           await addEmailQueue({

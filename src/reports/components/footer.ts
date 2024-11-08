@@ -100,6 +100,6 @@ export async function CashNoTaxReceiptFooterComponent(doc: PDFDocument, billingC
     .fillColor(COLORS.TEXT_PRIMARY)
     .text('(ผู้ให้บริการ)', signatureX, doc.y - 9, { width: signatureWidth, align: 'center' })
 
-  doc.image(ASSETS.SIGNATURE, signatureX + 100, doc.y - 94, { width: 78 })
+  doc.image(ASSETS.SIGNATURE, signatureX + 108, doc.y - 90, { width: 78 })
   doc.image(ASSETS.THEPPAWNCHAI, signatureX + 100 + 78, doc.y - (94 + 64), { width: 100 })
 }

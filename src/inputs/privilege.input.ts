@@ -1,9 +1,10 @@
+import { EPrivilegeDiscountUnit, EPrivilegeStatus } from '@enums/privilege'
 import { ArgsType, Field, Float, InputType } from 'type-graphql'
 
 @InputType()
 export class PrivilegeInput {
-  @Field()
-  status: TPrivilegeStatus
+  @Field(() => EPrivilegeStatus)
+  status: EPrivilegeStatus
 
   @Field()
   name: string
@@ -20,8 +21,8 @@ export class PrivilegeInput {
   @Field(() => Float)
   discount: number
 
-  @Field()
-  unit: TPrivilegeDiscountUnit
+  @Field(() => EPrivilegeDiscountUnit)
+  unit: EPrivilegeDiscountUnit
 
   @Field(() => Float, { nullable: true })
   minPrice: number
@@ -47,8 +48,8 @@ export class GetPrivilegesArgs {
   @Field({ nullable: true })
   _id?: string
 
-  @Field({ nullable: true })
-  status?: TPrivilegeStatus
+  @Field(() => EPrivilegeStatus, { nullable: true })
+  status?: EPrivilegeStatus
 
   @Field({ nullable: true })
   name?: string
