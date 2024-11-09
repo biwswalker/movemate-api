@@ -20,6 +20,8 @@ export default class SearchHistoryResolver {
   async searchHistorys(
     @Ctx() ctx: GraphQLContext,
     @Arg('search', { nullable: true }) search: string,
+    @Arg('startDate', { nullable: true }) startDate: Date,
+    @Arg('endDate', { nullable: true }) endDate: Date,
     @Args() paginate: PaginationArgs,
   ): Promise<SearchHistoryPaginationPayload> {
     // Pagination
@@ -35,7 +37,11 @@ export default class SearchHistoryResolver {
       ? await BusinessCustomerModel.find({ businessName: { $regex: search, $options: 'i' } }, '_id')
       : []
 
+    const startOfSearch = startDate ? new Date(new Date(startDate).setHours(0, 0, 0, 0)) : null
+    const endOfSearch = endDate ? new Date(new Date(endDate).setHours(23, 59, 59, 999)) : null
+
     const filterQuery: FilterQuery<typeof SearchHistory> = {
+      type: 'pricing',
       ...(search
         ? {
             $or: [
@@ -56,6 +62,14 @@ export default class SearchHistoryResolver {
             ],
           }
         : {}),
+      ...(startOfSearch && endOfSearch
+        ? {
+            createdAt: {
+              ...(startOfSearch ? { $gte: startOfSearch } : {}),
+              ...(endOfSearch ? { $lte: endOfSearch } : {}),
+            },
+          }
+        : {}),
     }
 
     const searchHistory = (await SearchHistoryModel.paginate(filterQuery, pagination)) as SearchHistoryPaginationPayload
@@ -67,8 +81,6 @@ export default class SearchHistoryResolver {
     return {
       ...searchHistory,
       docs: map(searchHistory.docs, (doc) => {
-        console.log('----searchHistory---', doc)
-
         return Object.assign(doc, {
           count: doc.count === Infinity ? -1 : doc.count,
           limit: doc.limit === Infinity ? -1 : doc.limit,
