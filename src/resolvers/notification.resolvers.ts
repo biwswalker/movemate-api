@@ -25,6 +25,8 @@ import { Repeater } from '@graphql-yoga/subscription'
 import { EPaymentMethod } from '@enums/payments'
 import { EShipmentStatus } from '@enums/shipments'
 import { EUserRole, EUserStatus, EUserType } from '@enums/users'
+import TransactionModel from '@models/transaction.model'
+import { TRANSACTION_DRIVER_LIST } from '@pipelines/transaction.pipeline'
 
 export async function getAdminMenuNotificationCount(): Promise<AdminNotificationCountPayload> {
   const individualCustomer = await UserModel.countDocuments({
@@ -58,6 +60,7 @@ export async function getAdminMenuNotificationCount(): Promise<AdminNotification
     billingStatus: { $in: [EBillingStatus.VERIFY, EBillingStatus.OVERDUE, EBillingStatus.REFUND] },
     paymentMethod: EPaymentMethod.CREDIT,
   }).catch(() => 0)
+  const financialPayment = await TransactionModel.aggregate(TRANSACTION_DRIVER_LIST({ isPending: true }))
 
   const payload: AdminNotificationCountPayload = {
     customer: sum([individualCustomer, businessCustomer]),
@@ -70,6 +73,7 @@ export async function getAdminMenuNotificationCount(): Promise<AdminNotification
     financial: sum([financialCash, financialCredit]),
     financialCash,
     financialCredit,
+    financialPayment: financialPayment.length,
   }
   return payload
 }

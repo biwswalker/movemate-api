@@ -34,6 +34,7 @@ export enum EStepDefinition {
   OTHER = 'OTHER',
   CUSTOMER_CANCELLED = 'CUSTOMER_CANCELLED',
   SYSTEM_CANCELLED = 'SYSTEM_CANCELLED',
+  ASSIGN_SHIPMENT = 'ASSIGN_SHIPMENT',
 }
 registerEnumType(EStepDefinition, {
   name: 'EStepDefinition',
@@ -57,6 +58,7 @@ export enum EStepDefinitionName {
   OTHER = 'อื่นๆ',
   CUSTOMER_CANCELLED = 'ลูกค้ายกเลิกงานขนส่ง',
   SYSTEM_CANCELLED = 'ระบบยกเลิกงานขนส่ง',
+  ASSIGN_SHIPMENT = 'รอบริษัทมอบหมายงานให้พนักงาน',
 }
 registerEnumType(EStepDefinitionName, {
   name: 'EStepDefinitionName',

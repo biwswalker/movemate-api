@@ -28,6 +28,12 @@ import { EDriverAcceptanceStatus, EShipmentMatchingCriteria, EShipmentStatus } f
 import { EDriverStatus, EUserRole, EUserStatus, EUserType } from '@enums/users'
 import { decryption } from '@utils/encryption'
 import { th } from 'date-fns/locale'
+import { FilterQuery } from 'mongoose'
+import StepDefinitionModel, {
+  EStepDefinition,
+  EStepDefinitionName,
+  EStepStatus,
+} from '@models/shipmentStepDefinition.model'
 
 @Resolver()
 export default class MatchingResolver {
@@ -36,14 +42,15 @@ export default class MatchingResolver {
     subscribe: async ({ context }) => {
       console.log('ListenAvailableShipment Subscribe: ')
       const repeater = new Repeater(async (push, stop) => {
-        const shipments = await ShipmentModel.getNewAllAvailableShipmentForDriver(context.user_id)
-        push(shipments)
-        await stop
+        try {
+          const shipments = await ShipmentModel.getNewAllAvailableShipmentForDriver(context.user_id)
+          push(shipments)
+          await stop
+        } catch (error) {
+          console.log('ListenAvailableShipment error: ', error)
+        }
       })
       return Repeater.merge([repeater, pubsub.subscribe(SHIPMENTS.GET_MATCHING_SHIPMENT)])
-    },
-    filter: async ({ payload, args, context }) => {
-      console.log('ListenAvailableShipment Filter: ')
     },
   } as any)
   async listenAvailableShipment(@Root() payload: Shipment[], @Ctx() ctx: AuthContext): Promise<Shipment[]> {
@@ -139,6 +146,40 @@ export default class MatchingResolver {
     return shipments
   }
 
+  @Query(() => Shipment, { nullable: true })
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  async getTodayShipment(@Ctx() ctx: GraphQLContext): Promise<Shipment> {
+    const userId = ctx.req.user_id
+    if (!userId) {
+      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+
+    const user = await UserModel.findById(userId).populate('driverDetail').lean()
+    const driverDetail = get(user, 'driverDetail', undefined) as DriverDetail | undefined
+
+    if (!driverDetail) {
+      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+
+    const today = new Date()
+    const start = today.setHours(0, 0, 0, 0)
+    const end = today.setHours(23, 59, 59, 999)
+
+    const shipmentDriver = user.userType === EUserType.BUSINESS ? { agent: userId } : { driver: userId }
+
+    const query: FilterQuery<Shipment> = {
+      bookingDateTime: { $gt: start, $lt: end },
+      ...shipmentDriver,
+      status: EShipmentStatus.PROGRESSING,
+    }
+
+    const shipment = await ShipmentModel.findOne(query, undefined, { sort: { bookingDateTime: 1 } })
+
+    return shipment
+  }
+
   @Query(() => Shipment)
   @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async getAvailableShipmentByTrackingNumber(
@@ -217,18 +258,39 @@ export default class MatchingResolver {
         driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
         ...(isBusinessUser ? { agentDriver: userId } : { driver: userId }),
       })
+
+      if (isBusinessUser) {
+        /**
+         * Trigger add waiting assign driver step
+         */
+        const assignShipmentStepSeq = shipment.currentStepSeq + 1
+        const assignShipmentStep = new StepDefinitionModel({
+          step: EStepDefinition.ASSIGN_SHIPMENT,
+          seq: assignShipmentStepSeq,
+          stepName: EStepDefinitionName.ASSIGN_SHIPMENT,
+          customerMessage: EStepDefinitionName.ASSIGN_SHIPMENT,
+          driverMessage: 'บริษัทมอบหมายงานให้พนักงาน',
+          stepStatus: EStepStatus.IDLE,
+        })
+        await shipment.addStep(assignShipmentStep)
+      }
+
+      /**
+       * Trigger next step
+       */
+      const freshShipment = await ShipmentModel.findById(shipmentId)
+      await freshShipment.nextStep()
       if (!isBusinessUser) {
-        await shipment.nextStep()
         await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.WORKING })
         // Notification
-        const customerId = get(shipment, 'customer._id', '')
+        const customerId = get(freshShipment, 'customer._id', '')
         if (customerId) {
           await NotificationModel.sendNotification({
             userId: customerId,
             varient: ENotificationVarient.MASTER,
-            title: `${shipment.trackingNumber} คนขับตอบรับแล้ว`,
+            title: `${freshShipment.trackingNumber} คนขับตอบรับแล้ว`,
             message: [
-              `งานขนส่งเลขที่ ${shipment.trackingNumber} ได้รับการตอบรับจากคนขับแล้ว คนขับจะติดต่อหาท่านเพื่อนัดหมาย`,
+              `งานขนส่งเลขที่ ${freshShipment.trackingNumber} ได้รับการตอบรับจากคนขับแล้ว คนขับจะติดต่อหาท่านเพื่อนัดหมาย`,
             ],
           })
         }
@@ -306,6 +368,7 @@ export default class MatchingResolver {
       const message = 'ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
+
     await shipment.podSent(data.images || [], data.trackingNumber, data.provider)
 
     return true

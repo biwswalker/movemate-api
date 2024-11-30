@@ -55,7 +55,15 @@ import { getAdminMenuNotificationCount } from './notification.resolvers'
 import pubsub, { NOTFICATIONS, USERS } from '@configs/pubsub'
 import { FileInput } from '@inputs/file.input'
 import { EPaymentMethod } from '@enums/payments'
-import { EDriverType, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
+import {
+  EDriverType,
+  EUserCriterialStatus,
+  EUserCriterialType,
+  EUserRole,
+  EUserStatus,
+  EUserType,
+  EUserValidationStatus,
+} from '@enums/users'
 import { credit, sendSMS } from '@services/sms/thaibulk'
 
 @Resolver(User)
@@ -67,7 +75,7 @@ export default class UserResolver {
     @Args() { sortField, sortAscending, ...paginationArgs }: PaginationArgs,
   ): Promise<UserPaginationAggregatePayload> {
     try {
-      const pagination: PaginateOptions = {
+      const { sort, ...pagination }: PaginateOptions = {
         ...paginationArgs,
         ...(isArray(sortField)
           ? {
@@ -82,8 +90,7 @@ export default class UserResolver {
           : {}),
       }
 
-      const filterQuery = omitBy(query, isEmpty)
-      const aggregate = UserModel.aggregate(GET_USERS(filterQuery))
+      const aggregate = UserModel.aggregate(GET_USERS(query, sort))
       console.log('aggregate: ', JSON.stringify(aggregate, undefined, 2))
       const users = (await UserModel.aggregatePaginate(aggregate, pagination)) as UserPaginationAggregatePayload
 
@@ -134,9 +141,7 @@ export default class UserResolver {
         phoneNumber: phonenumber,
         driverType: { $in: [EDriverType.BUSINESS] },
       })
-      console.log('1.-businessAgent-----> ')
       if (businessAgent) {
-        console.log('2.-businessAgent-----> ')
         const message = `เบอร์นี้ผู้ใช้แล้ว`
         throw new GraphQLError(message, {
           extensions: { code: 'EXISTING_DRIVER_PHONENUMBER', errors: [{ message }] },
@@ -163,7 +168,44 @@ export default class UserResolver {
           extensions: { code: 'NOT_FOUND', errors: [{ message }] },
         })
       }
+
       return user
+    } catch (error) {
+      throw error
+    }
+  }
+
+  @Query(() => Boolean)
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  async isExistingParentDriverByPhonenumber(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('phonenumber') phonenumber: string,
+  ): Promise<boolean> {
+    try {
+      const lookupUserId = ctx.req.user_id
+
+      const driverDetail = await DriverDetailModel.findOne({
+        phoneNumber: phonenumber,
+        $or: [
+          { driverType: { $in: [EDriverType.INDIVIDUAL_DRIVER] } },
+          { driverType: { $in: [EDriverType.BUSINESS_DRIVER] } },
+        ],
+      })
+      if (!driverDetail) {
+        return false
+      }
+
+      const user = await UserModel.findOne({
+        userRole: EUserRole.DRIVER,
+        driverDetail,
+        parents: { $in: [lookupUserId] },
+      })
+
+      if (!user) {
+        return false
+      }
+
+      return true
     } catch (error) {
       throw error
     }
@@ -177,9 +219,7 @@ export default class UserResolver {
         '_id',
         'userNumber',
         'userRole',
-        'userType',
         'username',
-        'status',
         'validationStatus',
         'registration',
         'lastestOTP',
@@ -187,7 +227,11 @@ export default class UserResolver {
         'isVerifiedEmail',
         'isVerifiedPhoneNumber',
       ])
-      const user = await UserModel.findOne(filter)
+      const user = await UserModel.findOne({
+        ...filter,
+        ...(data.status && data.status !== EUserCriterialStatus.ALL ? { status: data.status } : {}),
+        ...(data.userType && data.userType !== EUserCriterialType.ALL ? { status: data.userType } : {}),
+      })
       if (!user) {
         const message = `ไม่พบผู้ใช้`
         throw new GraphQLError(message, {
@@ -464,9 +508,11 @@ export default class UserResolver {
   async approvalUser(
     @Arg('id') id: string,
     @Arg('result') result: EUserValidationStatus,
+    @Arg('reason', { nullable: true }) reason: string,
     @Ctx() ctx: GraphQLContext,
   ): Promise<User> {
     try {
+      const adminId = ctx.req.user_id
       if (!id) {
         throw new AuthenticationError('ไม่พบผู้ใช้')
       }
@@ -522,7 +568,14 @@ export default class UserResolver {
               upgradeRequest: null,
               isChangePasswordRequire: true,
             }
-            await user.updateOne({ status, validationStatus: result, password: hashedPassword, ...newBusinessDetail })
+            await user.updateOne({
+              status,
+              validationStatus: result,
+              password: hashedPassword,
+              validationRejectedMessage: reason || '',
+              validationBy: adminId,
+              ...newBusinessDetail,
+            })
             const movemate_link = `https://www.movematethailand.com`
             await addEmailQueue({
               from: process.env.NOREPLY_EMAIL,
@@ -546,7 +599,7 @@ export default class UserResolver {
               infoLink: '/main/profile',
             })
           } else {
-            await user.updateOne({ status, validationStatus: result, password: hashedPassword })
+            await user.updateOne({ status, validationStatus: result, validationBy: adminId, password: hashedPassword })
             const host = getCurrentHost(ctx)
             const userNumberToken = generateExpToken({ userNumber: user.userNumber })
             const activate_link = `${host}/api/v1/activate/customer/${userNumberToken}`
@@ -579,7 +632,13 @@ export default class UserResolver {
 
           const sentemail = user.userType === EUserType.INDIVIDUAL ? individualDetail.email : businesData.businessEmail
 
-          await user.updateOne({ status, validationStatus: result, ...newBusinessDetail })
+          await user.updateOne({
+            status,
+            validationStatus: result,
+            validationRejectedMessage: reason || '',
+            validationBy: adminId,
+            ...newBusinessDetail,
+          })
           await addEmailQueue({
             from: process.env.NOREPLY_EMAIL,
             to: sentemail,
@@ -615,9 +674,11 @@ export default class UserResolver {
           const hashedPassword = await bcrypt.hash(password_decryption, 10)
           await user.updateOne({
             status,
+            validationBy: adminId,
             validationStatus: result,
             password: hashedPassword,
             isChangePasswordRequire: true,
+            validationRejectedMessage: reason || '',
           })
 
           // Sent password
@@ -639,7 +700,12 @@ export default class UserResolver {
             console.log('OTP message: ', smsMessage)
           }
         } else {
-          await user.updateOne({ status, validationStatus: result })
+          await user.updateOne({
+            status,
+            validationStatus: result,
+            validationRejectedMessage: reason || '',
+            validationBy: adminId,
+          })
         }
 
         const title = isApproved ? 'บัญชีของท่านได้รับการอนุมัติ' : 'บัญชีของท่านไม่ผ่านการอนุมัติ'
@@ -871,6 +937,16 @@ export default class UserResolver {
             : null
         if (!user) {
           const message = 'ไม่สามารถเรียกข้อมูลผู้ใช้ได้ เนื่องจากไม่พบผู้ใช้งาน'
+          throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
+        }
+
+        if (includes([EUserValidationStatus.APPROVE, EUserValidationStatus.DENIED], user.validationStatus)) {
+          const message = 'ไม่สามารถเรียกข้อมูลผู้ใช้ได้ เนื่องจากผู้ใช้งานยังไม่ถูกตรวจสอบ'
+          throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
+        }
+
+        if (user.isChangePasswordRequire) {
+          const message = 'ไม่สามารถเปลี่ยนแปลงรหัสผ่านได้ เนื่องจากรหัสผ่านของท่านถูกส่งไปแล้ว'
           throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
         }
 

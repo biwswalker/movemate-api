@@ -1,8 +1,8 @@
 import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
-import { GetShipmentArgs, ShipmentInput } from '@inputs/shipment.input'
+import { DestinationInput, GetShipmentArgs, ShipmentInput } from '@inputs/shipment.input'
 import PaymentModel, { CashDetail } from '@models/payment.model'
-import ShipmentModel, { Shipment } from '@models/shipment.model'
+import ShipmentModel, { Destination, Shipment } from '@models/shipment.model'
 import ShipmentAdditionalServicePriceModel from '@models/shipmentAdditionalServicePrice.model'
 import UserModel, { User } from '@models/user.model'
 import { generateTrackingNumber } from '@utils/string.utils'
@@ -73,6 +73,7 @@ import {
   EShipmentStatusCriteria,
 } from '@enums/shipments'
 import { EDriverStatus, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
+import { extractThaiAddress, getPlaceDetail } from '@services/maps/location'
 
 Aigle.mixin(lodash, {})
 
@@ -489,6 +490,18 @@ export default class ShipmentResolver {
       const isCashPaymentMethod = paymentMethod === EPaymentMethod.CASH
       const isCreditPaymentMethod = paymentMethod === EPaymentMethod.CREDIT
 
+      const destinations = await Aigle.map<DestinationInput, Destination>(locations, async (location) => {
+        const { place } = await getPlaceDetail(location.placeId)
+        const { province, district, subDistrict } = extractThaiAddress(place.addressComponents || [])
+        return {
+          ...location,
+          placeDetail: place,
+          placeProvince: province,
+          placeDistrict: district,
+          placeSubDistrict: subDistrict,
+        }
+      })
+
       // Make calculate pricing and for check credit usage
       const droppoint = locations.length - 1
       const _invoice = await ShipmentModel.calculate(
@@ -649,7 +662,6 @@ export default class ShipmentResolver {
       // Initial status log
       // const text = isCreditPaymentMethod ? favoriteDriverId ? 'รอคนขับคนโปรดรับงาน' : 'รอคนขับรับงาน' : 'รอเจ้าหน้าที่ยืนยันยอดการชำระ'
       // const startStatus: StatusLog = { status: 'pending', text, createdAt: new Date() }
-
       const _trackingNumber = await generateTrackingNumber('MMTH', 'tracking')
       const shipment = new ShipmentModel({
         ...data,
@@ -657,7 +669,7 @@ export default class ShipmentResolver {
         isRoundedReturn: data.isRoundedReturn || false,
         trackingNumber: _trackingNumber,
         customer: user_id,
-        destinations: locations,
+        destinations,
         additionalServices: _additionalServices,
         distances: _distances,
         discountId: _discountId,

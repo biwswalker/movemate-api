@@ -9,6 +9,8 @@ import { isArray } from 'lodash'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 
 export enum ENavigationType {
+  INDEX = 'index',
+  EMPLOYEE = 'employee',
   SHIPMENT = 'shipment',
   SHIPMENT_WORK = 'shipment-work',
   FINANCE = 'finance',

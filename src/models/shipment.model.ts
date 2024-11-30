@@ -20,6 +20,7 @@ import lodash, {
   filter,
   find,
   flatten,
+  forEach,
   get,
   head,
   isEmpty,
@@ -27,10 +28,13 @@ import lodash, {
   last,
   map,
   min,
+  omitBy,
   range,
   reduce,
   sum,
   tail,
+  union,
+  uniq,
   values,
 } from 'lodash'
 import { fNumber } from '@utils/formatNumber'
@@ -67,8 +71,9 @@ import {
   EShipmentMatchingCriteria,
 } from '@enums/shipments'
 import { addSeconds } from 'date-fns'
-import { EDriverStatus, EUserType } from '@enums/users'
+import { EDriverStatus, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 import { EPrivilegeDiscountUnit } from '@enums/privilege'
+import { GraphQLJSONObject } from 'graphql-type-json'
 
 Aigle.mixin(lodash, {})
 
@@ -147,6 +152,22 @@ export class Destination {
   @Field({ nullable: true })
   @Property()
   customerRemark: string
+
+  @Field(() => GraphQLJSONObject, { nullable: true })
+  @Property()
+  placeDetail: Record<string, any>
+
+  @Field({ nullable: true, defaultValue: '' })
+  @Property({ default: '' })
+  placeProvince: string
+
+  @Field({ nullable: true, defaultValue: '' })
+  @Property({ default: '' })
+  placeDistrict: string
+
+  @Field({ nullable: true, defaultValue: '' })
+  @Property({ default: '' })
+  placeSubDistrict: string
 }
 
 @plugin(mongooseAutoPopulate)
@@ -669,6 +690,43 @@ export class Shipment extends TimeStamps {
     return true
   }
 
+  async addStep(data: StepDefinition): Promise<boolean> {
+    try {
+      let newStep = []
+      console.log('Start Step: ')
+      await Aigle.forEach(this.steps, async (step, index) => {
+        const currentStepId = get(step, '_id', '')
+        if (index < data.seq) {
+          newStep.push(currentStepId)
+          console.log(index, currentStepId)
+        } else if (data.seq === index) {
+          const newStap = new StepDefinitionModel(data)
+          await newStap.save()
+          newStep.push(newStap._id)
+          console.log(index, currentStepId)
+          if (currentStepId) {
+            const newSeq = index + 1
+            await StepDefinitionModel.findByIdAndUpdate(currentStepId, { seq: newSeq })
+            newStep.push(currentStepId)
+            console.log(index, currentStepId)
+          }
+        } else if (index > data.seq) {
+          if (currentStepId) {
+            const newSeq = index + 1
+            await StepDefinitionModel.findByIdAndUpdate(currentStepId, { seq: newSeq })
+            newStep.push(currentStepId)
+            console.log(index, currentStepId)
+          }
+        }
+      })
+      await ShipmentModel.findByIdAndUpdate(this._id, { steps: newStep })
+      console.log('End Step: ')
+      return true
+    } catch (error) {
+      throw error
+    }
+  }
+
   async nextStep(images?: FileInput[]): Promise<boolean> {
     try {
       const currentStep = find(this.steps, ['seq', this.currentStepSeq])
@@ -763,7 +821,7 @@ export class Shipment extends TimeStamps {
         const dropoffs = tail(this.destinations)
         const description = `${this.trackingNumber} ค่าขนส่งจาก ${pickup.name} ไปยัง ${reduce(
           dropoffs,
-          (prev, curr) => (prev ? curr.name : `${prev}, ${curr.name}`),
+          (prev, curr) => (prev ? `${prev}, ${curr.name}` : curr.name),
           '',
         )}`
 
@@ -1090,21 +1148,40 @@ export class Shipment extends TimeStamps {
 
   static async getNewAllAvailableShipmentForDriverQuery(driverId?: string) {
     let vehicleIds = null
+    let employeeVehiclesIds = []
     let ignoreShipments = []
     if (driverId) {
       const user = await UserModel.findById(driverId).lean()
       if (user) {
         const isBusinessDriver = user.userType === EUserType.BUSINESS
         if (isBusinessDriver) {
-          const childrens = await UserModel.find({ parents: { $in: [driverId] } }).lean()
+          const childrens = await UserModel.find({
+            parents: { $in: [driverId] },
+            drivingStatus: { $in: [EDriverStatus.IDLE, EDriverStatus.WORKING] },
+            status: EUserStatus.ACTIVE,
+            validationStatus: EUserValidationStatus.APPROVE,
+          })
           if (isEmpty(childrens)) {
             return []
+          } else {
+            const vehicles = reduce(
+              childrens,
+              (prev, curr) => {
+                const vehicless = get(curr, 'driverDetail.serviceVehicleTypes', [])
+                return [...prev, ...map(vehicless, (vehicle) => get(vehicle, '_id', ''))]
+              },
+              [],
+            )
+            employeeVehiclesIds = uniq(vehicles || [])
           }
         }
         if (user?.drivingStatus === EDriverStatus.BUSY) return []
         const driverDetail = await DriverDetailModel.findById(user.driverDetail).lean()
         if (driverDetail.serviceVehicleTypes) {
           vehicleIds = driverDetail.serviceVehicleTypes
+          if (isBusinessDriver) {
+            vehicleIds = union(vehicleIds || [], employeeVehiclesIds)
+          }
         }
         const existingShipments = await ShipmentModel.find({
           ...(isBusinessDriver ? { agentDriver: user._id } : { driver: user._id }),
@@ -1142,8 +1219,9 @@ export class Shipment extends TimeStamps {
   }
 
   static async getNewAllAvailableShipmentForDriver(driverId?: string, options: any = {}) {
-    const query = await this.getNewAllAvailableShipmentForDriverQuery(driverId)
+    const generatedQuery = await this.getNewAllAvailableShipmentForDriverQuery(driverId)
     const queryOptions = Object.assign(options, { sort: { bookingDateTime: 1 } })
+    const query = isEmpty(generatedQuery) ? {} : generatedQuery
     const shipments = await ShipmentModel.find(query, undefined, queryOptions).exec()
     if (!shipments) {
       return []

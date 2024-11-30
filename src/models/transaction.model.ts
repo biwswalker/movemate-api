@@ -1,9 +1,21 @@
 import { Field, ID, ObjectType, registerEnumType } from 'type-graphql'
-import { prop as Property, getModelForClass } from '@typegoose/typegoose'
+import { prop as Property, getModelForClass, plugin } from '@typegoose/typegoose'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
-import { LoadmoreArgs } from '@inputs/query.input'
-import { TransactionPayload } from '@payloads/transaction.payloads'
-import { endOfMonth, startOfYear } from 'date-fns'
+import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
+import {
+  DriverTransactionsAggregatePayload,
+  DriverTransactionSummaryPayload,
+  TransactionDriversAggregatePayload,
+  TransactionPayload,
+} from '@payloads/transaction.payloads'
+import { endOfMonth, startOfMonth, startOfYear } from 'date-fns'
+import { GetDriverTransactionArgs, GetTransactionsArgs } from '@inputs/transactions.input'
+import { DRIVER_TRANSACTIONS, TRANSACTION_DRIVER_LIST } from '@pipelines/transaction.pipeline'
+import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
+import mongoose, { PaginateOptions } from 'mongoose'
+import { reformPaginate } from '@utils/pagination.utils'
+import { get, omitBy } from 'lodash'
+import UserModel from './user.model'
 
 export enum ETransactionType {
   INCOME = 'INCOME',
@@ -36,6 +48,7 @@ registerEnumType(ETransactionOwner, {
 export enum ERefType {
   SHIPMENT = 'SHIPMENT',
   BILLING = 'BILLING',
+  EARNING = 'EARNING',
 }
 registerEnumType(ERefType, {
   name: 'ERefType',
@@ -48,6 +61,7 @@ registerEnumType(ERefType, {
 
 export const MOVEMATE_OWNER_ID = 'movemate-thailand'
 
+@plugin(mongooseAggregatePaginate)
 @ObjectType()
 export class Transaction extends TimeStamps {
   @Field(() => ID)
@@ -93,6 +107,8 @@ export class Transaction extends TimeStamps {
   @Property({ default: Date.now })
   updatedAt: Date
 
+  static aggregatePaginate: mongoose.AggregatePaginateModel<any>['aggregatePaginate']
+
   static async findByDriverId(driverId: string, { skip, limit }: LoadmoreArgs): Promise<Transaction[]> {
     const transactions = await TransactionModel.find({ ownerId: driverId, ownerType: ETransactionOwner.DRIVER })
       .sort({ createdAt: -1 })
@@ -102,33 +118,56 @@ export class Transaction extends TimeStamps {
     return transactions
   }
 
-  static async calculateTransaction(ownerId: string): Promise<TransactionPayload> {
+  static async calculateTransaction(
+    ownerId: string,
+    start?: Date | undefined,
+    end?: Date | undefined,
+  ): Promise<TransactionPayload> {
     const transactions = await TransactionModel.aggregate([
-      { $match: { ownerId } },
+      {
+        $match: {
+          ownerId,
+          ...(start || end ? { createdAt: { ...(start ? { $gt: start } : {}), ...(end ? { $lt: end } : {}) } } : {}),
+        },
+      },
       { $group: { _id: '$transactionType', totalAmount: { $sum: '$amount' } } },
     ])
     const pendingTransactions = await TransactionModel.aggregate([
-      { $match: { ownerId, status: ETransactionStatus.PENDING } },
+      {
+        $match: {
+          ownerId,
+          transactionType: ETransactionType.INCOME,
+          status: ETransactionStatus.PENDING,
+          ...(start || end ? { createdAt: { ...(start ? { $gt: start } : {}), ...(end ? { $lt: end } : {}) } } : {}),
+        },
+      },
       { $group: { _id: '$transactionType', totalAmount: { $sum: '$amount' } } },
     ])
     const totalPending = pendingTransactions.length > 0 ? pendingTransactions[0]?.totalAmount : 0
     const totalIncome = transactions.find((t) => t._id === ETransactionType.INCOME)?.totalAmount || 0
     const totalOutcome = transactions.find((t) => t._id === ETransactionType.OUTCOME)?.totalAmount || 0
-    const totalOverall = totalIncome - totalOutcome
+    const totalBalance = totalIncome - totalOutcome
 
     return {
       totalPending,
       totalIncome,
       totalOutcome,
-      totalOverall,
+      totalBalance,
     }
   }
 
   static async calculateMonthlyTransaction(ownerId: string, date: Date): Promise<number> {
-    const startMonthDay = startOfYear(date)
+    const startMonthDay = startOfMonth(date)
     const endMonthDay = endOfMonth(date)
     const transactions = await TransactionModel.aggregate([
-      { $match: { ownerId, createdAt: { $gt: startMonthDay, $lt: endMonthDay }, status: ETransactionStatus.PENDING } },
+      {
+        $match: {
+          ownerId,
+          createdAt: { $gt: startMonthDay, $lt: endMonthDay },
+          status: ETransactionStatus.PENDING,
+          transactionType: ETransactionType.INCOME,
+        },
+      },
       { $group: { _id: '$transactionType', totalAmount: { $sum: '$amount' } } },
     ])
     const totalPending = transactions.length > 0 ? transactions[0]?.totalAmount : 0
@@ -156,12 +195,101 @@ export class Transaction extends TimeStamps {
     ])
     const totalIncome = transactions.find((t) => t._id === ETransactionType.INCOME)?.totalAmount || 0
     const totalOutcome = transactions.find((t) => t._id === ETransactionType.OUTCOME)?.totalAmount || 0
-    const totalOverall = totalIncome - totalOutcome
+    const totalBalance = totalIncome - totalOutcome
 
     return {
       totalIncome,
       totalOutcome,
-      totalOverall,
+      totalBalance,
+    }
+  }
+
+  static async getTransactionDriverList(
+    query: GetDriverTransactionArgs,
+    paginate: PaginationArgs,
+  ): Promise<TransactionDriversAggregatePayload> {
+    const { sort = {}, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
+    const aggregate = TransactionModel.aggregate(TRANSACTION_DRIVER_LIST(query, sort))
+    const drivers = (await TransactionModel.aggregatePaginate(
+      aggregate,
+      reformSorts,
+    )) as TransactionDriversAggregatePayload
+
+    return drivers
+  }
+
+  static async getDriverTransactions(
+    driverNumber: string,
+    query: GetTransactionsArgs,
+    paginate: PaginationArgs,
+  ): Promise<DriverTransactionsAggregatePayload> {
+    const { sort = {}, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
+    const driver = await UserModel.findOne({ userNumber: driverNumber })
+    console.log('Qwerty', JSON.stringify(DRIVER_TRANSACTIONS(driver._id.toString(), query, sort), undefined, 2))
+    const aggregate = TransactionModel.aggregate(DRIVER_TRANSACTIONS(driver._id.toString(), query, sort))
+    const transactions = (await TransactionModel.aggregatePaginate(
+      aggregate,
+      reformSorts,
+    )) as DriverTransactionsAggregatePayload
+
+    return transactions
+  }
+
+  static async driverTransactionSummary(
+    ownerId: string,
+    monthlyDate?: Date | undefined,
+  ): Promise<DriverTransactionSummaryPayload> {
+    const currentDate = new Date()
+    const start = startOfMonth(monthlyDate || currentDate)
+    const end = endOfMonth(monthlyDate || currentDate)
+
+    const monthlyTransactions = await TransactionModel.aggregate([
+      {
+        $match: {
+          ownerId,
+          createdAt: { $gt: start, $lt: end },
+          refType: ERefType.SHIPMENT,
+          transactionType: ETransactionType.INCOME,
+          amount: { $gt: 0 }
+        },
+      },
+      { $group: { _id: '$transactionType', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+    ])
+
+    const transactions = await TransactionModel.aggregate([
+      {
+        $match: {
+          ownerId,
+          refType: ERefType.SHIPMENT,
+          transactionType: ETransactionType.INCOME,
+          amount: { $gt: 0 }
+        },
+      },
+      { $group: { _id: '$status', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+    ])
+
+    const allTransactions = await TransactionModel.aggregate([
+      {
+        $match: {
+          ownerId,
+          refType: ERefType.SHIPMENT,
+          transactionType: ETransactionType.INCOME,
+          amount: { $gt: 0 }
+        },
+      },
+      { $group: { _id: '$transactionType', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+    ])
+
+    const monthly = get(monthlyTransactions, '0', { amount: 0, count: 0 }) || { amount: 0, count: 0 }
+    const pending = transactions.find((t) => t._id === ETransactionStatus.PENDING) || { amount: 0, count: 0 }
+    const paid = transactions.find((t) => t._id === ETransactionStatus.COMPLETE) || { amount: 0, count: 0 }
+    const all = get(allTransactions, '0', { amount: 0, count: 0 }) || { amount: 0, count: 0 }
+
+    return {
+      monthly,
+      pending,
+      paid,
+      all,
     }
   }
 }

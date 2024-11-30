@@ -79,7 +79,7 @@ export class User extends TimeStamps {
   })
   validationStatus: EUserValidationStatus
 
-  @Field(() => ERegistration) 
+  @Field(() => ERegistration)
   @IsEnum(ERegistration)
   @IsNotEmpty()
   @Property({ required: true, enum: ERegistration, default: ERegistration.WEB })
@@ -178,6 +178,18 @@ export class User extends TimeStamps {
   @Property({ default: [], allowMixed: Severity.ALLOW })
   parents?: string[]
 
+  @Field(() => [String], { nullable: true, defaultValue: [] })
+  @Property({ default: [], allowMixed: Severity.ALLOW })
+  requestedParents?: string[]
+
+  @Field({ nullable: true })
+  @Property({ required: false, default: '' })
+  validationRejectedMessage?: string
+
+  @Field(() => User, { nullable: true })
+  @Property({ required: false, autopopulate: true, ref: 'User' })
+  validationBy?: Ref<User>
+
   @Field({ nullable: true })
   get fullname(): string {
     const userRole = get(this, '_doc.userRole', '') || this.userRole || ''
@@ -237,6 +249,19 @@ export class User extends TimeStamps {
           }
         }
         return driverDetail.fullname
+      }
+    } else if (userRole === EUserRole.ADMIN) {
+      const admin: Admin | undefined = get(this, '_doc.adminDetail', undefined) || this.adminDetail || undefined
+      if (admin) {
+        if (!admin.fullname) {
+          const title = admin.title || ''
+          const otherTitle = ''
+          const titleName = `${title === 'อื่นๆ' ? otherTitle : title}`
+          const firstname = admin.firstname
+          const lastname = admin.lastname
+          return `${titleName || ''}${firstname} ${lastname}`
+        }
+        return admin.fullname
       }
     }
     return ''

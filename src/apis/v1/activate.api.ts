@@ -1,4 +1,4 @@
-import { EUserRole } from '@enums/users'
+import { EUserRole, EUserStatus } from '@enums/users'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import UserModel from '@models/user.model'
 import { verifyExpToken } from '@utils/encryption'
@@ -19,7 +19,7 @@ activate_api.get('/customer/:user_number', async (req, res) => {
       if (user.isVerifiedEmail) {
         res.redirect(`https://www.movematethailand.com/activate/exist/${username}`)
       } else {
-        await user.updateOne({ status: 'active', isVerifiedEmail: true })
+        await user.updateOne({ status: EUserStatus.ACTIVE, isVerifiedEmail: true })
         await NotificationModel.sendNotification({
           userId: user._id,
           varient: ENotificationVarient.INFO,

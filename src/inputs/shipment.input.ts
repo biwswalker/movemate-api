@@ -6,7 +6,7 @@ import { EPaymentMethod, EPaymentStatus } from '@enums/payments'
 import { EShipmentStatusCriteria } from '@enums/shipments'
 
 @InputType()
-class DestinationInput {
+export class DestinationInput {
   @Field()
   placeId: string
 

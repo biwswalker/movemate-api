@@ -1,6 +1,6 @@
 import { ArgsType, Field, InputType, Int } from 'type-graphql'
 import { RegisterBusinessInput, RegisterIndividualInput } from './customer.input'
-import { ERegistration, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
+import { ERegistration, EUpdateUserStatus, EUserCriterialStatus, EUserCriterialType, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 
 @InputType()
 export class RegisterInput {
@@ -97,14 +97,14 @@ export class GetUserArgs {
   @Field(() => EUserRole, { nullable: true })
   userRole: EUserRole
 
-  @Field(() => EUserType, { nullable: true })
-  userType: EUserType
+  @Field(() => EUserCriterialType, { nullable: true })
+  userType: EUserCriterialType
 
   @Field({ nullable: true })
   username: string
 
-  @Field(() => EUserStatus, { nullable: true })
-  status: EUserStatus
+  @Field(() => EUserCriterialStatus, { nullable: true })
+  status: EUserCriterialStatus
 
   @Field(() => EUserValidationStatus, { nullable: true })
   validationStatus: EUserValidationStatus
@@ -146,4 +146,43 @@ export class GetUserArgs {
 
   @Field(() => String, { nullable: true })
   parentId?: string
+}
+
+@ArgsType()
+export class GetUserPendingArgs {
+  @Field({ nullable: true })
+  userId: string
+
+  @Field({ nullable: true })
+  userNumber: string
+
+  @Field({ nullable: true })
+  name: string
+
+  @Field({ nullable: true })
+  email: string
+
+  @Field({ nullable: true })
+  phoneNumber: string
+  
+  @Field({ nullable: true })
+  taxId: string
+
+  @Field(() => EUserRole, { nullable: true })
+  userRole: EUserRole
+
+  @Field(() => EUserCriterialType, { nullable: true })
+  userType: EUserCriterialType
+
+  @Field({ nullable: true })
+  username: string
+
+  @Field(() => EUpdateUserStatus, { nullable: true })
+  status: EUpdateUserStatus
+
+  @Field(() => Date, { nullable: true })
+  requestStart: Date
+  
+  @Field(() => Date, { nullable: true })
+  requestEnd: Date
 }

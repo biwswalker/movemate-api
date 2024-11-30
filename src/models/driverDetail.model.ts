@@ -120,9 +120,9 @@ export class DriverDetail {
   @Property({ autopopulate: true, ref: 'DriverDocument' })
   documents: Ref<DriverDocument>
 
-  @Field(() => [User], { nullable: true })
-  @Property({ autopopulate: true, ref: 'User' })
-  employees: Ref<User>[]
+  // @Field(() => [User], { nullable: true })
+  // @Property({ autopopulate: true, ref: 'User' })
+  // employees: Ref<User>[]
 
   @Field({ nullable: true })
   get fullname(): string {

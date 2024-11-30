@@ -76,7 +76,6 @@ const LOOKUPs: PipelineStage[] = [
       as: 'driver',
       pipeline: [
         {
-          // TODO: Recheck for business
           $lookup: {
             from: 'driverdetails',
             localField: 'driverDetail',
@@ -102,12 +101,41 @@ const LOOKUPs: PipelineStage[] = [
   {
     $lookup: {
       from: 'users',
+      localField: 'agentDriver',
+      foreignField: '_id',
+      as: 'agentDriver',
+      pipeline: [
+        {
+          $lookup: {
+            from: 'driverdetails',
+            localField: 'driverDetail',
+            foreignField: '_id',
+            as: 'driverDetail',
+          },
+        },
+        {
+          $unwind: {
+            path: '$driverDetail',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+      ],
+    },
+  },
+  {
+    $unwind: {
+      path: '$agentDriver',
+      preserveNullAndEmptyArrays: true,
+    },
+  },
+  {
+    $lookup: {
+      from: 'users',
       localField: 'requestedDriver',
       foreignField: '_id',
       as: 'requestedDriver',
       pipeline: [
         {
-          // TODO: Recheck for business
           $lookup: {
             from: 'driverdetails',
             localField: 'driverDetail',
@@ -429,6 +457,16 @@ export const SHIPMENT_LIST = (
       ]
     : []
 
+  const agentDrivers = driverAgentName
+    ? [
+        {
+          $match: {
+            'agentDriver.driverDetail.businessName': { $regex: driverAgentName, $options: 'i' },
+          },
+        },
+      ]
+    : []
+
   const sorts: PipelineStage[] = [{ $sort: { statusWeight: 1, ...sort } }]
 
   const orderConditions: PipelineStage = {
@@ -479,6 +517,7 @@ export const SHIPMENT_LIST = (
     ...payments,
     ...customers,
     ...drivers,
+    ...agentDrivers,
     ...sorts,
   ]
 }

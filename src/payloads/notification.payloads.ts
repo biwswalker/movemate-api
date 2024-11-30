@@ -22,6 +22,8 @@ export class AdminNotificationCountPayload {
   financialCash: number
   @Field(() => Int)
   financialCredit: number
+  @Field(() => Int)
+  financialPayment: number
 }
 
 

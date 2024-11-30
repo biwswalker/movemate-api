@@ -19,6 +19,16 @@ registerEnumType(EUserType, {
   description: 'User type',
 })
 
+export enum EUserCriterialType {
+  ALL = 'ALL',
+  INDIVIDUAL = 'INDIVIDUAL',
+  BUSINESS = 'BUSINESS',
+}
+registerEnumType(EUserCriterialType, {
+  name: 'EUserCriterialType',
+  description: 'User Criteria type',
+})
+
 export enum EUserStatus {
   PENDING = 'PENDING',
   ACTIVE = 'ACTIVE',
@@ -29,6 +39,19 @@ export enum EUserStatus {
 registerEnumType(EUserStatus, {
   name: 'EUserStatus',
   description: 'User status',
+})
+
+export enum EUserCriterialStatus {
+  ALL = 'ALL',
+  PENDING = 'PENDING',
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  BANNED = 'BANNED',
+  DENIED = 'DENIED',
+}
+registerEnumType(EUserCriterialStatus, {
+  name: 'EUserCriterialStatus',
+  description: 'User criteria status',
 })
 
 export enum EUserValidationStatus {
@@ -79,4 +102,14 @@ export enum EAdminPermission {
 registerEnumType(EAdminPermission, {
   name: 'EAdminPermission',
   description: 'Admin permission',
+})
+
+export enum EUpdateUserStatus {
+  PENDING = 'PENDING',
+  APPROVE = 'APPROVE',
+  REJECT = 'REJECT',
+}
+registerEnumType(EUpdateUserStatus, {
+  name: 'EUpdateUserStatus',
+  description: 'Update user status permission',
 })

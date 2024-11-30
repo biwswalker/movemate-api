@@ -6,7 +6,7 @@ import {
   GOOGLEAPI_PLACE_DETAIL,
   GOOGLEAPI_ROUTE_DIRECTIONS,
 } from './constants'
-import { get, map } from 'lodash'
+import { forEach, get, includes, map } from 'lodash'
 import MarkerModel, { Marker } from '@models/marker.model'
 import LocationAutocompleteModel, { LocationAutocomplete } from '@models/locationAutocomplete.model'
 import { loadCache, saveCache } from '@configs/cache'
@@ -29,22 +29,22 @@ instance.interceptors.response.use(
   },
 )
 
-const removePlusCode = (formattedAddress: string) => {
-  if (formattedAddress) {
-    // Split the address into parts
-    const parts = formattedAddress.split(' ')
-    // Check if the first part is a Plus Code by using a regex pattern
-    const plusCodePattern = /^[A-Z0-9\+]+$/
-    // Plus Codes are typically alphanumeric and contain a '+' sign
-    if (parts[0].match(plusCodePattern) && parts[0].includes('+')) {
-      parts.shift() // Remove the first part if it's a Plus Code
-    }
-    // Join the remaining parts back into a single string
-    const cleanedAddress = parts.join(' ')
-    return cleanedAddress
-  }
-  return ''
-}
+// const removePlusCode = (formattedAddress: string) => {
+//   if (formattedAddress) {
+//     // Split the address into parts
+//     const parts = formattedAddress.split(' ')
+//     // Check if the first part is a Plus Code by using a regex pattern
+//     const plusCodePattern = /^[A-Z0-9\+]+$/
+//     // Plus Codes are typically alphanumeric and contain a '+' sign
+//     if (parts[0].match(plusCodePattern) && parts[0].includes('+')) {
+//       parts.shift() // Remove the first part if it's a Plus Code
+//     }
+//     // Join the remaining parts back into a single string
+//     const cleanedAddress = parts.join(' ')
+//     return cleanedAddress
+//   }
+//   return ''
+// }
 
 async function saveSearchingLog(detail: Omit<SearchHistory, '_id' | 'createdAt' | 'updatedAt'>) {
   const searchHistory = new SearchHistoryModel(detail)
@@ -131,6 +131,42 @@ export async function getAutocomplete(
   return locations
 }
 
+export function extractThaiAddress(addressComponents: google.maps.places.AddressComponent[]): {
+  province: string
+  district: string
+  subDistrict: string
+  country: string
+  postalCode: string
+} {
+  let province = ''
+  let district = ''
+  let subDistrict = ''
+  let country = ''
+  let postalCode = ''
+
+  forEach(addressComponents, (address) => {
+    if (includes(address.types, 'administrative_area_level_1')) {
+      province = address.longText
+    } else if (includes(address.types, 'administrative_area_level_2')) {
+      district = address.longText
+    } else if (includes(address.types, 'sublocality_level_1') || includes(address.types, 'locality')) {
+      subDistrict = address.longText
+    } else if (includes(address.types, 'country')) {
+      country = address.longText
+    } else if (includes(address.types, 'postal_code')) {
+      postalCode = address.longText
+    }
+  })
+
+  return {
+    province,
+    district,
+    subDistrict,
+    country,
+    postalCode,
+  }
+}
+
 /**
  *
  * @param placeId for get place detail
@@ -143,47 +179,25 @@ export async function getPlaceLocationDetail(ctx: GraphQLContext, placeId: strin
   const ip = ctx.ip
   const limit = ctx.req.limit
   const cacheType = 'place-detail'
-  const cached = await loadCache(cacheType, placeId)
   const count = await getLatestCount(ip, ELimiterType.LOCATION, ctx.req.user_id)
-  if (cached) {
-    // const count = await getLatestCount(ip, ELimiterType.LOCATION, ctx.req.user_id)
-    await saveSearchingLog({
-      ipaddress: ip,
-      isCache: true,
-      inputRaw: inputString,
-      resultRaw: JSON.stringify(cached),
-      count,
-      limit,
-      type: cacheType,
-      user: userId,
-    })
-    logger.info('Cache hit for locationMarker')
-    return cached
-  }
-  // Limit check
-  // const { count } = await rateLimiter(ip, ELimiterType.LOCATION, limit, userId || '')
 
-  const params = { languageCode: 'th', regionCode: 'th', fields: '*', ...(session ? { sessionToken: session } : {}) }
-  const headers = { 'X-Goog-Api-Key': process.env.GOOGLE_MAP_API_KEY }
-  const response = await instance.get<google.maps.places.Place>(`${GOOGLEAPI_PLACE_DETAIL}/${placeId}`, {
-    params,
-    headers,
-  })
+  const { place, cache } = await getPlaceDetail(placeId, session)
 
-  const { displayName, formattedAddress, location } = response.data
+  console.log(JSON.stringify(place, undefined, 2))
+
+  const { displayName, formattedAddress, location } = place
 
   const marker = new MarkerModel({
     placeId,
-    displayName: removePlusCode(get(displayName, 'text', '') || displayName),
-    formattedAddress: removePlusCode(formattedAddress),
+    displayName: get(place, 'displayName.text', '') || displayName,
+    formattedAddress: get(place, 'shortFormattedAddress', '') || formattedAddress,
     latitude: get(location, 'latitude', undefined) || location.lat(),
     longitude: get(location, 'longitude', undefined) || location.lng(),
   })
 
-  await saveCache(cacheType, placeId, marker)
   await saveSearchingLog({
     ipaddress: ip,
-    isCache: false,
+    isCache: cache,
     inputRaw: inputString,
     resultRaw: JSON.stringify(marker),
     count,
@@ -191,7 +205,35 @@ export async function getPlaceLocationDetail(ctx: GraphQLContext, placeId: strin
     type: cacheType,
     user: userId,
   })
+
   return marker
+}
+
+/**
+ *
+ * @param placeId for get place detail
+ * @url Document - https://developers.google.com/maps/documentation/places/web-service/place-details
+ */
+export async function getPlaceDetail(
+  placeId: string,
+  session?: string,
+): Promise<{ place: google.maps.places.Place; cache: boolean }> {
+  // Get cache
+  const cacheType = 'place-detail'
+  const cached = await loadCache(cacheType, placeId)
+  if (cached) {
+    logger.info('Cache hit for locationMarker')
+    return { place: cached, cache: false }
+  }
+  const params = { languageCode: 'th', regionCode: 'th', fields: '*', ...(session ? { sessionToken: session } : {}) }
+  const headers = { 'X-Goog-Api-Key': process.env.GOOGLE_MAP_API_KEY }
+  const response = await instance.get<google.maps.places.Place>(`${GOOGLEAPI_PLACE_DETAIL}/${placeId}`, {
+    params,
+    headers,
+  })
+  const place = response.data
+  await saveCache(cacheType, placeId, place)
+  return { place, cache: false }
 }
 
 /**
@@ -243,13 +285,14 @@ export async function getGeocode(ctx: GraphQLContext, latitude: number, longitud
   })
 
   const result = get(response, 'data.results.0', undefined) as google.maps.GeocoderResult | undefined
-  const places = await getPlaceLocationDetail(ctx, result?.place_id, session)
+  const { place } = await getPlaceDetail(result?.place_id, session)
+  const { displayName, formattedAddress, location, id } = place
   const marker = new MarkerModel({
-    placeId: places.placeId,
-    displayName: places.displayName,
-    formattedAddress: places.formattedAddress,
-    latitude,
-    longitude,
+    placeId: place.id,
+    displayName: get(place, 'displayName.text', '') || displayName,
+    formattedAddress: get(place, 'shortFormattedAddress', '') || formattedAddress,
+    latitude: get(location, 'latitude', undefined) || location.lat(),
+    longitude: get(location, 'longitude', undefined) || location.lng(),
   })
 
   await saveCache(cacheType, key, marker)

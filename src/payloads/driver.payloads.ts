@@ -116,4 +116,7 @@ export class EmployeeDetailPayload {
 
   @Field()
   postcode: string
+
+  @Field(() => [String])
+  serviceVehicleTypes: string[]
 }

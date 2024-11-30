@@ -34,3 +34,14 @@ registerEnumType(EPaymentRejectionReason, {
   name: 'EPaymentRejectionReason',
   description: 'Payment rejection reason',
 })
+
+export enum EQRPaymentType {
+  MOBILE_NUMBER = 'MSISDN',
+  NATIONAL_ID = 'NATID',
+  EWALLET_ID = 'EWALLETID',
+  BANK_ACCOUNT = 'BANKACC',
+}
+registerEnumType(EQRPaymentType, {
+  name: 'EQRPaymentType',
+  description: 'Payment type to generate each type code',
+})

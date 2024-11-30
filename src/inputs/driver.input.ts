@@ -28,7 +28,7 @@ export class DriverDetailInput {
 
   @Field({ nullable: true })
   businessBranch: string
-  
+
   @Field()
   taxNumber: string
 
@@ -66,6 +66,66 @@ export class DriverDetailInput {
   bankName: string
 
   @Field()
+  bankNumber: string
+
+  @Field(() => [String])
+  serviceVehicleTypes: string[]
+}
+
+@InputType()
+export class ReDriverDetailInput {
+  @Field()
+  title: string
+
+  @Field({ nullable: true })
+  otherTitle?: string
+
+  @Field({ nullable: true })
+  firstname: string
+
+  @Field({ nullable: true })
+  lastname: string
+
+  @Field({ nullable: true })
+  businessName: string
+
+  @Field({ nullable: true })
+  businessBranch: string
+
+  @Field()
+  taxNumber: string
+
+  @Field()
+  phoneNumber: string
+
+  @Field({ nullable: true })
+  lineId: string
+
+  @Field()
+  address: string
+
+  @Field()
+  province: string
+
+  @Field()
+  district: string
+
+  @Field()
+  subDistrict: string
+
+  @Field()
+  postcode: string
+
+  @Field({ nullable: true })
+  bank: string
+
+  @Field({ nullable: true })
+  bankBranch: string
+
+  @Field({ nullable: true })
+  bankName: string
+
+  @Field({ nullable: true })
   bankNumber: string
 
   @Field(() => [String])
@@ -126,6 +186,15 @@ export class DriverRegisterInput {
   otp: RegisterOTPInput
 }
 
+@InputType()
+export class DriverReRegisterInput {
+  @Field(() => ReDriverDetailInput)
+  detail: ReDriverDetailInput
+
+  @Field(() => DriverDocumentInput)
+  documents: DriverDocumentInput
+}
+
 
 @InputType()
 export class EmployeeDetailInput {
@@ -140,7 +209,7 @@ export class EmployeeDetailInput {
 
   @Field({ nullable: true })
   lastname: string
-  
+
   @Field()
   taxNumber: string
 
@@ -164,13 +233,16 @@ export class EmployeeDetailInput {
 
   @Field()
   postcode: string
+
+  @Field(() => [String])
+  serviceVehicleTypes: string[]
 }
 
 @InputType()
 export class EmployeeRegisterInput {
   @Field(() => EmployeeDetailInput)
-  detail?: EmployeeDetailInput;
+  detail?: EmployeeDetailInput
 
   @Field(() => DriverDocumentInput)
-  documents?: DriverDocumentInput;
+  documents?: DriverDocumentInput
 }

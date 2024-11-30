@@ -1,35 +1,26 @@
-import {
-  EUserCriterialStatus,
-  EUserCriterialType,
-  EUserRole,
-  EUserStatus,
-  EUserType,
-  EUserValidationStatus,
-} from '@enums/users'
-import { GetUserArgs } from '@inputs/user.input'
-import { format } from 'date-fns'
-import { toNumber } from 'lodash'
-import { PipelineStage, Types } from 'mongoose'
+import { EUserCriterialType, EUserRole, EUserStatus, EUserValidationStatus } from '@enums/users'
+import { GetUserPendingArgs } from '@inputs/user.input'
+import { PipelineStage } from 'mongoose'
 
-export const GET_USERS = (
+export const GET_PENDING_USERS = (
   {
+    userId,
+    userNumber,
+    userRole,
+    userType,
+    username,
+    status,
+    requestStart,
+    requestEnd,
     email,
     name,
     phoneNumber,
     taxId,
-    userNumber,
-    username,
-    lineId,
-    serviceVehicleType,
-    parentId,
-    status,
-    userType,
-    ...query
-  }: Partial<GetUserArgs>,
+  }: Partial<GetUserPendingArgs>,
   sort = {},
 ): PipelineStage[] => {
   const detailMatch =
-    query.userRole === EUserRole.CUSTOMER && userType === EUserCriterialType.INDIVIDUAL
+    userRole === EUserRole.CUSTOMER && userType === EUserCriterialType.INDIVIDUAL
       ? {
           ...(email ? { 'individualDetail.email': { $regex: email, $options: 'i' } } : {}),
           ...(name
@@ -43,16 +34,15 @@ export const GET_USERS = (
           ...(phoneNumber ? { 'individualDetail.phoneNumber': { $regex: phoneNumber, $options: 'i' } } : {}),
           ...(taxId ? { 'individualDetail.taxId': { $regex: taxId, $options: 'i' } } : {}),
         }
-      : query.userRole === EUserRole.CUSTOMER && userType === EUserCriterialType.BUSINESS
+      : userRole === EUserRole.CUSTOMER && userType === EUserCriterialType.BUSINESS
       ? {
           ...(email ? { 'businessDetail.businessEmail': { $regex: email, $options: 'i' } } : {}),
           ...(name ? { 'businessDetail.businessName': { $regex: name, $options: 'i' } } : {}),
           ...(phoneNumber ? { 'businessDetail.contactNumber': { $regex: phoneNumber, $options: 'i' } } : {}),
           ...(taxId ? { 'businessDetail.taxNumber': { $regex: taxId, $options: 'i' } } : {}),
         }
-      : query.userRole === EUserRole.DRIVER
+      : userRole === EUserRole.DRIVER
       ? {
-          ...(lineId ? { 'driverDetail.lineId': { $regex: lineId, $options: 'i' } } : {}),
           ...(name
             ? {
                 $or: [
@@ -64,47 +54,20 @@ export const GET_USERS = (
             : {}),
           ...(phoneNumber ? { 'driverDetail.phoneNumber': { $regex: phoneNumber, $options: 'i' } } : {}),
           ...(taxId ? { 'driverDetail.taxNumber': { $regex: taxId, $options: 'i' } } : {}),
-          ...(serviceVehicleType
-            ? {
-                'driverDetail.serviceVehicleTypes._id': {
-                  $in: [new Types.ObjectId(serviceVehicleType)],
-                },
-              }
-            : {}),
         }
       : {}
 
-  const statusFilter =
-    query.userRole === EUserRole.CUSTOMER
-      ? [
-          ...((userType === EUserCriterialType.BUSINESS && status === EUserCriterialStatus.PENDING) ||
-          (userType === EUserCriterialType.BUSINESS && status === EUserCriterialStatus.ALL)
-            ? [
-                {
-                  userType: EUserType.INDIVIDUAL,
-                  validationStatus: EUserValidationStatus.PENDING,
-                  upgradeRequest: { $ne: null },
-                },
-              ]
-            : []),
-        ]
-      : []
-
   const prematch: PipelineStage = {
     $match: {
+      ...(userId ? { userId } : {}),
       $or: [
         {
-          ...query,
           ...(userType && userType !== EUserCriterialType.ALL ? { userType: userType } : {}),
-          ...(status && status !== EUserCriterialStatus.ALL ? { status: status } : {}),
+          ...(status ? { status: status } : {}),
           ...(userNumber ? { userNumber: { $regex: userNumber, $options: 'i' } } : {}),
           ...(username ? { username: { $regex: username, $options: 'i' } } : {}),
         },
-        ...(parentId ? [{ parents: { $in: [parentId] } }] : []),
-        ...(parentId ? [{ requestedParents: { $in: [parentId] } }] : []),
-        ...statusFilter,
       ],
-      ...(parentId ? { $or: [{ parents: { $in: [parentId] } }, { requestedParents: { $in: [parentId] } }] } : {}),
     },
   }
 
@@ -158,50 +121,6 @@ export const GET_USERS = (
     },
     {
       $lookup: {
-        from: 'businesscustomers',
-        localField: 'upgradeRequest',
-        foreignField: '_id',
-        as: 'upgradeRequest',
-        pipeline: [
-          {
-            $lookup: {
-              from: 'businesscustomercreditpayments',
-              localField: 'creditPayment',
-              foreignField: '_id',
-              as: 'creditPayment',
-            },
-          },
-          {
-            $unwind: {
-              path: '$creditPayment',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $lookup: {
-              from: 'businesscustomercashpayments',
-              localField: 'cashPayment',
-              foreignField: '_id',
-              as: 'cashPayment',
-            },
-          },
-          {
-            $unwind: {
-              path: '$cashPayment',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-        ],
-      },
-    },
-    {
-      $unwind: {
-        path: '$upgradeRequest',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
         from: 'individualcustomers',
         localField: 'individualDetail',
         foreignField: '_id',
@@ -211,20 +130,6 @@ export const GET_USERS = (
     {
       $unwind: {
         path: '$individualDetail',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: 'admins',
-        localField: 'adminDetail',
-        foreignField: '_id',
-        as: 'adminDetail',
-      },
-    },
-    {
-      $unwind: {
-        path: '$adminDetail',
         preserveNullAndEmptyArrays: true,
       },
     },
@@ -283,6 +188,94 @@ export const GET_USERS = (
       },
     },
     {
+      $lookup: {
+        from: 'users',
+        localField: 'user',
+        foreignField: '_id',
+        as: 'user',
+        pipeline: [
+          {
+            $lookup: {
+              from: 'driverdetails',
+              localField: 'driverDetail',
+              foreignField: '_id',
+              as: 'driverDetail',
+            },
+          },
+          {
+            $unwind: {
+              path: '$driverDetail',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          {
+            $lookup: {
+              from: 'individualcustomers',
+              localField: 'individualDetail',
+              foreignField: '_id',
+              as: 'individualDetail',
+            },
+          },
+          {
+            $unwind: {
+              path: '$individualDetail',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+          {
+            $lookup: {
+              from: 'businesscustomers',
+              localField: 'businessDetail',
+              foreignField: '_id',
+              as: 'businessDetail',
+            },
+          },
+          {
+            $unwind: {
+              path: '$businessDetail',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: '$user',
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'approvalBy',
+        foreignField: '_id',
+        as: 'approvalBy',
+        pipeline: [
+          {
+            $lookup: {
+              from: 'admins',
+              localField: 'adminDetail',
+              foreignField: '_id',
+              as: 'adminDetail',
+            },
+          },
+          {
+            $unwind: {
+              path: '$adminDetail',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: '$approvalBy',
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
       $addFields: {
         statusWeight: {
           $switch: {
@@ -314,132 +307,5 @@ export const GET_USERS = (
     },
     { $sort: { validationStatusWeight: 1, statusWeight: 1, ...sort } },
     ...postmatch,
-  ]
-}
-
-export const EXISTING_USERS = (_id: string, email: string, userType: EUserType, userRole: EUserRole) => [
-  {
-    $match: {
-      _id: { $ne: new Types.ObjectId(_id) },
-      userRole,
-      userType,
-    },
-  },
-  ...(userRole === EUserRole.CUSTOMER
-    ? userType === EUserType.INDIVIDUAL
-      ? [
-          {
-            $lookup: {
-              from: 'individualcustomers',
-              localField: 'individualDetail',
-              foreignField: '_id',
-              as: 'individualDetail',
-            },
-          },
-          {
-            $unwind: {
-              path: '$individualDetail',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          { $match: { 'individualDetail.email': email } },
-        ]
-      : [
-          {
-            $lookup: {
-              from: 'businesscustomers',
-              localField: 'businessDetail',
-              foreignField: '_id',
-              as: 'businessDetail',
-            },
-          },
-          {
-            $unwind: {
-              path: '$businessDetail',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          { $match: { 'businessDetail.businessEmail': email } },
-        ]
-    : []),
-]
-
-export const GET_CUSTOMER_BY_EMAIL = (email: string) => [
-  {
-    $lookup: {
-      from: 'individualcustomers',
-      localField: 'individualDetail',
-      foreignField: '_id',
-      as: 'individualDetail',
-    },
-  },
-  {
-    $lookup: {
-      from: 'businesscustomers',
-      localField: 'businessDetail',
-      foreignField: '_id',
-      as: 'businessDetail',
-    },
-  },
-  {
-    $match: {
-      $or: [{ 'individualDetail.email': email }, { 'businessDetail.businessEmail': email }],
-    },
-  },
-  {
-    $unwind: {
-      path: '$individualDetail',
-      preserveNullAndEmptyArrays: true,
-    },
-  },
-  {
-    $unwind: {
-      path: '$businessDetail',
-      preserveNullAndEmptyArrays: true,
-    },
-  },
-]
-
-export const GET_CUSTOMER_WITH_TODAY_BILLED_DATE = () => {
-  const today = new Date()
-  const currentMonth = format(today, 'MMM').toLowerCase()
-  const currentDay = toNumber(format(today, 'dd'))
-
-  return [
-    {
-      $lookup: {
-        from: 'businesscustomers',
-        localField: 'businessDetail',
-        foreignField: '_id',
-        as: 'businessDetail',
-        pipeline: [
-          {
-            $lookup: {
-              from: 'businesscustomercreditpayments',
-              localField: 'creditPayment',
-              foreignField: '_id',
-              as: 'creditPayment',
-            },
-          },
-          {
-            $unwind: {
-              path: '$creditPayment',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-        ],
-      },
-    },
-    {
-      $unwind: {
-        path: '$businessDetail',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $match: {
-        [`businessDetail.creditPayment.billedDate.${currentMonth}`]: currentDay,
-      },
-    },
   ]
 }

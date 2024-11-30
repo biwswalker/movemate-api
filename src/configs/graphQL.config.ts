@@ -36,6 +36,8 @@ import { verifyAccessToken } from '@utils/auth.utils'
 import FavoriteDriverResolver from '@resolvers/favoritedrivers.resolvers'
 import EventResolver from '@resolvers/event.resolvers'
 import SearchHistoryResolver from '@resolvers/search.resolvers'
+import DriverPaymentResolver from '@resolvers/driverpayment.resolvers'
+import UserPendingResolver from '@resolvers/userPending.resolvers'
 
 export interface GraphQLContext {
   req: Request
@@ -80,6 +82,8 @@ export async function createGraphQLServer(httpServer: http.Server) {
       FavoriteDriverResolver,
       EventResolver,
       SearchHistoryResolver,
+      DriverPaymentResolver,
+      UserPendingResolver,
     ],
     pubSub: pubSub,
     authChecker: ({ context }: { context: GraphQLContext }) => {
