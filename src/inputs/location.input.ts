@@ -2,10 +2,10 @@ import { ArgsType, Field, Float, InputType } from "type-graphql"
 
 @ArgsType()
 export class SearchLocationsArgs {
-    @Field(() => Float)
+    @Field(() => Float, { nullable: true })
     latitude: number
 
-    @Field(() => Float)
+    @Field(() => Float, { nullable: true })
     longitude: number
 
     @Field()

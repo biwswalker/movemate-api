@@ -35,7 +35,14 @@ export const AuthGuard: (roles?: EUserRole[]) => MiddlewareFn<GraphQLContext> =
         throw new AuthenticationError('ไม่สามารถใช้งานฟังก์ชั้นนี้ได้ เนื่องจากจำกัดสิทธิ์การเข้าถึง')
       }
 
-      const limit = user.userType === EUserType.BUSINESS ? Infinity : user.userType === EUserType.INDIVIDUAL ? 20 : 10
+      const limit =
+        user.userRole === EUserRole.DRIVER
+          ? Infinity
+          : user.userType === EUserType.BUSINESS
+          ? Infinity
+          : user.userType === EUserType.INDIVIDUAL
+          ? 20
+          : 10
       req.user_id = user_id
       req.user_role = user_role
       req.limit = limit

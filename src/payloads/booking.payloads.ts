@@ -43,6 +43,9 @@ export class PriceItem {
 
   @Field(() => Float, { defaultValue: 0, nullable: true })
   cost: number
+
+  @Field({ defaultValue: false, nullable: true })
+  isNew?: boolean
 }
 
 @ObjectType()

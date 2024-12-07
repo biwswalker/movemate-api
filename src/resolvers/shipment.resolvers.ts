@@ -74,6 +74,8 @@ import {
 } from '@enums/shipments'
 import { EDriverStatus, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 import { extractThaiAddress, getPlaceDetail } from '@services/maps/location'
+import { SubtotalCalculatedPayload } from '@payloads/booking.payloads'
+import { CalculationExistingArgs } from '@inputs/booking.input'
 
 Aigle.mixin(lodash, {})
 
@@ -838,6 +840,17 @@ export default class ShipmentResolver {
   async clearMonitor(): Promise<boolean> {
     await obliterateQueue()
     return true
+  }
+
+  @Query(() => SubtotalCalculatedPayload)
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async calculateExistingShipment(@Args() data: CalculationExistingArgs): Promise<SubtotalCalculatedPayload> {
+    try {
+      const pricing = await Shipment.calculateExistingShipment(data)
+      return pricing
+    } catch (error) {
+      throw error
+    }
   }
 }
 

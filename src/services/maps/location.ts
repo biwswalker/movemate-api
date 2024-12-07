@@ -310,12 +310,67 @@ export async function getGeocode(ctx: GraphQLContext, latitude: number, longitud
 }
 
 /**
- * @deprecated TODO: Can not using with Client || Rewrite and recheck response,
  * @param origin
  * @param destinations
  * @returns
  */
-export async function getRoute(origin: LocationInput, destinations: LocationInput[]) {
+export async function getRoute(
+  origin: LocationInput,
+  destinations: LocationInput[],
+): Promise<google.maps.DirectionsResult> {
+  // Get cache
+  const cacheType = 'routes'
+  const key = `${origin.latitude}:${origin.longitude}:${destinations
+    .map((desti) => `${desti.latitude}:${desti.longitude}`)
+    .join(':')}`
+  const cached = await loadCache(cacheType, key)
+  if (cached) {
+    logger.info('Cache hit for getRoute')
+    // console.log('cached:', JSON.stringify(cached))
+    return cached
+  }
+  // ------
+
+  const originStr = `${origin.latitude},${origin.longitude}`
+  const waypointsStrArray = destinations.map((point) => `${point.latitude},${point.longitude}`)
+
+  const waypoints = waypointsStrArray.slice(0, -1).join('|')
+  const finalDestination = waypointsStrArray[waypointsStrArray.length - 1]
+
+  try {
+    const response = await instance.get<google.maps.DirectionsResult>(GOOGLEAPI_DIRECTIONS, {
+      params: {
+        origin: originStr,
+        destination: finalDestination,
+        waypoints: waypoints ? `optimize:true|${waypoints}` : undefined,
+        key: process.env.GOOGLE_MAP_API_KEY,
+        avoid: 'tolls', // TODO: Possible to add config of admin web e.g. tolls|highways|ferries|indoor
+        mode: 'driving',
+        language: 'th',
+        region: 'th',
+        units: 'metric',
+      },
+    })
+
+    const data = response.data
+    // console.log('\n', JSON.stringify(data), '\n')
+    await saveCache(cacheType, key, data)
+    return data
+  } catch (error) {
+    throw error
+  }
+}
+
+/**
+ * V2
+ * @param origin
+ * @param destinations
+ * @returns
+ */
+export async function getRouteV2(
+  origin: LocationInput,
+  destinations: LocationInput[],
+): Promise<google.maps.DirectionsResult> {
   // Get cache
   const cacheType = 'routes'
   const key = `${origin.latitude}:${origin.longitude}:${destinations
@@ -327,41 +382,7 @@ export async function getRoute(origin: LocationInput, destinations: LocationInpu
     console.log('cached:', JSON.stringify(cached))
     return cached
   }
-  // ------
 
-  const originStr = `${origin.latitude},${origin.longitude}`
-  const waypointsStrArray = destinations.map((point) => `${point.latitude},${point.longitude}`)
-
-  const waypoints = waypointsStrArray.slice(0, -1).join('|')
-  const finalDestination = waypointsStrArray[waypointsStrArray.length - 1]
-
-  const response = await instance.get<google.maps.DirectionsResult>(GOOGLEAPI_DIRECTIONS, {
-    params: {
-      origin: originStr,
-      destination: finalDestination,
-      waypoints: waypoints ? `optimize:true|${waypoints}` : undefined,
-      key: process.env.GOOGLE_MAP_API_KEY,
-      avoid: 'tolls', // TODO: Possible to add config of admin web e.g. tolls|highways|ferries|indoor
-      mode: 'driving',
-      language: 'th',
-      region: 'th',
-      units: 'metric',
-    },
-  })
-
-  const data = response.data
-  console.log('\n', JSON.stringify(data), '\n')
-  await saveCache(cacheType, key, data)
-  return data
-}
-
-/**
- * @deprecated TODO: Can not using with Client || Rewrite and recheck response
- * @param origin
- * @param destinations
- * @returns
- */
-export async function getRouteCompute(origin: LocationInput, destinations: LocationInput[]) {
   const waypoints = destinations.slice(0, -1)
   const destination = destinations[destinations.length - 1]
 
@@ -381,11 +402,13 @@ export async function getRouteCompute(origin: LocationInput, destinations: Locat
   }
   const headers = { 'X-Goog-Api-Key': process.env.GOOGLE_MAP_API_KEY, 'X-Goog-FieldMask': '*' }
 
-  const response = await instance.post<google.maps.DirectionsResult>(GOOGLEAPI_ROUTE_DIRECTIONS, data, { headers })
-
-  const resp = response.data
-
-  console.log('\n', JSON.stringify(data), '\n')
-
-  return resp
+  try {
+    const response = await instance.post<google.maps.DirectionsResult>(GOOGLEAPI_ROUTE_DIRECTIONS, data, { headers })
+    const resp = response.data
+    console.log('\n', JSON.stringify(data, undefined, 2), '\n')
+    await saveCache(cacheType, key, resp)
+    return resp
+  } catch (error) {
+    throw error
+  }
 }

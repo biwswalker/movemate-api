@@ -14,7 +14,7 @@ import { Payment } from './payment.model'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
 import mongoosePagination from 'mongoose-paginate-v2'
 import { DirectionsResult } from './directionResult.model'
-import { SubtotalCalculationArgs } from '@inputs/booking.input'
+import { CalculationExistingArgs, SubtotalCalculationArgs } from '@inputs/booking.input'
 import VehicleCostModel from './vehicleCost.model'
 import lodash, {
   filter,
@@ -29,8 +29,10 @@ import lodash, {
   map,
   min,
   omitBy,
+  random,
   range,
   reduce,
+  sortBy,
   sum,
   tail,
   union,
@@ -38,8 +40,8 @@ import lodash, {
   values,
 } from 'lodash'
 import { fNumber } from '@utils/formatNumber'
-import AdditionalServiceCostPricingModel from './additionalServiceCostPricing.model'
-import { SubtotalCalculatedPayload } from '@payloads/booking.payloads'
+import AdditionalServiceCostPricingModel, { AdditionalServiceCostPricing } from './additionalServiceCostPricing.model'
+import { PriceItem, SubtotalCalculatedPayload } from '@payloads/booking.payloads'
 import StepDefinitionModel, {
   EStepDefinition,
   EStepDefinitionName,
@@ -74,6 +76,10 @@ import { addSeconds } from 'date-fns'
 import { EDriverStatus, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 import { EPrivilegeDiscountUnit } from '@enums/privilege'
 import { GraphQLJSONObject } from 'graphql-type-json'
+import { getRoute } from '@services/maps/location'
+import { DistanceCostPricing, EDistanceCostPricingUnit } from './distanceCostPricing.model'
+import { CalculationResultPayload } from '@payloads/pricing.payloads'
+import { AdditionalService } from './additionalService.model'
 
 Aigle.mixin(lodash, {})
 
@@ -1228,8 +1234,373 @@ export class Shipment extends TimeStamps {
     }
     return shipments
   }
+
+  static async calculateExistingShipment({
+    shipmentId,
+    isRounded,
+    locations,
+    vehicleTypeId,
+    serviceIds,
+  }: CalculationExistingArgs): Promise<SubtotalCalculatedPayload> {
+    const shipment = await ShipmentModel.findById(shipmentId)
+    if (!shipment) {
+      const message = 'ไม่สามารถหาข้อมูลงานขนส่ง เนื่องจากไม่พบงานขนส่งดังกล่าว'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+
+    const newVehicleCost = await VehicleCostModel.findByVehicleId(vehicleTypeId)
+    // .populate({ path: 'distance', options: { sort: { from: 1 } } })
+    // .populate({
+    //   path: 'additionalServices',
+    //   match: { available: true },
+    //   populate: {
+    //     path: 'additionalService',
+    //     model: 'AdditionalService',
+    //   },
+    // })
+    // .lean()
+
+    if (!newVehicleCost) {
+      const message = `ไม่สามารถเรียกข้อมูลต้นทุนขนส่งได้`
+      throw new GraphQLError(message, {
+        extensions: { code: 'NOT_FOUND', errors: [{ message }] },
+      })
+    }
+
+    // TODO: Check matching vehicle
+    // const vehicleType = vehicleTypeId
+
+    const original = head(locations)
+    const destinationsRaw = tail(locations).map((destination) => destination.location)
+    const destinations = isRounded ? [...destinationsRaw, original.location] : destinationsRaw
+    const computeRoutes = await getRoute(original.location, destinations).catch((error) => {
+      console.log(JSON.stringify(error, undefined, 2))
+      throw error
+    })
+    const directionRoutes = head(computeRoutes.routes)
+    const { displayDistance, displayTime, distance: distanceMeter, returnDistance: returnDistanceMeter } = handleGetDistanceDetail(
+      directionRoutes,
+      shipment.vehicleId as VehicleType,
+      isRounded,
+    )
+    const distanceKM = distanceMeter / 1000
+    const distanceReturnKM = returnDistanceMeter / 1000
+
+    // Check again
+    const originCalculation = calculateStep(distanceKM, sortBy(shipment.distances, ['form']) as ShipmentDistancePricing[])
+    const subTotalDistanceCost = originCalculation.cost
+    const subTotalDistancePrice = originCalculation.price
+
+    /**
+     *
+     * Get Droppoint codes
+     */
+    const dropPoint = locations.length - 1
+    let subTotalDropPointCost = 0
+    let subTotalDropPointPrice = 0
+    if (dropPoint > 1) {
+      const additionalExistingServiceDroppoint = find(
+        shipment.additionalServices,
+        (service: ShipmentAdditionalServicePrice) => {
+          const coreService = get(service, 'reference.additionalService', undefined) as AdditionalService
+          return coreService?.name === 'หลายจุดส่ง'
+        },
+      )
+
+      if (additionalExistingServiceDroppoint) {
+        const service = additionalExistingServiceDroppoint as ShipmentAdditionalServicePrice
+        const droppointCost = service.cost || 0
+        const droppointPrice = service.price || 0
+
+        subTotalDropPointCost = dropPoint * droppointCost
+        subTotalDropPointPrice = dropPoint * droppointPrice
+      } else {
+        const additionalServices = newVehicleCost.additionalServices as AdditionalServiceCostPricing[]
+        const additionalServiceDroppoint = find(additionalServices, (service: AdditionalServiceCostPricing) => {
+          const coreService = service.additionalService as AdditionalService
+          return coreService.name === 'หลายจุดส่ง'
+        })
+
+        if (additionalServiceDroppoint) {
+          const droppointCost = additionalServiceDroppoint.cost || 0
+          const droppointPrice = additionalServiceDroppoint.price || 0
+
+          subTotalDropPointCost = dropPoint * droppointCost
+          subTotalDropPointPrice = dropPoint * droppointPrice
+        }
+      }
+    }
+
+    /**
+     *
+     * Get Rounded percent
+     */
+    let subTotalRoundedCost = 0
+    let subTotalRoundedPrice = 0
+    let roundedCostPercent = 0
+    let roundedPricePercent = 0
+    if (isRounded) {
+      const additionalExistingServiceRouned = find(
+        shipment.additionalServices,
+        (service: AdditionalServiceCostPricing) => {
+          const coreService = service.additionalService as AdditionalService
+          return coreService?.name === 'ไป-กลับ'
+        },
+      )
+
+      // Existing As percent
+      if (additionalExistingServiceRouned) {
+        const service = additionalExistingServiceRouned as ShipmentAdditionalServicePrice
+        roundedCostPercent = service.cost || 0
+        roundedPricePercent = service.price || 0
+        const roundedCostPercentCal = (service.cost || 0) / 100
+        const roundedPricePercentCal = (service.price || 0) / 100
+
+        // Round calculation
+        const roundedCalculation = calculateStep(distanceReturnKM, shipment.distances as ShipmentDistancePricing[])
+
+        subTotalRoundedCost = roundedCostPercentCal * roundedCalculation.cost
+        subTotalRoundedPrice = roundedPricePercentCal * roundedCalculation.price
+      } else {
+        const additionalServices = newVehicleCost.additionalServices as AdditionalServiceCostPricing[]
+        const additionalServiceRouned = find(additionalServices, (service: AdditionalServiceCostPricing) => {
+          const coreService = service.additionalService as AdditionalService
+          return coreService?.name === 'ไป-กลับ'
+        })
+
+        // Existing As percent
+        if (additionalServiceRouned) {
+          roundedCostPercent = additionalServiceRouned.cost || 0
+          roundedPricePercent = additionalServiceRouned.price || 0
+          const roundedCostPercentCal = (additionalServiceRouned.cost || 0) / 100
+          const roundedPricePercentCal = (additionalServiceRouned.price || 0) / 100
+
+          // Round calculation
+          const roundedCalculation = calculateStep(distanceReturnKM, shipment.distances as ShipmentDistancePricing[])
+
+          subTotalRoundedCost = roundedCostPercentCal * roundedCalculation.cost
+          subTotalRoundedPrice = roundedPricePercentCal * roundedCalculation.price
+        }
+      }
+    }
+
+    /**
+     *
+     * Total Distance price
+     */
+    const totalDistanceCost = sum([subTotalDropPointCost, subTotalDistanceCost, subTotalRoundedCost])
+    const totalDistancePrice = sum([subTotalDropPointPrice, subTotalDistancePrice, subTotalRoundedPrice])
+
+    /**
+     * Additional Service Cost Pricng
+     */
+    const additionalServicesPricing = await Aigle.map<string, PriceItem>(serviceIds, async (serviceId) => {
+      const service = find(shipment.additionalServices, ['reference._id', serviceId]) as
+        | ShipmentAdditionalServicePrice
+        | undefined
+      if (service) {
+        const label = get(service, 'reference.additionalService.name', '')
+        return {
+          label,
+          cost: service.cost,
+          price: service.price,
+          isNew: false,
+        }
+      } else {
+        const newService = await AdditionalServiceCostPricingModel.findById(serviceId)
+        if (newService) {
+          const label = get(newService.additionalService, 'name', '')
+          return {
+            label,
+            cost: newService.cost,
+            price: newService.price,
+            isNew: true,
+          }
+        } else {
+          return {
+            label: '',
+            cost: 0,
+            price: 0,
+            isNew: false,
+          }
+        }
+      }
+    })
+
+    const servicesTotalPrice = reduce(
+      additionalServicesPricing,
+      (prev, curr) => {
+        const cost = sum([prev.cost, curr.cost])
+        const price = sum([prev.price, curr.price])
+        return { cost, price }
+      },
+      { cost: 0, price: 0 },
+    )
+
+    /**
+     *
+     * Privilege
+     */
+    // Privilege
+    // let discountName = ''
+    // let totalDiscount = 0
+    // if (discountId) {
+    //   const privilege = await PrivilegeModel.findById(discountId)
+    //   if (privilege) {
+    //     const { unit, discount, minPrice, maxDiscountPrice } = privilege
+    //     const subTotal = sum([calculated.totalPrice, additionalservices.price])
+    //     const isPercent = unit === EPrivilegeDiscountUnit.PERCENTAGE
+    //     if (subTotal >= minPrice) {
+    //       if (isPercent) {
+    //         const discountAsBath = (discount / 100) * subTotal
+    //         const maxDiscountAsBath = maxDiscountPrice ? min([maxDiscountPrice, discountAsBath]) : discountAsBath
+    //         totalDiscount = maxDiscountAsBath
+    //       } else {
+    //         totalDiscount = discount
+    //       }
+    //     } else {
+    //       totalDiscount = 0
+    //     }
+    //     discountName = `${privilege.name} (${privilege.discount}${
+    //       privilege.unit === EPrivilegeDiscountUnit.CURRENCY
+    //         ? ' บาท'
+    //         : privilege.unit === EPrivilegeDiscountUnit.PERCENTAGE
+    //         ? '%'
+    //         : ''
+    //     })`
+    //   }
+    // }
+
+    const subTotalCost = sum([totalDistanceCost, servicesTotalPrice.cost])
+    const subTotalPrice = sum([totalDistancePrice, servicesTotalPrice.price])
+
+    /**
+     * งานเงินสด
+     * บริษัท
+     * - แสดงและคำนวณ WHT ทุกครั้ง และแสดงทุกครั้ง
+     * (ค่าขนส่งเกิน 1000 คิด WHT 1%)
+     * (ค่าขนส่งน้อยกว่า 1000 คิดราคาเต็ม)
+     */
+    const customerTypes = get(shipment, 'customer.userType', '')
+    let whtName = ''
+    let wht = 0
+    const isTaxCalculation = customerTypes === EUserType.BUSINESS && subTotalPrice > 1000
+    if (isTaxCalculation) {
+      whtName = 'ค่าภาษีบริการขนส่งสินค้าจากบริษัท 1% (WHT)'
+      wht = subTotalPrice * 0.01
+    }
+
+    const vehicleName = get(shipment, 'vehicleId.name', '')
+    const distanceKMText = fNumber(distanceKM, '0.0')
+    const distanceReturnKMText = fNumber(distanceReturnKM, '0.0')
+
+    const totalCost = sum([subTotalCost])
+    const totalPrice = sum([subTotalPrice, -wht])
+
+    return {
+      shippingPrices: [
+        {
+          label: `${vehicleName} (${fNumber(distanceKMText)} กม.)`,
+          price: subTotalDistancePrice,
+          cost: subTotalDistanceCost,
+        },
+        ...(isRounded
+          ? [
+              {
+                label: `ไป-กลับ ${roundedPricePercent}% (${distanceReturnKMText} กม.)`,
+                price: subTotalRoundedPrice,
+                cost: subTotalRoundedCost,
+              },
+            ]
+          : []),
+      ],
+      additionalServices: [
+        ...(dropPoint > 1
+          ? [
+              {
+                label: 'หลายจุดส่ง',
+                price: subTotalDropPointPrice,
+                cost: subTotalDropPointCost,
+              },
+            ]
+          : []),
+        ...additionalServicesPricing,
+      ],
+      discounts: [], // discountId ? [{ label: discountName, price: totalDiscount, cost: 0 }] : [],
+      taxs: isTaxCalculation ? [{ label: whtName, price: wht, cost: 0 }] : [],
+      subTotalCost: subTotalCost,
+      subTotalPrice: subTotalPrice,
+      totalCost: totalCost,
+      totalPrice: totalPrice,
+    }
+  }
 }
 
 const ShipmentModel = getModelForClass(Shipment)
 
 export default ShipmentModel
+
+// Get distance
+function handleGetDistanceDetail(route: google.maps.DirectionsRoute, vehicle: VehicleType, isRounded: boolean) {
+  const legs = route.legs
+  const timeAnDistance = reduce(
+    legs,
+    (prev, curr) => {
+      const distance = prev.distance + get(curr, 'distance.value', 0)
+      const duration = prev.duration + get(curr, 'duration.value', 0)
+      return { distance, duration }
+    },
+    { distance: 0, duration: 0 },
+  )
+  const originDistance = isRounded ? get(legs, '0.distance.value', 0) : timeAnDistance.distance
+  const returnDistance = isRounded ? get(legs, '1.distance.value', 0) : 0
+
+  const w4 = [1800, 2700] // 30s - 45s
+  const other = [2700, 3600] // 45s - 60s
+
+  // Make random time
+  // const vehicleCost = find(vehicleCosts, ['vehicleType._id', vehicleId])
+  const typeVehicle = vehicle.type
+  const distanceTime = typeVehicle ? (typeVehicle === '4W' ? random(w4[0], w4[1]) : random(other[0], other[1])) : 0
+
+  return {
+    displayDistance: timeAnDistance.distance,
+    displayTime: sum([timeAnDistance.duration, distanceTime]),
+    distance: originDistance,
+    returnDistance: returnDistance,
+  }
+}
+
+function calculateStep(distanceInput: number, formulas: ShipmentDistancePricing[]) {
+  let _subTotalCost = 0
+  let _subTotalPrice = 0
+  const _calculations: CalculationResultPayload[] = []
+
+  // Calculate for each distance
+  forEach(formulas, (step: ShipmentDistancePricing, index) => {
+    if (distanceInput >= step.from) {
+      const stepTo = step.to === step.from ? Infinity : step.to
+      const applicableDistance = Math.min(distanceInput, stepTo ?? distanceInput) - step.from + 1
+      const calculatedCost = step.unit === EDistanceCostPricingUnit.KM ? step.cost * applicableDistance : step.cost
+      const calculatedPrice = step.unit === EDistanceCostPricingUnit.KM ? step.price * applicableDistance : step.price
+
+      console.log('--biwslwaker---', index, distanceInput, 'calculateStep', calculatedCost, calculatedPrice)
+
+      _subTotalCost += calculatedCost
+      _subTotalPrice += calculatedPrice
+
+      _calculations.push({
+        ...(step as DistanceCostPricing),
+        costResult: calculatedCost,
+        priceResult: calculatedPrice,
+      })
+    }
+  })
+
+  console.log('Biwswalker GG', _subTotalCost, _subTotalPrice, JSON.stringify(_calculations, undefined, 2))
+  return {
+    calculations: _calculations,
+    cost: _subTotalCost,
+    price: _subTotalPrice,
+  }
+}

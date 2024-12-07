@@ -685,20 +685,20 @@ export default class UserResolver {
           const smsMessage = `รหัสสำหรับเข้าสู่ระบบของ Movemate Driver ของคุณคือ ${password_decryption}`
 
           // Request to thai bulk sms
+          console.log('OTP message: ', process.env.NODE_ENV, smsMessage)
           if (process.env.NODE_ENV === 'production') {
             const smscredit = await credit().catch((error) => {
               console.log('credit error: ', error)
             })
             console.log('ThaiBulk Credit Remaining: ', smscredit)
-            await sendSMS({
-              message: smsMessage,
-              msisdn: driverDetail.phoneNumber,
-            }).catch((error) => {
-              console.log('sendSMS error: ', error)
-            })
           } else if (process.env.NODE_ENV === 'development') {
-            console.log('OTP message: ', smsMessage)
           }
+          await sendSMS({
+            message: smsMessage,
+            msisdn: driverDetail.phoneNumber,
+          }).catch((error) => {
+            console.log('sendSMS error: ', error)
+          })
         } else {
           await user.updateOne({
             status,
@@ -960,20 +960,20 @@ export default class UserResolver {
           await UserModel.findByIdAndUpdate(user._id, { resetPasswordCode: otp, lastestResetPassword: reset_time })
           const phoneNumber = username
           // Request to thai bulk sms
+          console.log('OTP message: ', process.env.NODE_ENV, verifyLast)
           if (process.env.NODE_ENV === 'production') {
             const smscredit = await credit().catch((error) => {
               console.log('credit error: ', error)
             })
             console.log('ThaiBulk Credit Remaining: ', smscredit)
-            await sendSMS({
-              message: verifyLast,
-              msisdn: phoneNumber,
-            }).catch((error) => {
-              console.log('sendSMS error: ', error)
-            })
           } else if (process.env.NODE_ENV === 'development') {
-            console.log('OTP message: ', verifyLast)
           }
+          await sendSMS({
+            message: verifyLast,
+            msisdn: phoneNumber,
+          }).catch((error) => {
+            console.log('sendSMS error: ', error)
+          })
           return {
             countdown: resend_countdown,
             duration: '90s',

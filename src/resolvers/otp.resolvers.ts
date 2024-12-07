@@ -48,20 +48,21 @@ export async function requestOTP(phoneNumber: string, action: string) {
     const verifyLast = `${otp} คือ รหัสยืนยันเบอร์ติดต่อ Movemate Thailand ของคุณ (Ref:${ref})`
 
     // Request to thai bulk sms
+    console.log('OTP message: ', process.env.NODE_ENV, verifyLast)
     if (process.env.NODE_ENV === 'production') {
       const smscredit = await credit().catch((error) => {
         console.log('credit error: ', error)
       })
       console.log('ThaiBulk Credit Remaining: ', smscredit)
-      await sendSMS({
-        message: verifyLast,
-        msisdn: phoneNumber,
-      }).catch((error) => {
-        console.log('sendSMS error: ', error)
-      })
-    } else if(process.env.NODE_ENV === 'development'){
-      console.log('OTP message: ', verifyLast)
+    } else if (process.env.NODE_ENV === 'development') {
     }
+    // 
+    await sendSMS({
+      message: verifyLast,
+      msisdn: phoneNumber,
+    }).catch((error) => {
+      console.log('sendSMS error: ', error)
+    })
 
     const currentDate = new Date()
     const countdown = addMinutes(currentDate, DEFUALT_OTP_DURATION)

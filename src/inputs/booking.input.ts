@@ -1,4 +1,5 @@
 import { ArgsType, Field, Float, InputType, Int } from "type-graphql"
+import { DestinationInput } from "./shipment.input";
 
 @InputType()
 export class PODAddressInput {
@@ -55,4 +56,22 @@ export class SubtotalCalculationArgs {
 
     @Field()
     isBusinessCashPayment: boolean
+}
+
+@ArgsType()
+export class CalculationExistingArgs {
+    @Field()
+    shipmentId: string
+    
+    @Field(() => [DestinationInput])
+    locations: DestinationInput[]
+
+    @Field(() => Boolean)
+    isRounded: boolean
+
+    @Field()
+    vehicleTypeId: string
+
+    @Field(() => [String], { nullable: true })
+    serviceIds?: string[]
 }
