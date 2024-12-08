@@ -2,6 +2,7 @@ import { VehicleCost } from '@models/vehicleCost.model'
 import { ObjectType, Field, Float } from 'type-graphql'
 import { prop as Property, Severity } from '@typegoose/typegoose'
 import { User } from '@models/user.model'
+import { PricingCalculationMethodPayload } from './pricing.payloads'
 
 @ObjectType()
 export class paymentMethodPayload {
@@ -81,4 +82,9 @@ export class SubtotalCalculatedPayload {
   @Field(() => Float, { defaultValue: 0 })
   @Property()
   totalPrice: number
+
+  formula?: PricingCalculationMethodPayload
+  displayDistance?: number
+  displayTime?: number
+  distance?: number
 }

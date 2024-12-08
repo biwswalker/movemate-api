@@ -64,6 +64,7 @@ import { generateReceiptCashWithNonTax } from 'reports/receiptWithCashNonTax'
 import { EPaymentMethod, EPaymentRejectionReason, EPaymentStatus } from '@enums/payments'
 import { EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
 import { EUserRole, EUserStatus, EUserType } from '@enums/users'
+import { BillingAdjustmentNote } from './billingCreditNote.model'
 
 Aigle.mixin(lodash, {})
 
@@ -239,6 +240,10 @@ export class BillingCycle extends TimeStamps {
   @Property({ required: false })
   issueReceiptFilename: string
 
+  @Field(() => [BillingAdjustmentNote], { nullable: true })
+  @Property({ required: false, ref: () => BillingAdjustmentNote, default: [], autopopulate: true })
+  adjustmentNote: Ref<BillingAdjustmentNote>[]
+
   static aggregatePaginate: AggregatePaginateModel<typeof BillingCycle>['aggregatePaginate']
 
   static async createBillingCycleForUser(userId: string) {
@@ -278,7 +283,7 @@ export class BillingCycle extends TimeStamps {
             (prev, shipment) => {
               if (shipment.payment) {
                 const payment = shipment.payment as Payment
-                const payTotal = payment.calculation.totalPrice
+                const payTotal = payment.invoice.totalPrice
                 return prev + payTotal
               }
               return prev + 0
@@ -1190,7 +1195,10 @@ export async function issueEmailToCustomer() {
   const startRange = currentDate.setHours(0, 0, 0, 0)
   const endRange = currentDate.setHours(23, 59, 59, 999)
 
-  const billingCycles = await BillingCycleModel.find({ createdAt: { $gte: startRange, $lt: endRange }, paymentMethod: EPaymentMethod.CREDIT })
+  const billingCycles = await BillingCycleModel.find({
+    createdAt: { $gte: startRange, $lt: endRange },
+    paymentMethod: EPaymentMethod.CREDIT,
+  })
 
   await Aigle.forEach(billingCycles, async (billingCycle) => {
     const customer = await UserModel.findById(billingCycle.user)

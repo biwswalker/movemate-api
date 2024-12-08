@@ -852,6 +852,18 @@ export default class ShipmentResolver {
       throw error
     }
   }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async updateShipment(@Args() data: CalculationExistingArgs): Promise<boolean> {
+    try {
+      const shipment = await ShipmentModel.findById(data.shipmentId)
+      await shipment.updateShipment(data)
+      return true
+    } catch (error) {
+      throw error
+    }
+  }
 }
 
 export async function shipmentNotify(shipmentId: string, driverId: string) {

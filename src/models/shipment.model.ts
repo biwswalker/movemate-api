@@ -5,12 +5,14 @@ import { IsEnum } from 'class-validator'
 import PrivilegeModel, { Privilege } from './privilege.model'
 import { VehicleType } from './vehicleType.model'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
-import mongoose, { FilterQuery, Schema, Types } from 'mongoose'
+import mongoose, { AnyBulkWriteOperation, FilterQuery, Schema, Types } from 'mongoose'
 import FileModel, { File } from './file.model'
 import { Location } from './location.model'
-import { ShipmentAdditionalServicePrice } from './shipmentAdditionalServicePrice.model'
+import ShipmentAdditionalServicePriceModel, {
+  ShipmentAdditionalServicePrice,
+} from './shipmentAdditionalServicePrice.model'
 import { ShipmentDistancePricing } from './shipmentDistancePricing.model'
-import { Payment } from './payment.model'
+import PaymentModel, { Payment } from './payment.model'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
 import mongoosePagination from 'mongoose-paginate-v2'
 import { DirectionsResult } from './directionResult.model'
@@ -64,7 +66,7 @@ import TransactionModel, {
   MOVEMATE_OWNER_ID,
 } from './transaction.model'
 import DriverDetailModel from './driverDetail.model'
-import { EPaymentMethod } from '@enums/payments'
+import { EPaymentMethod, EPaymentStatus } from '@enums/payments'
 import {
   EShipmentStatus,
   EAdminAcceptanceStatus,
@@ -76,10 +78,12 @@ import { addSeconds } from 'date-fns'
 import { EDriverStatus, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 import { EPrivilegeDiscountUnit } from '@enums/privilege'
 import { GraphQLJSONObject } from 'graphql-type-json'
-import { getRoute } from '@services/maps/location'
+import { extractThaiAddress, getPlaceDetail, getRoute } from '@services/maps/location'
 import { DistanceCostPricing, EDistanceCostPricingUnit } from './distanceCostPricing.model'
-import { CalculationResultPayload } from '@payloads/pricing.payloads'
+import { CalculationResultPayload, PricingCalculationMethodPayload } from '@payloads/pricing.payloads'
 import { AdditionalService } from './additionalService.model'
+import { DestinationInput } from '@inputs/shipment.input'
+import { generateTrackingNumber } from '@utils/string.utils'
 
 Aigle.mixin(lodash, {})
 
@@ -318,6 +322,10 @@ export class Shipment extends TimeStamps {
   @Field(() => Payment)
   @Property({ ref: () => Payment, required: true, autopopulate: true })
   payment: Ref<Payment>
+
+  @Field(() => [Payment])
+  @Property({ ref: () => Payment, autopopulate: true })
+  paymentOlds: Ref<Payment>[]
 
   @Field(() => Refund, { nullable: true })
   @Property({ ref: () => Refund, required: false, autopopulate: true })
@@ -1278,16 +1286,20 @@ export class Shipment extends TimeStamps {
       throw error
     })
     const directionRoutes = head(computeRoutes.routes)
-    const { displayDistance, displayTime, distance: distanceMeter, returnDistance: returnDistanceMeter } = handleGetDistanceDetail(
-      directionRoutes,
-      shipment.vehicleId as VehicleType,
-      isRounded,
-    )
+    const {
+      displayDistance,
+      displayTime,
+      distance: distanceMeter,
+      returnDistance: returnDistanceMeter,
+    } = handleGetDistanceDetail(directionRoutes, shipment.vehicleId as VehicleType, isRounded)
     const distanceKM = distanceMeter / 1000
     const distanceReturnKM = returnDistanceMeter / 1000
 
     // Check again
-    const originCalculation = calculateStep(distanceKM, sortBy(shipment.distances, ['form']) as ShipmentDistancePricing[])
+    const originCalculation = calculateStep(
+      distanceKM,
+      sortBy(shipment.distances, ['form']) as ShipmentDistancePricing[],
+    )
     const subTotalDistanceCost = originCalculation.cost
     const subTotalDistancePrice = originCalculation.price
 
@@ -1401,7 +1413,7 @@ export class Shipment extends TimeStamps {
       if (service) {
         const label = get(service, 'reference.additionalService.name', '')
         return {
-          label,
+          label: label === 'POD' ? `บริการคืนใบส่งสินค้า (POD)` : label,
           cost: service.cost,
           price: service.price,
           isNew: false,
@@ -1411,7 +1423,7 @@ export class Shipment extends TimeStamps {
         if (newService) {
           const label = get(newService.additionalService, 'name', '')
           return {
-            label,
+            label: label === 'POD' ? `บริการคืนใบส่งสินค้า (POD)` : label,
             cost: newService.cost,
             price: newService.price,
             isNew: true,
@@ -1497,6 +1509,20 @@ export class Shipment extends TimeStamps {
     const totalCost = sum([subTotalCost])
     const totalPrice = sum([subTotalPrice, -wht])
 
+    const formula: PricingCalculationMethodPayload = {
+      calculations: originCalculation.calculations,
+      roundedCostPercent,
+      roundedPricePercent,
+      subTotalRoundedCost,
+      subTotalRoundedPrice,
+      subTotalCost,
+      subTotalPrice,
+      subTotalDropPointCost,
+      subTotalDropPointPrice,
+      totalCost,
+      totalPrice,
+    }
+
     return {
       shippingPrices: [
         {
@@ -1532,7 +1558,79 @@ export class Shipment extends TimeStamps {
       subTotalPrice: subTotalPrice,
       totalCost: totalCost,
       totalPrice: totalPrice,
+      formula,
+      displayDistance,
+      displayTime,
+      distance: distanceMeter,
     }
+  }
+
+  async updateShipment(data: CalculationExistingArgs) {
+    const { isRounded, locations, vehicleTypeId, serviceIds } = data
+    const { formula, displayDistance, displayTime, distance, ...invoice } = await Shipment.calculateExistingShipment(
+      data,
+    )
+
+    // Duplicate additional service cost for invoice data
+    const oldServices = filter(this.additionalServices as ShipmentAdditionalServicePrice[], (service) => {
+      const _id = get(service, 'reference._id', '')
+      return !isEmpty(_id)
+    }).map((service) => service._id.toString())
+    const serviceBulkOperations = await Aigle.map<string, AnyBulkWriteOperation>(serviceIds, async (serviceCostId) => {
+      const serviceCost = await AdditionalServiceCostPricingModel.findById(serviceCostId).lean()
+      return {
+        insertOne: {
+          document: {
+            cost: serviceCost.cost,
+            price: serviceCost.price,
+            reference: serviceCost._id,
+          },
+        },
+      }
+    })
+
+    const serviceBulkResult = await ShipmentAdditionalServicePriceModel.bulkWrite(serviceBulkOperations)
+    const _additionalServices = values(serviceBulkResult.insertedIds)
+
+    const destinations = await Aigle.map<DestinationInput, Destination>(locations, async (location) => {
+      const { place } = await getPlaceDetail(location.placeId)
+      const { province, district, subDistrict } = extractThaiAddress(place.addressComponents || [])
+      return {
+        ...location,
+        placeDetail: place,
+        placeProvince: province,
+        placeDistrict: district,
+        placeSubDistrict: subDistrict,
+      }
+    })
+
+    const oldPayment = this.payment as Payment
+    const isCreditPayment = oldPayment.paymentMethod === EPaymentMethod.CREDIT
+    const _paymentNumber = await generateTrackingNumber(isCreditPayment ? 'MMPAYCE' : 'MMPAYCA', 'payment')
+
+    const payment = new PaymentModel({
+      paymentNumber: _paymentNumber,
+      status: isCreditPayment ? EPaymentStatus.INVOICE : EPaymentStatus.WAITING_CONFIRM_PAYMENT,
+      paymentMethod: oldPayment.paymentMethod,
+      creditDetail: oldPayment.creditDetail,
+      calculation: formula,
+      invoice,
+    })
+
+    await payment.save()
+    await ShipmentModel.findByIdAndUpdate(this._id, {
+      displayDistance,
+      displayTime,
+      distance,
+      destinations,
+      isRoundedReturn: isRounded,
+      vehicleId: vehicleTypeId,
+      additionalServices: [...oldServices, ..._additionalServices],
+      payment,
+      paymentOlds: { $push: this.payment },
+    })
+
+    // Noti
   }
 }
 
@@ -1584,8 +1682,6 @@ function calculateStep(distanceInput: number, formulas: ShipmentDistancePricing[
       const calculatedCost = step.unit === EDistanceCostPricingUnit.KM ? step.cost * applicableDistance : step.cost
       const calculatedPrice = step.unit === EDistanceCostPricingUnit.KM ? step.price * applicableDistance : step.price
 
-      console.log('--biwslwaker---', index, distanceInput, 'calculateStep', calculatedCost, calculatedPrice)
-
       _subTotalCost += calculatedCost
       _subTotalPrice += calculatedPrice
 
@@ -1597,7 +1693,6 @@ function calculateStep(distanceInput: number, formulas: ShipmentDistancePricing[
     }
   })
 
-  console.log('Biwswalker GG', _subTotalCost, _subTotalPrice, JSON.stringify(_calculations, undefined, 2))
   return {
     calculations: _calculations,
     cost: _subTotalCost,
