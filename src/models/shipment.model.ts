@@ -1640,7 +1640,7 @@ export default ShipmentModel
 
 // Get distance
 function handleGetDistanceDetail(route: google.maps.DirectionsRoute, vehicle: VehicleType, isRounded: boolean) {
-  const legs = route.legs
+  const legs = route?.legs
   const timeAnDistance = reduce(
     legs,
     (prev, curr) => {
