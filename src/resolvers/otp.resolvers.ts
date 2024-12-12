@@ -49,20 +49,25 @@ export async function requestOTP(phoneNumber: string, action: string) {
 
     // Request to thai bulk sms
     console.log('OTP message: ', process.env.NODE_ENV, verifyLast)
-    if (process.env.NODE_ENV === 'production') {
+    // if (process.env.NODE_ENV === 'production') {
+    //   const smscredit = await credit().catch((error) => {
+    //     console.log('credit error: ', error)
+    //   })
+    //   console.log('ThaiBulk Credit Remaining: ', smscredit)
+    // } else if (process.env.NODE_ENV === 'development') {
+    // }
+    if (process.env.NODE_ENV !== 'development') {
       const smscredit = await credit().catch((error) => {
         console.log('credit error: ', error)
       })
       console.log('ThaiBulk Credit Remaining: ', smscredit)
-    } else if (process.env.NODE_ENV === 'development') {
+      await sendSMS({
+        message: verifyLast,
+        msisdn: phoneNumber,
+      }).catch((error) => {
+        console.log('sendSMS error: ', error)
+      })
     }
-    // 
-    await sendSMS({
-      message: verifyLast,
-      msisdn: phoneNumber,
-    }).catch((error) => {
-      console.log('sendSMS error: ', error)
-    })
 
     const currentDate = new Date()
     const countdown = addMinutes(currentDate, DEFUALT_OTP_DURATION)

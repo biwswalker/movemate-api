@@ -22,6 +22,7 @@ import ShipmentModel, { Shipment } from '@models/shipment.model'
 import pubsub, { NOTFICATIONS, SHIPMENTS } from '@configs/pubsub'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import { EUserRole } from '@enums/users'
+import mongoose from 'mongoose'
 
 Aigle.mixin(lodash, {})
 
@@ -30,42 +31,58 @@ export default class BillingPaymentResolver {
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async approvalCashPayment(@Ctx() ctx: GraphQLContext, @Args() args: ApprovalCashPaymentArgs): Promise<boolean> {
-    const user_id = ctx.req.user_id
-    const billingCycleModel = await BillingCycleModel.findById(args.billingCycleId).lean()
-    const billingPaymentModel = await BillingPaymentModel.findById(billingCycleModel.billingPayment).lean()
-    if (!billingCycleModel || !billingPaymentModel) {
-      const message = 'ไม่สามารถหาข้อมูลการชำระได้ เนื่องจากไม่พบการชำระดังกล่าว'
-      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
-    }
-    if (args.result === 'approve') {
-      await BillingCycleModel.markAsPaid(billingCycleModel._id, user_id)
+    const session = await mongoose.startSession()
+    session.startTransaction()
 
-      // For Movemate transaction
-      const movemateTransaction = new TransactionModel({
-        amount: billingPaymentModel.paymentAmount,
-        ownerId: MOVEMATE_OWNER_ID,
-        ownerType: ETransactionOwner.MOVEMATE,
-        description: `ยืนยันการชำระเงินหมายเลข ${billingCycleModel.billingNumber}`,
-        refId: billingCycleModel._id,
-        refType: ERefType.BILLING,
-        transactionType: ETransactionType.INCOME,
-        status: ETransactionStatus.COMPLETE,
-      })
-      await movemateTransaction.save()
-      const shipment = head(billingCycleModel.shipments) as Shipment
-      if (shipment) {
-        shipmentNotify(shipment._id, get(shipment, 'requestedDriver._id', ''))
-        const newShipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
-        await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
-        const adminNotificationCount = await getAdminMenuNotificationCount()
-        await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+    const user_id = ctx.req.user_id
+    try {
+      const billingCycleModel = await BillingCycleModel.findById(args.billingCycleId).session(session).lean()
+      const billingPaymentModel = await BillingPaymentModel.findById(billingCycleModel.billingPayment)
+        .session(session)
+        .lean()
+      if (!billingCycleModel || !billingPaymentModel) {
+        const message = 'ไม่สามารถหาข้อมูลการชำระได้ เนื่องจากไม่พบการชำระดังกล่าว'
+        throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
       }
-      return true
-    } else if (args.result === 'reject') {
-      await BillingCycleModel.rejectedPayment(billingCycleModel._id, user_id, args.reason, args.otherReason)
-      return true
+      if (args.result === 'approve') {
+        await BillingCycleModel.markAsPaid(billingCycleModel._id, user_id, null, null, session)
+
+        // For Movemate transaction
+        const movemateTransaction = new TransactionModel({
+          amount: billingPaymentModel.paymentAmount,
+          ownerId: MOVEMATE_OWNER_ID,
+          ownerType: ETransactionOwner.MOVEMATE,
+          description: `ยืนยันการชำระเงินหมายเลข ${billingCycleModel.billingNumber}`,
+          refId: billingCycleModel._id,
+          refType: ERefType.BILLING,
+          transactionType: ETransactionType.INCOME,
+          status: ETransactionStatus.COMPLETE,
+        })
+        await movemateTransaction.save({ session })
+        const shipment = head(billingCycleModel.shipments) as Shipment
+        if (shipment) {
+          shipmentNotify(shipment._id, get(shipment, 'requestedDriver._id', ''))
+          const newShipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
+          await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
+          const adminNotificationCount = await getAdminMenuNotificationCount()
+          await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+        }
+        await session.commitTransaction()
+        return true
+      } else if (args.result === 'reject') {
+        await BillingCycleModel.rejectedPayment(billingCycleModel._id, user_id, args.reason, args.otherReason)
+        await session.commitTransaction()
+        return true
+      }
+      // await session.commitTransaction()
+      return false
+    } catch (error) {
+      console.log('ApprovalCashPayment Error: ', error)
+      await session.abortTransaction()
+      throw error
+    } finally {
+      session.endSession()
     }
-    return false
   }
 
   @Mutation(() => Boolean)

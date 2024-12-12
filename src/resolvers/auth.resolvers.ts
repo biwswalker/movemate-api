@@ -16,14 +16,18 @@ import { yupValidationThrow } from '@utils/error.utils'
 import bcrypt from 'bcrypt'
 import addEmailQueue from '@utils/email.utils'
 import { EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
+import mongoose from 'mongoose'
 
 @Resolver()
 export default class AuthResolver {
   @Mutation(() => AuthPayload)
   async login(@Arg('username') username: string, @Ctx() ctx: GraphQLContext): Promise<AuthPayload> {
+    const session = await mongoose.startSession()
+    session.startTransaction()
+
     try {
       const hashedPassword = get(split(get(ctx, 'req.headers.authorization', ''), ' '), '1', '')
-      const user = await User.findByUsername(username)
+      const user = await User.findByUsername(username, undefined, { session })
 
       if (!user) {
         throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
@@ -60,18 +64,17 @@ export default class AuthResolver {
 
       const validateResult = await user.validatePassword(hashedPassword)
 
-      
       if (!validateResult) {
         throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
       }
-      
+
       const token = generateAccessToken(user._id, user.userRole)
       ctx.res.cookie('access_token', token, { httpOnly: true })
-      
+
       // Check policy
       let requireAcceptedPolicy = true
       if (user.userRole === EUserRole.CUSTOMER) {
-        const settingCustomerPolicies = await SettingCustomerPoliciesModel.find()
+        const settingCustomerPolicies = await SettingCustomerPoliciesModel.find().session(session)
         const policyVersion = get(settingCustomerPolicies, '0.version', 0)
         if (user.acceptPolicyVersion >= policyVersion) {
           requireAcceptedPolicy = false
@@ -79,7 +82,7 @@ export default class AuthResolver {
           requireAcceptedPolicy = true
         }
       } else if (user.userRole === EUserRole.DRIVER) {
-        const settingDriverPolicies = await SettingDriverPoliciesModel.find()
+        const settingDriverPolicies = await SettingDriverPoliciesModel.find().session(session)
         const policyVersion = get(settingDriverPolicies, '0.version', 0)
         if (user.acceptPolicyVersion >= policyVersion) {
           requireAcceptedPolicy = false
@@ -88,6 +91,7 @@ export default class AuthResolver {
         }
       }
 
+      await session.commitTransaction()
       return {
         token,
         user,
@@ -96,7 +100,10 @@ export default class AuthResolver {
       }
     } catch (error) {
       console.log('-------', error)
+      await session.abortTransaction()
       throw error
+    } finally {
+      session.endSession()
     }
   }
 

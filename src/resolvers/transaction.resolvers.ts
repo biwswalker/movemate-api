@@ -60,29 +60,12 @@ export default class TransactionResolver {
     return transactions
   }
 
-  @Query(() => TransactionPayload)
+  @Query(() => DriverTransactionSummaryPayload)
   @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
-  async calculateTransaction(@Ctx() ctx: GraphQLContext): Promise<TransactionPayload> {
+  async calculateTransaction(@Ctx() ctx: GraphQLContext): Promise<DriverTransactionSummaryPayload> {
     const userId = ctx.req.user_id
-    if (!userId) {
-      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
-      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
-    }
-    const transactions = await TransactionModel.calculateTransaction(userId)
-
-    return transactions
-  }
-
-  @Query(() => Float)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
-  async calculateMonthlyTransaction(@Ctx() ctx: GraphQLContext, @Arg('date') date: Date): Promise<number> {
-    const userId = ctx.req.user_id
-    if (!userId) {
-      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
-      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
-    }
-    const totalMonthly = await TransactionModel.calculateMonthlyTransaction(userId, date)
-    return totalMonthly
+    const summaries = await TransactionModel.driverTransactionSummary(userId)
+    return summaries
   }
 
   @Query(() => Int)
@@ -189,7 +172,7 @@ export default class TransactionResolver {
 
   @Query(() => TransactionDetailPayload)
   @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
-  async getDriverTransaction(
+  async getDriverTransactionDetail(
     @Ctx() ctx: GraphQLContext,
     @Arg('transactionId') transactionId: string,
   ): Promise<TransactionDetailPayload> {

@@ -14,7 +14,7 @@ import { DRIVER_TRANSACTIONS, TRANSACTION_DRIVER_LIST } from '@pipelines/transac
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
 import mongoose, { PaginateOptions } from 'mongoose'
 import { reformPaginate } from '@utils/pagination.utils'
-import { get, omitBy } from 'lodash'
+import { get, omitBy, sum } from 'lodash'
 import UserModel from './user.model'
 
 export enum ETransactionType {
@@ -57,6 +57,8 @@ registerEnumType(ERefType, {
 
 /**
  * TODO: WHT Tax to calculate
+ * เพิ่ม tax
+ * เอา status ออก
  */
 
 export const MOVEMATE_OWNER_ID = 'movemate-thailand'
@@ -83,21 +85,29 @@ export class Transaction extends TimeStamps {
   @Property({ required: false })
   refType: ERefType
 
-  @Field()
-  @Property({ required: true })
-  amount: number
-
   @Field(() => ETransactionType)
   @Property({ required: true })
   transactionType: ETransactionType
 
-  @Field()
-  @Property({ required: true })
-  description: string
-
   @Field(() => ETransactionStatus)
   @Property({ required: true, default: ETransactionStatus.PENDING })
   status: ETransactionStatus
+
+  @Field()
+  @Property({ required: true })
+  amountBeforeTax: number
+
+  @Field()
+  @Property({ required: true })
+  amountTax: number
+
+  @Field()
+  @Property({ required: true })
+  amount: number
+
+  @Field()
+  @Property({ required: true })
+  description: string
 
   @Field()
   @Property({ default: Date.now })
@@ -164,7 +174,7 @@ export class Transaction extends TimeStamps {
         $match: {
           ownerId,
           createdAt: { $gt: startMonthDay, $lt: endMonthDay },
-          status: ETransactionStatus.PENDING,
+          status: ETransactionStatus.COMPLETE,
           transactionType: ETransactionType.INCOME,
         },
       },
@@ -172,36 +182,6 @@ export class Transaction extends TimeStamps {
     ])
     const totalPending = transactions.length > 0 ? transactions[0]?.totalAmount : 0
     return totalPending
-  }
-
-  static async calculateProfit(startDate: Date, endDate: Date): Promise<TransactionPayload> {
-    const transactions = await TransactionModel.aggregate([
-      {
-        $match: {
-          createdAt: {
-            $gte: startDate,
-            $lte: endDate,
-          },
-          ownerType: ETransactionOwner.MOVEMATE,
-          ownerId: MOVEMATE_OWNER_ID,
-        },
-      },
-      {
-        $group: {
-          _id: '$transactionType',
-          totalAmount: { $sum: '$amount' },
-        },
-      },
-    ])
-    const totalIncome = transactions.find((t) => t._id === ETransactionType.INCOME)?.totalAmount || 0
-    const totalOutcome = transactions.find((t) => t._id === ETransactionType.OUTCOME)?.totalAmount || 0
-    const totalBalance = totalIncome - totalOutcome
-
-    return {
-      totalIncome,
-      totalOutcome,
-      totalBalance,
-    }
   }
 
   static async getTransactionDriverList(
@@ -250,7 +230,7 @@ export class Transaction extends TimeStamps {
           createdAt: { $gt: start, $lt: end },
           refType: ERefType.SHIPMENT,
           transactionType: ETransactionType.INCOME,
-          amount: { $gt: 0 }
+          amount: { $gt: 0 },
         },
       },
       { $group: { _id: '$transactionType', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
@@ -262,29 +242,37 @@ export class Transaction extends TimeStamps {
           ownerId,
           refType: ERefType.SHIPMENT,
           transactionType: ETransactionType.INCOME,
-          amount: { $gt: 0 }
+          amount: { $gt: 0 },
         },
       },
       { $group: { _id: '$status', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
     ])
 
-    const allTransactions = await TransactionModel.aggregate([
-      {
-        $match: {
-          ownerId,
-          refType: ERefType.SHIPMENT,
-          transactionType: ETransactionType.INCOME,
-          amount: { $gt: 0 }
-        },
-      },
-      { $group: { _id: '$transactionType', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
-    ])
+    // const allTransactions = await TransactionModel.aggregate([
+    //   {
+    //     $match: {
+    //       ownerId,
+    //       refType: ERefType.SHIPMENT,
+    //       transactionType: ETransactionType.INCOME,
+    //       amount: { $gt: 0 },
+    //     },
+    //   },
+    //   { $group: { _id: '$transactionType', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+    // ])
 
     const monthly = get(monthlyTransactions, '0', { amount: 0, count: 0 }) || { amount: 0, count: 0 }
     const pending = transactions.find((t) => t._id === ETransactionStatus.PENDING) || { amount: 0, count: 0 }
     const paid = transactions.find((t) => t._id === ETransactionStatus.COMPLETE) || { amount: 0, count: 0 }
-    const all = get(allTransactions, '0', { amount: 0, count: 0 }) || { amount: 0, count: 0 }
+    // const all = get(allTransactions, '0', { amount: 0, count: 0 }) || { amount: 0, count: 0 }
+    const all = { amount: sum([pending.amount, paid.amount]), count: sum([pending.count, paid.count]) }
 
+    /**
+     * Return
+     * - monthly: รายได้เดือนนี้
+     * - pending: รอรับเงิน
+     * - paid: ได้รับเงินแล้ว
+     * - all: รายได้ทั้งหมด
+     */
     return {
       monthly,
       pending,

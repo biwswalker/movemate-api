@@ -5,7 +5,7 @@ import { IsEnum } from 'class-validator'
 import PrivilegeModel, { Privilege } from './privilege.model'
 import { VehicleType } from './vehicleType.model'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
-import mongoose, { AnyBulkWriteOperation, FilterQuery, Schema, Types } from 'mongoose'
+import mongoose, { AnyBulkWriteOperation, ClientSession, FilterQuery, Schema, Types } from 'mongoose'
 import FileModel, { File } from './file.model'
 import { Location } from './location.model'
 import ShipmentAdditionalServicePriceModel, {
@@ -934,9 +934,10 @@ export class Shipment extends TimeStamps {
     reason?: string,
     otherReason?: string,
     refunId?: string,
+    session?: ClientSession | null,
   ) {
-    const shipmentModel = await ShipmentModel.findById(_id)
-    const shipment = await ShipmentModel.findById(_id).lean()
+    const shipmentModel = await ShipmentModel.findById(_id).session(session)
+    const shipment = await ShipmentModel.findById(_id).session(session).lean()
     if (!shipmentModel) {
       const message = 'ไม่สามารถหาข้อมูลงานขนส่ง เนื่องจากไม่พบงานขนส่งดังกล่าว'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -962,13 +963,17 @@ export class Shipment extends TimeStamps {
           steps: [{ ...currentStep, stepStatus: EStepStatus.DONE }],
         },
       })
-      await _shipmentUpdateHistory.save()
-      await ShipmentModel.findByIdAndUpdate(_id, {
-        status: EShipmentStatus.IDLE,
-        adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,
-        driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
-        $push: { history: _shipmentUpdateHistory },
-      })
+      await _shipmentUpdateHistory.save({ session })
+      await ShipmentModel.findByIdAndUpdate(
+        _id,
+        {
+          status: EShipmentStatus.IDLE,
+          adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,
+          driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
+          $push: { history: _shipmentUpdateHistory },
+        },
+        { session },
+      )
 
       /**
        * Sent notification
@@ -1006,10 +1011,14 @@ export class Shipment extends TimeStamps {
                 driverMessage: EStepDefinitionName.REJECTED_PAYMENT,
               }
             : {}
-          await StepDefinitionModel.findByIdAndUpdate(step._id, {
-            stepStatus: EStepStatus.CANCELLED,
-            ...cashVerifyStepChangeData,
-          })
+          await StepDefinitionModel.findByIdAndUpdate(
+            step._id,
+            {
+              stepStatus: EStepStatus.CANCELLED,
+              ...cashVerifyStepChangeData,
+            },
+            { session },
+          )
           return { ...step, stepStatus: EStepStatus.CANCELLED, ...cashVerifyStepChangeData }
         })
         // Add refund step
@@ -1022,7 +1031,7 @@ export class Shipment extends TimeStamps {
           driverMessage: EStepDefinitionName.REFUND,
           stepStatus: 'progressing',
         })
-        await refundStep.save()
+        await refundStep.save({ session })
         // Update history
         const _shipmentUpdateHistory = new UpdateHistoryModel({
           referenceId: _id,
@@ -1037,14 +1046,18 @@ export class Shipment extends TimeStamps {
             steps: [...steps, refundStep],
           },
         })
-        await _shipmentUpdateHistory.save()
-        await ShipmentModel.findByIdAndUpdate(_id, {
-          status: EShipmentStatus.REFUND,
-          refund: refunId,
-          adminAcceptanceStatus: EAdminAcceptanceStatus.REJECTED,
-          currentStepSeq: newLatestSeq,
-          $push: { history: _shipmentUpdateHistory, steps: refundStep._id },
-        })
+        await _shipmentUpdateHistory.save({ session })
+        await ShipmentModel.findByIdAndUpdate(
+          _id,
+          {
+            status: EShipmentStatus.REFUND,
+            refund: refunId,
+            adminAcceptanceStatus: EAdminAcceptanceStatus.REJECTED,
+            currentStepSeq: newLatestSeq,
+            $push: { history: _shipmentUpdateHistory, steps: refundStep._id },
+          },
+          { session },
+        )
 
         /**
          * Sent notification

@@ -33,7 +33,7 @@ import addEmailQueue from '@utils/email.utils'
 import { th } from 'date-fns/locale'
 import path from 'path'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
-import { AggregatePaginateModel } from 'mongoose'
+import { AggregatePaginateModel, ClientSession } from 'mongoose'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
 import UpdateHistoryModel, { UpdateHistory } from './updateHistory.model'
 import { IsEnum } from 'class-validator'
@@ -362,16 +362,26 @@ export class BillingCycle extends TimeStamps {
     }
   }
 
-  static async markAsPaid(billingCycleId: string, userId: string, paymentDate?: string, imageEvidenceId?: string) {
+  static async markAsPaid(
+    billingCycleId: string,
+    userId: string,
+    paymentDate?: string,
+    imageEvidenceId?: string,
+    session?: ClientSession | null,
+  ) {
     const billingCycle = await BillingCycleModel.findById(billingCycleId).lean()
     if (billingCycle) {
       let _billingPayment = null
       // Billing Payment
       if (billingCycle.billingPayment) {
-        await BillingPaymentModel.findByIdAndUpdate(billingCycle.billingPayment, {
-          status: EBillingPaymentStatus.PAID,
-          updatedBy: userId,
-        })
+        await BillingPaymentModel.findByIdAndUpdate(
+          billingCycle.billingPayment,
+          {
+            status: EBillingPaymentStatus.PAID,
+            updatedBy: userId,
+          },
+          { session },
+        )
       } else {
         const _paymentNumber = await generateTrackingNumber(
           billingCycle.paymentMethod === EPaymentMethod.CREDIT ? 'MMPAYCE' : 'MMPAYCA',
@@ -385,7 +395,7 @@ export class BillingCycle extends TimeStamps {
           ...(imageEvidenceId ? { imageEvidence: imageEvidenceId } : {}),
           updatedBy: userId,
         })
-        await _billingPayment.save()
+        await _billingPayment.save({ session })
       }
       // Billing Receipt
       const generateMonth = format(new Date(), 'yyMM')
@@ -396,7 +406,7 @@ export class BillingCycle extends TimeStamps {
         receiptNumber: _receiptNumber,
         updatedBy: userId,
       })
-      await _billingReceipt.save()
+      await _billingReceipt.save({ session })
       // Billing Cycle
       const _billingCycleUpdateHistory = new UpdateHistoryModel({
         referenceId: billingCycleId,
@@ -410,17 +420,21 @@ export class BillingCycle extends TimeStamps {
           ...(_billingPayment ? { billingPayment: get(_billingPayment, '_id', '') } : {}),
         },
       })
-      await _billingCycleUpdateHistory.save()
-      await BillingCycleModel.findByIdAndUpdate(billingCycleId, {
-        billingStatus: EBillingStatus.PAID,
-        ...(_billingPayment ? { billingPayment: _billingPayment } : {}),
-        billingReceipt: _billingReceipt,
-        $push: { history: _billingCycleUpdateHistory },
-      })
+      await _billingCycleUpdateHistory.save({ session })
+      await BillingCycleModel.findByIdAndUpdate(
+        billingCycleId,
+        {
+          billingStatus: EBillingStatus.PAID,
+          ...(_billingPayment ? { billingPayment: _billingPayment } : {}),
+          billingReceipt: _billingReceipt,
+          $push: { history: _billingCycleUpdateHistory },
+        },
+        { session },
+      )
       // Update shipment
       const shipments = billingCycle.shipments
       await Aigle.forEach(shipments as Shipment[], async (shipment) => {
-        const shipmentModel = await ShipmentModel.findById(shipment)
+        const shipmentModel = await ShipmentModel.findById(shipment).session(session)
         const payment = await PaymentModel.findById(shipmentModel.payment).lean()
 
         // Update Payment model
@@ -431,14 +445,18 @@ export class BillingCycle extends TimeStamps {
           beforeUpdate: payment,
           afterUpdate: { ...payment, status: EPaymentStatus.PAID },
         })
-        await _paymentUpdateHistory.save()
-        await PaymentModel.findByIdAndUpdate(payment._id, {
-          status: EPaymentStatus.PAID,
-          $push: { history: _paymentUpdateHistory },
-        })
+        await _paymentUpdateHistory.save({ session })
+        await PaymentModel.findByIdAndUpdate(
+          payment._id,
+          {
+            status: EPaymentStatus.PAID,
+            $push: { history: _paymentUpdateHistory },
+          },
+          { session },
+        )
 
         // Update Shipment model
-        await ShipmentModel.markAsCashVerified(shipment._id, 'approve', userId)
+        await ShipmentModel.markAsCashVerified(shipment._id, 'approve', userId, null, null, null, session)
       })
 
       // ** Generate receipt sent at Finish job shipment **
@@ -449,24 +467,24 @@ export class BillingCycle extends TimeStamps {
       const customerId = get(billingCycle, 'user._id', '')
       if (customerId) {
         // Check other billing is overdue
-        const customerModel = await UserModel.findById(customerId)
+        const customerModel = await UserModel.findById(customerId).session(session)
         const creditPaymentId = get(customerModel, 'businessDetail.creditPayment._id', '')
         if (billingCycle.paymentMethod === EPaymentMethod.CREDIT && creditPaymentId) {
-          const creditPayment = await BusinessCustomerCreditPaymentModel.findById(creditPaymentId)
+          const creditPayment = await BusinessCustomerCreditPaymentModel.findById(creditPaymentId).session(session)
           const newCreditOutstandingBalance = sum([creditPayment.creditOutstandingBalance, -billingCycle.totalAmount])
           const newCreditBalance = sum([creditPayment.creditUsage, -billingCycle.totalAmount])
           await creditPayment.updateOne({
             creditUsage: newCreditBalance,
             creditOutstandingBalance: newCreditOutstandingBalance,
-          })
+          }, { session })
         }
         // const creditDetail = awa/
         const billingCycles = await BillingCycleModel.find({
           user: customerId,
           billingStatus: EBillingStatus.OVERDUE,
-        }).lean()
+        }).session(session).lean()
         if (isEmpty(billingCycles)) {
-          await UserModel.findByIdAndUpdate(customerId, { status: EUserStatus.ACTIVE })
+          await UserModel.findByIdAndUpdate(customerId, { status: EUserStatus.ACTIVE }, { session })
         }
       }
 

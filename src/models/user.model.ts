@@ -5,7 +5,7 @@ import { IsNotEmpty, IsString, IsEnum } from 'class-validator'
 import bcrypt from 'bcrypt'
 import mongoosePagination from 'mongoose-paginate-v2'
 import aggregatePaginate from 'mongoose-aggregate-paginate-v2'
-import mongoose from 'mongoose'
+import mongoose, { ProjectionType, QueryOptions } from 'mongoose'
 import { Admin } from './admin.model'
 import { IndividualCustomer } from './customerIndividual.model'
 import { BusinessCustomer } from './customerBusiness.model'
@@ -315,8 +315,12 @@ export class User extends TimeStamps {
     return bcrypt.compare(password_decryption, this.password)
   }
 
-  static async findByUsername(username: string): Promise<User | null> {
-    return UserModel.findOne({ username })
+  static async findByUsername(
+    username: string,
+    projection?: ProjectionType<User> | null,
+    options?: QueryOptions<User> | null,
+  ): Promise<User | null> {
+    return UserModel.findOne({ username }, projection, options)
   }
 
   static async findCustomerByEmail(email: string): Promise<User | null> {

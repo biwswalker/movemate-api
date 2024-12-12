@@ -686,19 +686,21 @@ export default class UserResolver {
 
           // Request to thai bulk sms
           console.log('OTP message: ', process.env.NODE_ENV, smsMessage)
-          if (process.env.NODE_ENV === 'production') {
+          // if (process.env.NODE_ENV === 'production') {
+          // } else if (process.env.NODE_ENV === 'development') {
+          // }
+          if (process.env.NODE_ENV !== 'development') {
             const smscredit = await credit().catch((error) => {
               console.log('credit error: ', error)
             })
             console.log('ThaiBulk Credit Remaining: ', smscredit)
-          } else if (process.env.NODE_ENV === 'development') {
+            await sendSMS({
+              message: smsMessage,
+              msisdn: driverDetail.phoneNumber,
+            }).catch((error) => {
+              console.log('sendSMS error: ', error)
+            })
           }
-          await sendSMS({
-            message: smsMessage,
-            msisdn: driverDetail.phoneNumber,
-          }).catch((error) => {
-            console.log('sendSMS error: ', error)
-          })
         } else {
           await user.updateOne({
             status,
@@ -940,7 +942,7 @@ export default class UserResolver {
           throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
         }
 
-        if (includes([EUserValidationStatus.APPROVE, EUserValidationStatus.DENIED], user.validationStatus)) {
+        if (!includes([EUserValidationStatus.APPROVE, EUserValidationStatus.DENIED], user.validationStatus)) {
           const message = 'ไม่สามารถเรียกข้อมูลผู้ใช้ได้ เนื่องจากผู้ใช้งานยังไม่ถูกตรวจสอบ'
           throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
         }
@@ -961,19 +963,22 @@ export default class UserResolver {
           const phoneNumber = username
           // Request to thai bulk sms
           console.log('OTP message: ', process.env.NODE_ENV, verifyLast)
-          if (process.env.NODE_ENV === 'production') {
+          // if (process.env.NODE_ENV === 'production') {
+          // } else if (process.env.NODE_ENV === 'development') {
+          // }
+
+          if (process.env.NODE_ENV !== 'development') {
             const smscredit = await credit().catch((error) => {
               console.log('credit error: ', error)
             })
             console.log('ThaiBulk Credit Remaining: ', smscredit)
-          } else if (process.env.NODE_ENV === 'development') {
+            await sendSMS({
+              message: verifyLast,
+              msisdn: phoneNumber,
+            }).catch((error) => {
+              console.log('sendSMS error: ', error)
+            })
           }
-          await sendSMS({
-            message: verifyLast,
-            msisdn: phoneNumber,
-          }).catch((error) => {
-            console.log('sendSMS error: ', error)
-          })
           return {
             countdown: resend_countdown,
             duration: '90s',
