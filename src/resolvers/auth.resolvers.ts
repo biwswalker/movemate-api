@@ -22,12 +22,9 @@ import mongoose from 'mongoose'
 export default class AuthResolver {
   @Mutation(() => AuthPayload)
   async login(@Arg('username') username: string, @Ctx() ctx: GraphQLContext): Promise<AuthPayload> {
-    const session = await mongoose.startSession()
-    session.startTransaction()
-
     try {
       const hashedPassword = get(split(get(ctx, 'req.headers.authorization', ''), ' '), '1', '')
-      const user = await User.findByUsername(username, undefined, { session })
+      const user = await User.findByUsername(username, undefined)
 
       if (!user) {
         throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
@@ -74,7 +71,7 @@ export default class AuthResolver {
       // Check policy
       let requireAcceptedPolicy = true
       if (user.userRole === EUserRole.CUSTOMER) {
-        const settingCustomerPolicies = await SettingCustomerPoliciesModel.find().session(session)
+        const settingCustomerPolicies = await SettingCustomerPoliciesModel.find()
         const policyVersion = get(settingCustomerPolicies, '0.version', 0)
         if (user.acceptPolicyVersion >= policyVersion) {
           requireAcceptedPolicy = false
@@ -82,7 +79,7 @@ export default class AuthResolver {
           requireAcceptedPolicy = true
         }
       } else if (user.userRole === EUserRole.DRIVER) {
-        const settingDriverPolicies = await SettingDriverPoliciesModel.find().session(session)
+        const settingDriverPolicies = await SettingDriverPoliciesModel.find()
         const policyVersion = get(settingDriverPolicies, '0.version', 0)
         if (user.acceptPolicyVersion >= policyVersion) {
           requireAcceptedPolicy = false
@@ -91,7 +88,6 @@ export default class AuthResolver {
         }
       }
 
-      await session.commitTransaction()
       return {
         token,
         user,
@@ -100,10 +96,7 @@ export default class AuthResolver {
       }
     } catch (error) {
       console.log('-------', error)
-      await session.abortTransaction()
       throw error
-    } finally {
-      session.endSession()
     }
   }
 

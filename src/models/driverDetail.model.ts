@@ -7,7 +7,7 @@ import { DriverDocument } from './driverDocument.model'
 import { get, includes } from 'lodash'
 import TransactionModel from './transaction.model'
 import { EDriverType } from '@enums/users'
-import { User } from './user.model'
+import { ClientSession } from 'mongoose'
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()
@@ -159,10 +159,10 @@ export class DriverDetail {
     // }
   }
 
-  async updateBalance() {
-    const transactions = await TransactionModel.calculateTransaction(this._id)
+  async updateBalance(session?: ClientSession) {
+    const transactions = await TransactionModel.calculateTransaction(this._id, undefined, undefined)
     console.log('New user balance: ', this._id, transactions.totalPending)
-    await DriverDetailModel.findByIdAndUpdate(this._id, { balance: transactions.totalPending })
+    await DriverDetailModel.findByIdAndUpdate(this._id, { balance: transactions.totalPending }, { session })
   }
 }
 

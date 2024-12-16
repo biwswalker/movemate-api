@@ -704,7 +704,7 @@ export class Shipment extends TimeStamps {
     return true
   }
 
-  async addStep(data: StepDefinition): Promise<boolean> {
+  async addStep(data: StepDefinition, session?: ClientSession): Promise<boolean> {
     try {
       let newStep = []
       console.log('Start Step: ')
@@ -715,25 +715,25 @@ export class Shipment extends TimeStamps {
           console.log(index, currentStepId)
         } else if (data.seq === index) {
           const newStap = new StepDefinitionModel(data)
-          await newStap.save()
+          await newStap.save({ session })
           newStep.push(newStap._id)
           console.log(index, currentStepId)
           if (currentStepId) {
             const newSeq = index + 1
-            await StepDefinitionModel.findByIdAndUpdate(currentStepId, { seq: newSeq })
+            await StepDefinitionModel.findByIdAndUpdate(currentStepId, { seq: newSeq }, { session })
             newStep.push(currentStepId)
             console.log(index, currentStepId)
           }
         } else if (index > data.seq) {
           if (currentStepId) {
             const newSeq = index + 1
-            await StepDefinitionModel.findByIdAndUpdate(currentStepId, { seq: newSeq })
+            await StepDefinitionModel.findByIdAndUpdate(currentStepId, { seq: newSeq }, { session })
             newStep.push(currentStepId)
             console.log(index, currentStepId)
           }
         }
       })
-      await ShipmentModel.findByIdAndUpdate(this._id, { steps: newStep })
+      await ShipmentModel.findByIdAndUpdate(this._id, { steps: newStep }, { session })
       console.log('End Step: ')
       return true
     } catch (error) {
@@ -741,27 +741,33 @@ export class Shipment extends TimeStamps {
     }
   }
 
-  async nextStep(images?: FileInput[]): Promise<boolean> {
+  async nextStep(images?: FileInput[], session?: ClientSession): Promise<boolean> {
     try {
       const currentStep = find(this.steps, ['seq', this.currentStepSeq])
       const uploadedFiles = await Aigle.map(images, async (image) => {
         const fileModel = new FileModel(image)
-        await fileModel.save()
+        await fileModel.save({ session })
         const file = await FileModel.findById(fileModel._id)
         return file
       })
       const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', ''))
-      await stepDefinitionModel.updateOne({
-        stepStatus: EStepStatus.DONE,
-        images: uploadedFiles,
-        updatedAt: new Date(),
-      })
+      await stepDefinitionModel.updateOne(
+        {
+          stepStatus: EStepStatus.DONE,
+          images: uploadedFiles,
+          updatedAt: new Date(),
+        },
+        { session },
+      )
       const nextStepDeifinition = find(this.steps, ['seq', this.currentStepSeq + 1])
       const nextStepId = get(nextStepDeifinition, '_id', '')
       if (nextStepId) {
         const nextStepDefinitionModel = await StepDefinitionModel.findById(nextStepId)
-        await nextStepDefinitionModel.updateOne({ stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() })
-        await ShipmentModel.findByIdAndUpdate(this._id, { currentStepSeq: nextStepDefinitionModel.seq })
+        await nextStepDefinitionModel.updateOne(
+          { stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() },
+          { session },
+        )
+        await ShipmentModel.findByIdAndUpdate(this._id, { currentStepSeq: nextStepDefinitionModel.seq }, { session })
         return true
       }
       return false
@@ -770,12 +776,12 @@ export class Shipment extends TimeStamps {
     }
   }
 
-  async podSent(images: FileInput[], trackingNumber: string, provider: string): Promise<boolean> {
+  async podSent(images: FileInput[], trackingNumber: string, provider: string, session?: ClientSession): Promise<boolean> {
     try {
       const currentStep = find(this.steps, ['seq', this.currentStepSeq])
       const uploadedFiles = await Aigle.map(images, async (image) => {
         const fileModel = new FileModel(image)
-        await fileModel.save()
+        await fileModel.save({ session })
         const file = await FileModel.findById(fileModel._id)
         return file
       })
@@ -785,21 +791,21 @@ export class Shipment extends TimeStamps {
           stepStatus: EStepStatus.DONE,
           images: uploadedFiles,
           updatedAt: new Date(),
-        })
+        }, { session })
         const nextStep = find(this.steps, ['seq', this.currentStepSeq + 1])
         const nextStepId = get(nextStep, '_id', '')
         const shipmentModel = await ShipmentModel.findById(this._id)
         if (nextStepId) {
           const nextStepDefinitionModel = await StepDefinitionModel.findById(nextStepId)
-          await nextStepDefinitionModel.updateOne({ stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() })
+          await nextStepDefinitionModel.updateOne({ stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() }, { session })
           await shipmentModel.updateOne({
             currentStepSeq: nextStepDefinitionModel.seq,
             podDetail: Object.assign(shipmentModel.podDetail, { trackingNumber, provider }),
-          })
+          }, { session })
         } else {
           await shipmentModel.updateOne({
             podDetail: Object.assign(shipmentModel.podDetail, { trackingNumber, provider }),
-          })
+          }, { session })
         }
         return true
       } else {
@@ -813,23 +819,30 @@ export class Shipment extends TimeStamps {
     }
   }
 
-  async finishJob(): Promise<boolean> {
+  async finishJob(session?: ClientSession): Promise<boolean> {
     try {
       const currentStep = find(this.steps, ['seq', this.currentStepSeq])
       const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', ''))
       const currentDate = new Date()
       if (stepDefinitionModel.step === EStepDefinition.FINISH) {
-        await stepDefinitionModel.updateOne({
-          stepStatus: EStepStatus.DONE,
-          customerMessage: 'ดำเนินการเสร็จสิ้น',
-          driverMessage: 'ดำเนินการเสร็จสิ้น',
-          updatedAt: currentDate,
-        })
-        await ShipmentModel.findByIdAndUpdate(this._id, {
-          currentStepSeq: stepDefinitionModel.seq,
-          status: EShipmentStatus.DELIVERED,
-          deliveredDate: currentDate,
-        })
+        await stepDefinitionModel.updateOne(
+          {
+            stepStatus: EStepStatus.DONE,
+            customerMessage: 'ดำเนินการเสร็จสิ้น',
+            driverMessage: 'ดำเนินการเสร็จสิ้น',
+            updatedAt: currentDate,
+          },
+          { session },
+        )
+        await ShipmentModel.findByIdAndUpdate(
+          this._id,
+          {
+            currentStepSeq: stepDefinitionModel.seq,
+            status: EShipmentStatus.DELIVERED,
+            deliveredDate: currentDate,
+          },
+          { session },
+        )
 
         const pickup = head(this.destinations)
         const dropoffs = tail(this.destinations)
@@ -841,8 +854,11 @@ export class Shipment extends TimeStamps {
 
         /**
          * TRANSACTIONS
+         * Calculate WHT 1% for driver here
          */
         const amountCost = get(this, 'payment.invoice.totalCost', 0)
+        const whtCost = 0.01 * amountCost
+        const totalCost = sum([amountCost, -whtCost])
         const amountPrice = get(this, 'payment.invoice.totalPrice', 0)
         const isAgentDriver = !isEmpty(this.agentDriver)
         const ownerDriverId = isAgentDriver ? get(this, 'agentDriver._id', '') : get(this, 'driver._id', '')
@@ -853,6 +869,8 @@ export class Shipment extends TimeStamps {
            * Update employee transaction
            */
           const employeeTransaction = new TransactionModel({
+            amountTax: 0, // WHT
+            amountBeforeTax: 0,
             amount: 0,
             ownerId: get(this, 'driver._id', ''),
             ownerType: ETransactionOwner.BUSINESS_DRIVER,
@@ -862,13 +880,15 @@ export class Shipment extends TimeStamps {
             transactionType: ETransactionType.INCOME,
             status: ETransactionStatus.COMPLETE,
           })
-          await employeeTransaction.save()
+          await employeeTransaction.save({ session })
         }
         /**
          * Add transaction for shipment driver owner
          */
         const driverTransaction = new TransactionModel({
-          amount: amountCost,
+          amountTax: whtCost, // WHT
+          amountBeforeTax: amountCost,
+          amount: totalCost,
           ownerId: ownerDriverId,
           ownerType: ETransactionOwner.DRIVER,
           description: description,
@@ -877,27 +897,27 @@ export class Shipment extends TimeStamps {
           transactionType: ETransactionType.INCOME,
           status: ETransactionStatus.PENDING,
         })
-        await driverTransaction.save()
+        await driverTransaction.save({ session })
 
         /**
          * Add transaction for Movemate Thailand
          */
-        const movemateTransaction = new TransactionModel({
-          amount: amountPrice,
-          ownerId: MOVEMATE_OWNER_ID,
-          ownerType: ETransactionOwner.MOVEMATE,
-          description: description,
-          refId: this._id,
-          refType: ERefType.SHIPMENT,
-          transactionType: ETransactionType.INCOME,
-          status: ETransactionStatus.COMPLETE,
-        })
-        await movemateTransaction.save()
+        // const movemateTransaction = new TransactionModel({
+        //   amount: amountPrice,
+        //   ownerId: MOVEMATE_OWNER_ID,
+        //   ownerType: ETransactionOwner.MOVEMATE,
+        //   description: description,
+        //   refId: this._id,
+        //   refType: ERefType.SHIPMENT,
+        //   transactionType: ETransactionType.INCOME,
+        //   status: ETransactionStatus.COMPLETE,
+        // })
+        // await movemateTransaction.save({ session })
 
         // Update balance
         if (driver) {
           const driverDetail = await DriverDetailModel.findById(driver.driverDetail)
-          await driverDetail.updateBalance()
+          await driverDetail.updateBalance(session)
         }
 
         /**
@@ -936,8 +956,8 @@ export class Shipment extends TimeStamps {
     refunId?: string,
     session?: ClientSession | null,
   ) {
-    const shipmentModel = await ShipmentModel.findById(_id).session(session)
-    const shipment = await ShipmentModel.findById(_id).session(session).lean()
+    const shipmentModel = await ShipmentModel.findById(_id)
+    const shipment = await ShipmentModel.findById(_id).lean()
     if (!shipmentModel) {
       const message = 'ไม่สามารถหาข้อมูลงานขนส่ง เนื่องจากไม่พบงานขนส่งดังกล่าว'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -947,7 +967,7 @@ export class Shipment extends TimeStamps {
       const currentStep = find(shipmentModel.steps, ['seq', shipmentModel.currentStepSeq]) as StepDefinition | undefined
       if (currentStep) {
         if (currentStep.step === EStepDefinition.CASH_VERIFY) {
-          shipmentModel.nextStep()
+          await shipmentModel.nextStep(undefined, session)
         }
       }
       const _shipmentUpdateHistory = new UpdateHistoryModel({
@@ -978,17 +998,20 @@ export class Shipment extends TimeStamps {
       /**
        * Sent notification
        */
-      await NotificationModel.sendNotification({
-        userId: shipment.customer as string,
-        varient: ENotificationVarient.INFO,
-        title: 'การจองของท่านยืนยันยอดชำระแล้ว',
-        message: [
-          `เราขอแจ้งให้ท่าทราบว่าการจองรถเลขที่ ${shipment.trackingNumber} ของท่านยืนยันยอดชำระแล้ว`,
-          `การจองจะถูกดำเนินการจับคู่หาคนขับในไม่ช้า`,
-        ],
-        infoText: 'ดูการจอง',
-        infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
-      })
+      await NotificationModel.sendNotification(
+        {
+          userId: shipment.customer as string,
+          varient: ENotificationVarient.INFO,
+          title: 'การจองของท่านยืนยันยอดชำระแล้ว',
+          message: [
+            `เราขอแจ้งให้ท่าทราบว่าการจองรถเลขที่ ${shipment.trackingNumber} ของท่านยืนยันยอดชำระแล้ว`,
+            `การจองจะถูกดำเนินการจับคู่หาคนขับในไม่ช้า`,
+          ],
+          infoText: 'ดูการจอง',
+          infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
+        },
+        session,
+      )
       /**
        * Sent email ?
        */
@@ -1062,17 +1085,20 @@ export class Shipment extends TimeStamps {
         /**
          * Sent notification
          */
-        await NotificationModel.sendNotification({
-          userId: shipment.customer as string,
-          varient: ENotificationVarient.ERROR,
-          title: 'การจองถูกยกเลิก',
-          message: [
-            `เราเสียใจที่ต้องแจ้งให้ท่านทราบว่าการจองเลขที่ ${shipment.trackingNumber} ของท่านถูกยกเลิกโดยทีมผู้ดูแลระบบของเรา`,
-            `สาเหตุการยกเลิกคือ ${otherReason} และการจองจะถูกดำเนินการคืนเงินต่อไป`,
-          ],
-          infoText: 'ดูการจอง',
-          infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
-        })
+        await NotificationModel.sendNotification(
+          {
+            userId: shipment.customer as string,
+            varient: ENotificationVarient.ERROR,
+            title: 'การจองถูกยกเลิก',
+            message: [
+              `เราเสียใจที่ต้องแจ้งให้ท่านทราบว่าการจองเลขที่ ${shipment.trackingNumber} ของท่านถูกยกเลิกโดยทีมผู้ดูแลระบบของเรา`,
+              `สาเหตุการยกเลิกคือ ${otherReason} และการจองจะถูกดำเนินการคืนเงินต่อไป`,
+            ],
+            infoText: 'ดูการจอง',
+            infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
+          },
+          session,
+        )
         /**
          * Sent email
          */

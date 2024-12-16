@@ -140,21 +140,29 @@ export default class TransactionResolver {
       const message = 'ไม่สามารถใช้ข้อมูลรายการชำระนี้ได้ กรุณารีโหลดรายการใหม่'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
-    const subTotal = reduce(
+    const summarizeTotal = reduce(
       transactions,
       (prev, transaction) => {
-        const amounts = sum([prev, transaction.amount])
-        return amounts
+        const subtotal = sum([prev.subtotal, transaction.amountBeforeTax])
+        const tax = sum([prev.tax, transaction.amountTax])
+        const total = sum([prev.total, transaction.amount])
+        return { subtotal, tax, total }
       },
-      0,
+      { subtotal: 0, tax: 0, total: 0 },
     )
-    const taxPercent = subTotal > 1000 ? (isBusinessDriver ? 0.01 : 0) : 0
-    const taxIncluded = subTotal * taxPercent
-    const total = sum([subTotal, -taxIncluded])
+
+    /**
+     * Driver WHT Payment
+     * WHT1% for driver
+     */
+    // const taxPercent = subTotal > 1000 ? (isBusinessDriver ? 0.01 : 0) : 0
+    // const taxPercent = 0.01
+    // const taxIncluded = subTotal * taxPercent
+    // const total = sum([subTotal, -taxIncluded])
     return {
-      subtotal: subTotal,
-      tax: taxIncluded,
-      total,
+      subtotal: summarizeTotal.subtotal,
+      tax: summarizeTotal.tax,
+      total: summarizeTotal.total,
       transactions: transactions,
     }
   }

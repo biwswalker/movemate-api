@@ -5,6 +5,7 @@ import {
   SettingBusinessTypeInput,
   SettingContactUsInput,
   SettingFAQInput,
+  SettingFinancialInput,
   SettingInstructionInput,
 } from '@inputs/settings.input'
 import { Admin } from '@models/admin.model'
@@ -529,7 +530,7 @@ export default class SettingsResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
-  async updateFinancial(@Arg('promptpay') promptpay: string, @Ctx() ctx: GraphQLContext): Promise<boolean> {
+  async updateFinancial(@Arg('data') data: SettingFinancialInput, @Ctx() ctx: GraphQLContext): Promise<boolean> {
     try {
       const userId = ctx.req.user_id
       const user = await UserModel.findById(userId)
@@ -546,6 +547,7 @@ export default class SettingsResolver {
           extensions: { code: 'NOT_FOUND', errors: [{ message }] },
         })
       }
+      
       const settingFinancial = await SettingFinancialModel.find()
       const settingFinancialOldData = settingFinancial[0]
 
@@ -556,7 +558,7 @@ export default class SettingsResolver {
         referenceType: 'SettingFinancial',
         who: userId,
         beforeUpdate: settingFinancialOldData ? omit(settingFinancialOldData.toObject(), ['history']) : {},
-        afterUpdate: { promptpay },
+        afterUpdate: data,
       })
 
       const updateData = [
@@ -564,7 +566,7 @@ export default class SettingsResolver {
           updateOne: {
             filter: { _id },
             update: {
-              $set: { promptpay },
+              $set: data,
               $push: { history: updateHistory },
             },
             upsert: true,

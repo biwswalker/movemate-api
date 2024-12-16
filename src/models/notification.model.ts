@@ -7,6 +7,7 @@ import admin from '@configs/firebase'
 import { Message } from 'firebase-admin/messaging'
 import { isArray } from 'lodash'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
+import { ClientSession } from 'mongoose'
 
 export enum ENavigationType {
   INDEX = 'index',
@@ -111,11 +112,11 @@ export class Notification extends TimeStamps {
   @Property({ default: Date.now })
   updatedAt: Date
 
-  static async sendNotification(data: INotification): Promise<void> {
+  static async sendNotification(data: INotification, session?: ClientSession): Promise<void> {
     const notification = new NotificationModel({ ...data, read: false })
-    await notification.save()
-    await UserModel.findByIdAndUpdate(data.userId, { $push: { notifications: notification._id } })
-    const unreadCount = await NotificationModel.countDocuments({ userId: data.userId, read: false })
+    await notification.save({ session })
+    await UserModel.findByIdAndUpdate(data.userId, { $push: { notifications: notification._id } }, { session })
+    const unreadCount = await NotificationModel.countDocuments({ userId: data.userId, read: false }, { session })
     await pubsub.publish(NOTFICATIONS.COUNT, data.userId, unreadCount)
     // Publish to new noti
   }

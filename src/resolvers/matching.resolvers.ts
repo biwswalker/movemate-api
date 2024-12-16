@@ -28,12 +28,13 @@ import { EDriverAcceptanceStatus, EShipmentMatchingCriteria, EShipmentStatus } f
 import { EDriverStatus, EUserRole, EUserStatus, EUserType } from '@enums/users'
 import { decryption } from '@utils/encryption'
 import { th } from 'date-fns/locale'
-import { FilterQuery } from 'mongoose'
+import mongoose, { FilterQuery } from 'mongoose'
 import StepDefinitionModel, {
   EStepDefinition,
   EStepDefinitionName,
   EStepStatus,
 } from '@models/shipmentStepDefinition.model'
+import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
 
 @Resolver()
 export default class MatchingResolver {
@@ -230,8 +231,9 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
   async acceptShipment(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
+    const session = ctx.session
     const userId = ctx.req.user_id
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
@@ -257,7 +259,7 @@ export default class MatchingResolver {
         status: EShipmentStatus.PROGRESSING,
         driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
         ...(isBusinessUser ? { agentDriver: userId } : { driver: userId }),
-      })
+      }, { session })
 
       if (isBusinessUser) {
         /**
@@ -272,16 +274,16 @@ export default class MatchingResolver {
           driverMessage: 'บริษัทมอบหมายงานให้พนักงาน',
           stepStatus: EStepStatus.IDLE,
         })
-        await shipment.addStep(assignShipmentStep)
+        await shipment.addStep(assignShipmentStep, session)
       }
 
       /**
        * Trigger next step
        */
       const freshShipment = await ShipmentModel.findById(shipmentId)
-      await freshShipment.nextStep()
+      await freshShipment.nextStep(undefined, session)
       if (!isBusinessUser) {
-        await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.WORKING })
+        await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.WORKING }, { session })
         // Notification
         const customerId = get(freshShipment, 'customer._id', '')
         if (customerId) {
@@ -292,7 +294,7 @@ export default class MatchingResolver {
             message: [
               `งานขนส่งเลขที่ ${freshShipment.trackingNumber} ได้รับการตอบรับจากคนขับแล้ว คนขับจะติดต่อหาท่านเพื่อนัดหมาย`,
             ],
-          })
+          }, session)
         }
       }
 
@@ -308,11 +310,12 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
   async confirmShipmentDatetime(
     @Ctx() ctx: GraphQLContext,
     @Arg('data') data: ConfirmShipmentDateInput,
   ): Promise<boolean> {
+    const session = ctx.session
     const userId = ctx.req.user_id
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
@@ -324,18 +327,22 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    await shipment.nextStep()
-    await shipment.updateOne({
-      bookingDateTime: data.datetime,
-      isBookingWithDate: true,
-    })
+    await shipment.nextStep(undefined, session)
+    await shipment.updateOne(
+      {
+        bookingDateTime: data.datetime,
+        isBookingWithDate: true,
+      },
+      { session },
+    )
 
     return true
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
   async nextShipmentStep(@Ctx() ctx: GraphQLContext, @Arg('data') data: NextShipmentStepInput): Promise<boolean> {
+    const session = ctx.session
     const userId = ctx.req.user_id
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
@@ -347,17 +354,18 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    await shipment.nextStep(data.images || [])
+    await shipment.nextStep(data.images || [], session)
 
     return true
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
   async sentPODDocument(
     @Ctx() ctx: GraphQLContext,
     @Arg('data') data: SentPODDocumentShipmentStepInput,
   ): Promise<boolean> {
+    const session = ctx.session
     const userId = ctx.req.user_id
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
@@ -368,16 +376,27 @@ export default class MatchingResolver {
       const message = 'ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
+    
+    if (!data.trackingNumber) {
+      const message = 'ไม่สามารถบันทึกได้ เนื่องจากต้องระบุหมายเลขติดตาม'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
+    if (!data.provider) {
+      const message = 'ไม่สามารถบันทึกได้ เนื่องจากต้องระบุบริษัทขนส่ง'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
 
-    await shipment.podSent(data.images || [], data.trackingNumber, data.provider)
+    await shipment.podSent(data.images || [], data.trackingNumber, data.provider, session)
 
     return true
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
   async markAsFinish(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
+    const session = ctx.session
     const userId = ctx.req.user_id
+
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -388,7 +407,7 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    await shipment.finishJob()
+    await shipment.finishJob(session)
 
     const paymentMethod = get(shipment, 'payment.paymentMethod', '')
     const customer = await UserModel.findById(shipment.customer)
@@ -437,13 +456,16 @@ export default class MatchingResolver {
             )
           }
         } else {
-          await BillingCycleModel.generateShipmentReceipt(shipmentId, true)
+          await BillingCycleModel.generateShipmentReceipt(shipmentId, true, session)
         }
       } else {
-        await BillingCycleModel.generateShipmentReceipt(shipmentId, true)
+        console.log('0000. returnedddd................................= ======> Mark as finish')
+        await BillingCycleModel.generateShipmentReceipt(shipmentId, true, session)
+        console.log('111. returnedddd................................= ======> Mark as finish')
       }
     }
-    await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.IDLE })
+    await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.IDLE }, { session })
+    console.log('returnedddd................................= ======> Mark as finish')
     return true
   }
 
@@ -467,12 +489,13 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
   async assignShipment(
     @Ctx() ctx: GraphQLContext,
     @Arg('shipmentId') shipmentId: string,
     @Arg('driverId') driverId: string,
   ): Promise<boolean> {
+    const session = ctx.session
     const userId = ctx.req.user_id
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
@@ -506,9 +529,9 @@ export default class MatchingResolver {
     ) {
       const isBusinessUser = user.userType === EUserType.BUSINESS
       if (isBusinessUser) {
-        await ShipmentModel.findByIdAndUpdate(shipmentId, { driver: driverId })
-        await shipment.nextStep()
-        await UserModel.findByIdAndUpdate(driverId, { drivingStatus: EDriverStatus.WORKING })
+        await ShipmentModel.findByIdAndUpdate(shipmentId, { driver: driverId }, { session })
+        await shipment.nextStep(undefined, session)
+        await UserModel.findByIdAndUpdate(driverId, { drivingStatus: EDriverStatus.WORKING }, { session })
         const customerId = get(shipment, 'customer._id', '')
         if (driver.fcmToken) {
           const token = decryption(driver.fcmToken)

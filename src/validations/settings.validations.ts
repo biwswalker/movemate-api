@@ -47,3 +47,18 @@ const InstructionsValueSchema = Yup.object().shape({
 export const InstructionsSchema = Yup.object().shape({
     instructions: Yup.array(InstructionsValueSchema),
 })
+
+export const FinancialSchema = Yup.object().shape({
+    bank: Yup.string().required('ระบุธนาคารที่ชำระ'),
+    bankBranch: Yup.string()
+      .required('ระบุชื่อสาขาธนาคาร')
+      .matches(/^[a-zA-Z0-9ก-๙\s]+$/g, 'ไม่อนุญาตมีอักษรพิเศษ'),
+    bankName: Yup.string().required('ระบุชื่อบัญชี'),
+    // .matches(/^[a-zA-Z0-9ก-๙\s]+$/g, 'ไม่อนุญาตมีอักษรพิเศษ'),
+    bankNumber: Yup.string()
+      .required('ระบุเลขที่บัญชี')
+      .matches(/^[0-9\s]+$/g, 'ตัวเลขเท่านั้น')
+      .min(10, 'ตัวเลขขั้นต่ำ 10 หลัก')
+      .max(15, 'ตัวเลขสูงสุด 15 หลัก'),
+    descriptions: Yup.string(),
+  })

@@ -38,12 +38,14 @@ import EventResolver from '@resolvers/event.resolvers'
 import SearchHistoryResolver from '@resolvers/search.resolvers'
 import DriverPaymentResolver from '@resolvers/driverpayment.resolvers'
 import UserPendingResolver from '@resolvers/userPending.resolvers'
+import { ClientSession } from 'mongoose'
 
 export interface GraphQLContext {
   req: Request
   res: Response
   ip: string
   pubsub: typeof pubSub
+  session?: ClientSession
 }
 
 export interface AuthContext {

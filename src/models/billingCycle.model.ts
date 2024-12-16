@@ -434,7 +434,7 @@ export class BillingCycle extends TimeStamps {
       // Update shipment
       const shipments = billingCycle.shipments
       await Aigle.forEach(shipments as Shipment[], async (shipment) => {
-        const shipmentModel = await ShipmentModel.findById(shipment).session(session)
+        const shipmentModel = await ShipmentModel.findById(shipment)
         const payment = await PaymentModel.findById(shipmentModel.payment).lean()
 
         // Update Payment model
@@ -467,22 +467,25 @@ export class BillingCycle extends TimeStamps {
       const customerId = get(billingCycle, 'user._id', '')
       if (customerId) {
         // Check other billing is overdue
-        const customerModel = await UserModel.findById(customerId).session(session)
+        const customerModel = await UserModel.findById(customerId)
         const creditPaymentId = get(customerModel, 'businessDetail.creditPayment._id', '')
         if (billingCycle.paymentMethod === EPaymentMethod.CREDIT && creditPaymentId) {
-          const creditPayment = await BusinessCustomerCreditPaymentModel.findById(creditPaymentId).session(session)
+          const creditPayment = await BusinessCustomerCreditPaymentModel.findById(creditPaymentId)
           const newCreditOutstandingBalance = sum([creditPayment.creditOutstandingBalance, -billingCycle.totalAmount])
           const newCreditBalance = sum([creditPayment.creditUsage, -billingCycle.totalAmount])
-          await creditPayment.updateOne({
-            creditUsage: newCreditBalance,
-            creditOutstandingBalance: newCreditOutstandingBalance,
-          }, { session })
+          await creditPayment.updateOne(
+            {
+              creditUsage: newCreditBalance,
+              creditOutstandingBalance: newCreditOutstandingBalance,
+            },
+            { session },
+          )
         }
         // const creditDetail = awa/
         const billingCycles = await BillingCycleModel.find({
           user: customerId,
           billingStatus: EBillingStatus.OVERDUE,
-        }).session(session).lean()
+        }).lean()
         if (isEmpty(billingCycles)) {
           await UserModel.findByIdAndUpdate(customerId, { status: EUserStatus.ACTIVE }, { session })
         }
@@ -493,17 +496,23 @@ export class BillingCycle extends TimeStamps {
     }
   }
 
-  static async rejectedPayment(billingCycleId: string, userId: string, reason?: string, otherReason?: string) {
+  static async rejectedPayment(
+    billingCycleId: string,
+    userId: string,
+    reason?: string,
+    otherReason?: string,
+    session?: ClientSession,
+  ) {
     const billingCycle = await BillingCycleModel.findById(billingCycleId).lean()
     if (billingCycle) {
       const billingPayment = await BillingPaymentModel.findById(billingCycle.billingPayment)
-      await billingPayment.updateOne({ status: EBillingPaymentStatus.FAILED })
+      await billingPayment.updateOne({ status: EBillingPaymentStatus.FAILED }, { session })
       const _refund = new RefundModel({
         updatedBy: userId,
         refundAmout: billingPayment.paymentAmount,
         refundStatus: ERefundStatus.PENDING,
       })
-      await _refund.save()
+      await _refund.save({ session })
       // Update Biling cycle model
       const _billingCycleUpdateHistory = new UpdateHistoryModel({
         referenceId: billingCycleId,
@@ -518,14 +527,18 @@ export class BillingCycle extends TimeStamps {
           rejectedDetail: otherReason,
         },
       })
-      await _billingCycleUpdateHistory.save()
-      await BillingCycleModel.findByIdAndUpdate(billingCycle._id, {
-        billingStatus: EBillingStatus.REFUND,
-        refund: _refund,
-        rejectedReason: reason,
-        rejectedDetail: otherReason,
-        $push: { history: _billingCycleUpdateHistory },
-      })
+      await _billingCycleUpdateHistory.save({ session })
+      await BillingCycleModel.findByIdAndUpdate(
+        billingCycle._id,
+        {
+          billingStatus: EBillingStatus.REFUND,
+          refund: _refund,
+          rejectedReason: reason,
+          rejectedDetail: otherReason,
+          $push: { history: _billingCycleUpdateHistory },
+        },
+        { session },
+      )
       // Update shipment
       const shipments = billingCycle.shipments
       await Aigle.forEach(shipments as Shipment[], async (shipment) => {
@@ -545,16 +558,28 @@ export class BillingCycle extends TimeStamps {
             rejectionOtherReason: otherReason || '',
           },
         })
-        await _paymentUpdateHistory.save()
-        await PaymentModel.findByIdAndUpdate(payment._id, {
-          status: EPaymentStatus.REFUND,
-          rejectionReason: reason,
-          rejectionOtherReason: otherReason || '',
-          $push: { history: _paymentUpdateHistory },
-        })
+        await _paymentUpdateHistory.save({ session })
+        await PaymentModel.findByIdAndUpdate(
+          payment._id,
+          {
+            status: EPaymentStatus.REFUND,
+            rejectionReason: reason,
+            rejectionOtherReason: otherReason || '',
+            $push: { history: _paymentUpdateHistory },
+          },
+          { session },
+        )
 
         // Update Shipment model
-        await ShipmentModel.markAsCashVerified(shipment._id, 'reject', userId, reason, otherReason, _refund._id)
+        await ShipmentModel.markAsCashVerified(
+          shipment._id,
+          'reject',
+          userId,
+          reason,
+          otherReason,
+          _refund._id,
+          session,
+        )
       })
 
       // Trigger admin notification
@@ -586,6 +611,8 @@ export class BillingCycle extends TimeStamps {
 
       // For Movemate transaction
       const movemateTransaction = new TransactionModel({
+        amountTax: 0, // WHT
+        amountBeforeTax: refundModel.refundAmout,
         amount: refundModel.refundAmout,
         ownerId: MOVEMATE_OWNER_ID,
         ownerType: ETransactionOwner.MOVEMATE,
@@ -797,8 +824,13 @@ export class BillingCycle extends TimeStamps {
 
     // เพิ่ม transaction income ให้กับ driver
     if (isDriverAccepted && driver) {
+      const driverSubtotal = forDriver
+      const driverTax = driverSubtotal * 0.01
+      const driverTotal = sum([driverSubtotal, -driverTax])
       const driverTransaction = new TransactionModel({
-        amount: forDriver,
+        amountTax: driverTax, // WHT
+        amountBeforeTax: driverSubtotal,
+        amount: driverTotal,
         ownerId: driver._id,
         ownerType: ETransactionOwner.DRIVER,
         description: description,
@@ -971,7 +1003,7 @@ export class BillingCycle extends TimeStamps {
      */
   }
 
-  static async generateShipmentReceipt(shipmentId: string, sentEmail?: boolean) {
+  static async generateShipmentReceipt(shipmentId: string, sentEmail?: boolean, session?: ClientSession) {
     /**
      * Generate receipt
      */
