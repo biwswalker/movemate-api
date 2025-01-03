@@ -205,7 +205,6 @@ export class Transaction extends TimeStamps {
   ): Promise<DriverTransactionsAggregatePayload> {
     const { sort = {}, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
     const driver = await UserModel.findOne({ userNumber: driverNumber })
-    console.log('Qwerty', JSON.stringify(DRIVER_TRANSACTIONS(driver._id.toString(), query, sort), undefined, 2))
     const aggregate = TransactionModel.aggregate(DRIVER_TRANSACTIONS(driver._id.toString(), query, sort))
     const transactions = (await TransactionModel.aggregatePaginate(
       aggregate,

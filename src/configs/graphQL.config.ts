@@ -28,8 +28,6 @@ import AddressResolver from '@resolvers/address.resolvers'
 import OTPRequestResolver from '@resolvers/otp.resolvers'
 import DriverResolver from '@resolvers/driver.resolvers'
 import MatchingResolver from '@resolvers/matching.resolvers'
-import BillingCycleResolver from '@resolvers/billingCycle.resolvers'
-import BillingPaymentResolver from '@resolvers/billingPayment.resolvers'
 import TransactionResolver from '@resolvers/transaction.resolvers'
 import CancellationResolver from '@resolvers/cancellation.resolvers'
 import { verifyAccessToken } from '@utils/auth.utils'
@@ -39,6 +37,7 @@ import SearchHistoryResolver from '@resolvers/search.resolvers'
 import DriverPaymentResolver from '@resolvers/driverpayment.resolvers'
 import UserPendingResolver from '@resolvers/userPending.resolvers'
 import { ClientSession } from 'mongoose'
+import BillingResolver from '@resolvers/billing.resolvers'
 
 export interface GraphQLContext {
   req: Request
@@ -77,8 +76,6 @@ export async function createGraphQLServer(httpServer: http.Server) {
       OTPRequestResolver,
       DriverResolver,
       MatchingResolver,
-      BillingCycleResolver,
-      BillingPaymentResolver,
       TransactionResolver,
       CancellationResolver,
       FavoriteDriverResolver,
@@ -86,6 +83,7 @@ export async function createGraphQLServer(httpServer: http.Server) {
       SearchHistoryResolver,
       DriverPaymentResolver,
       UserPendingResolver,
+      BillingResolver,
     ],
     pubSub: pubSub,
     authChecker: ({ context }: { context: GraphQLContext }) => {

@@ -4,43 +4,60 @@ import fs from 'fs'
 import path from 'path'
 import { fCurrency } from '@utils/formatNumber'
 import { fDate } from '@utils/formatTime'
-import ThaiBahtText from 'thai-baht-text'
-import BillingCycleModel, { BillingCycle } from '@models/billingCycle.model'
 import { User } from '@models/user.model'
 import { BusinessCustomer } from '@models/customerBusiness.model'
 import { BusinessCustomerCreditPayment } from '@models/customerBusinessCreditPayment.model'
 import { IndividualCustomer } from '@models/customerIndividual.model'
 import { Shipment } from '@models/shipment.model'
 import { VehicleType } from '@models/vehicleType.model'
-import { Payment } from '@models/payment.model'
 import { EPaymentMethod } from '@enums/payments'
 import { EUserType } from '@enums/users'
+import { Billing } from '@models/finance/billing.model'
+import { Payment } from '@models/finance/payment.model'
+import InvoiceModel, { Invoice } from '@models/finance/invoice.model'
+import BillingDocumentModel, { BillingDocument } from '@models/finance/documents.model'
+import { GraphQLError } from 'graphql'
+import { ClientSession } from 'mongoose'
 
-const sarabunThin = path.join(__dirname, '..', 'assets/fonts/Sarabun-Thin.ttf')
-const sarabunExtraLight = path.join(__dirname, '..', 'assets/fonts/Sarabun-ExtraLight.ttf')
 const sarabunLight = path.join(__dirname, '..', 'assets/fonts/Sarabun-Light.ttf')
 const sarabunRegular = path.join(__dirname, '..', 'assets/fonts/Sarabun-Regular.ttf')
 const sarabunMedium = path.join(__dirname, '..', 'assets/fonts/Sarabun-Medium.ttf')
-const sarabunSemiBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-SemiBold.ttf')
-const sarabunBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-Bold.ttf')
-const sarabunExtraBold = path.join(__dirname, '..', 'assets/fonts/Sarabun-ExtraBold.ttf')
 
-export async function generateInvoice(billingCycle: BillingCycle) {
+interface GenerateInvoiceResponse {
+  fileName: string
+  filePath: string
+  document: BillingDocument
+}
+
+/**
+ * `billing` should be an object of Billing model (`lean` function is cannot be used)
+ * @param billing
+ * @param session
+ * @returns GenerateInvoiceResponse
+ */
+export async function generateInvoice(billing: Billing, session?: ClientSession): Promise<GenerateInvoiceResponse> {
+  const _invoice = billing.invoice as Invoice | undefined
+  if (!_invoice) {
+    const message = 'ไม่สามารถหาข้อมูลใบแจ้งหนี้ได้ เนื่องจากไม่พบใบแจ้งหนี้'
+    throw new GraphQLError(message, {
+      extensions: { code: 'NOT_FOUND', errors: [{ message }] },
+    })
+  }
+
   const logoPath = path.join(__dirname, '..', 'assets/images/logo_bluesky.png')
   const kbankPath = path.join(__dirname, '..', 'assets/images/kbank-full.png')
-  const fileName = `invoice_${billingCycle.billingNumber}.pdf`
+  const fileName = `invoice_${_invoice.invoiceNumber}.pdf`
   const filePath = path.join(__dirname, '..', '..', 'generated/invoice', fileName)
 
   const doc = new PDFDocument({ size: 'A4', margins: { top: 60, bottom: 56, left: 22, right: 22 } })
   const writeStream = fs.createWriteStream(filePath)
   doc.pipe(writeStream)
 
-
   let splitIndex: number[] = []
   let stackHeight = 0
   const maxHeight = 326
   doc.font(sarabunLight).fontSize(8)
-  const billingShipments = get(billingCycle, 'shipments', []) as Shipment[]
+  const billingShipments = get(billing, 'shipments', []) as Shipment[]
   billingShipments.forEach((data, index) => {
     const pickup = head(data.destinations)
     const dropoffs = tail(data.destinations)
@@ -107,16 +124,16 @@ export async function generateInvoice(billingCycle: BillingCycle) {
     doc.moveDown(0.5)
     doc.fontSize(8)
     doc.font(sarabunMedium).text('Invoice No.:', 420, doc.y, { align: 'right', width: 74 }) // 81
-    doc.font(sarabunLight).text(billingCycle.billingNumber, 504, doc.y - 10, { align: 'left' })
+    doc.font(sarabunLight).text(_invoice.invoiceNumber, 504, doc.y - 10, { align: 'left' })
     doc.moveDown(0.3)
     doc.font(sarabunMedium).text('Date :', 420, doc.y, { align: 'right', width: 74 }) // 81
 
-    const issueInBEDateMonth = fDate(billingCycle.issueDate, 'dd/MM')
-    const issueInBEYear = toNumber(fDate(billingCycle.issueDate, 'yyyy')) + 543
+    const issueInBEDateMonth = fDate(billing.issueDate, 'dd/MM')
+    const issueInBEYear = toNumber(fDate(billing.issueDate, 'yyyy')) + 543
     doc.font(sarabunLight).text(`${issueInBEDateMonth}/${issueInBEYear}`, 504, doc.y - 10, { align: 'left' })
 
-    const duedateInBEDateMonth = fDate(billingCycle.paymentDueDate, 'dd/MM')
-    const duedateInBEYear = toNumber(fDate(billingCycle.paymentDueDate, 'yyyy')) + 543
+    const duedateInBEDateMonth = fDate(billing.paymentDueDate, 'dd/MM')
+    const duedateInBEYear = toNumber(fDate(billing.paymentDueDate, 'yyyy')) + 543
     doc.moveDown(0.3)
     doc.font(sarabunMedium).text('Due Date :', 420, doc.y, { align: 'right', width: 74 }) // 81
     doc.font(sarabunLight).text(`${duedateInBEDateMonth}/${duedateInBEYear}`, 504, doc.y - 10, { align: 'left' })
@@ -131,7 +148,7 @@ export async function generateInvoice(billingCycle: BillingCycle) {
       .stroke()
 
     let address = '-'
-    const user = get(billingCycle, 'user', undefined) as User | undefined
+    const user = get(billing, 'user', undefined) as User | undefined
     const businessDetail = get(user, 'businessDetail', undefined) as BusinessCustomer | undefined
     const paymentMethod = get(businessDetail, 'paymentMethod', '')
     if (paymentMethod === EPaymentMethod.CASH) {
@@ -164,9 +181,7 @@ export async function generateInvoice(billingCycle: BillingCycle) {
     doc.font(sarabunLight).text(taxId, 110, doc.y - 9)
     doc.moveDown(0.6)
     doc.font(sarabunMedium).text('ที่อยู่ :', 22)
-    doc
-      .font(sarabunLight)
-      .text(address, 110, doc.y - 9)
+    doc.font(sarabunLight).text(address, 110, doc.y - 9)
 
     // Page detail
     doc.moveDown(2.1)
@@ -246,142 +261,144 @@ export async function generateInvoice(billingCycle: BillingCycle) {
           .text(fDate(shipment.bookingDateTime, 'dd/MM/yyyy'), 54, currentY, { width: 64, align: 'center' })
           .text(shipment.trackingNumber, 118, currentY, { width: 64, align: 'center' })
           .text(details, 182, currentY, { width: 260, align: 'left' })
-          .text(fCurrency(payment.invoice.totalPrice || 0), 442, currentY, { width: 64, align: 'right' })
-          .text(fCurrency(payment.invoice.totalPrice || 0), 506, currentY, { width: 78, align: 'right' })
+          .text(fCurrency(payment.total || 0), 442, currentY, { width: 64, align: 'right' })
+          .text(fCurrency(payment.total || 0), 506, currentY, { width: 78, align: 'right' })
       })
     })
   }
 
-  function FooterComponent() {
-    // Summary and Payment detail
-    // Seperate line
-    // doc.moveDown(2)
-    doc
-      .lineCap('butt')
-      .lineWidth(1.5)
-      .moveTo(22, doc.y + latestHeight)
-      .lineTo(584, doc.y + latestHeight)
-      .stroke()
+  // function FooterComponent() {
+  //   // Summary and Payment detail
+  //   // Seperate line
+  //   // doc.moveDown(2)
+  //   doc
+  //     .lineCap('butt')
+  //     .lineWidth(1.5)
+  //     .moveTo(22, doc.y + latestHeight)
+  //     .lineTo(584, doc.y + latestHeight)
+  //     .stroke()
 
-    // Total detail
-    doc.fontSize(8)
-    doc.font(sarabunMedium).text('รวมเป็นเงิน :', 0, doc.y + latestHeight + 16, { width: 450, align: 'right' })
-    doc.font(sarabunLight).text(fCurrency(billingCycle.subTotalAmount), 450, doc.y - 10, { align: 'right', width: 128 })
-    if (billingCycle.taxAmount > 0) {
-      doc.moveDown(1.6)
-      doc.font(sarabunMedium).text('ภาษีหัก ณ ที่จ่าย 1% :', 0, doc.y - 10, { width: 450, align: 'right' })
-      doc.font(sarabunLight).text(`-${fCurrency(billingCycle.taxAmount)}`, 450, doc.y - 10, { align: 'right', width: 128 })
-    }
-    doc.moveDown(2.6)
-    doc.fontSize(10)
-    doc.font(sarabunMedium).text('รวมที่ต้องชำระทั้งสิ้น :', 0, doc.y - 12, { width: 450, align: 'right' })
-    doc.font(sarabunSemiBold).text(fCurrency(billingCycle.totalAmount), 450, doc.y - 12, { align: 'right', width: 128 })
-    doc
-      .fontSize(7)
-      .font(sarabunLight)
-      .text(`( ${ThaiBahtText(billingCycle.totalAmount)} )`, 0, doc.y + 4, {
-        align: 'right',
-        width: 578,
-      })
+  //   // Total detail
+  //   doc.fontSize(8)
+  //   doc.font(sarabunMedium).text('รวมเป็นเงิน :', 0, doc.y + latestHeight + 16, { width: 450, align: 'right' })
+  //   doc.font(sarabunLight).text(fCurrency(billingCycle.subTotalAmount), 450, doc.y - 10, { align: 'right', width: 128 })
+  //   if (billingCycle. > 0) {
+  //     doc.moveDown(1.6)
+  //     doc.font(sarabunMedium).text('ภาษีหัก ณ ที่จ่าย 1% :', 0, doc.y - 10, { width: 450, align: 'right' })
+  //     doc.font(sarabunLight).text(`-${fCurrency(billingCycle.taxAmount)}`, 450, doc.y - 10, { align: 'right', width: 128 })
+  //   }
+  //   doc.moveDown(2.6)
+  //   doc.fontSize(10)
+  //   doc.font(sarabunMedium).text('รวมที่ต้องชำระทั้งสิ้น :', 0, doc.y - 12, { width: 450, align: 'right' })
+  //   doc.font(sarabunSemiBold).text(fCurrency(billingCycle.totalAmount), 450, doc.y - 12, { align: 'right', width: 128 })
+  //   doc
+  //     .fontSize(7)
+  //     .font(sarabunLight)
+  //     .text(`( ${ThaiBahtText(billingCycle.totalAmount)} )`, 0, doc.y + 4, {
+  //       align: 'right',
+  //       width: 578,
+  //     })
 
-    // Policy detail
-    doc.moveDown(3.5)
-    doc.fontSize(8)
-    doc.font(sarabunMedium).text('เงื่อนไขการชำระเงิน:', 22)
-    doc
-      .font(sarabunLight)
-      .text('ภายใน 7 วันปฏิทินนับจากวันที่ออกใบแจ้งหนี้ ในกรณีที่ชำระเงินไม่ตรงตามระยะเวลาที่กำหนด', 92, doc.y - 10)
-    doc.moveDown(0.3)
-    doc.text(
-      'บริษัทฯจะคิดค่าธรรมเนียมอัตราร้อยละ 3.0 ต่อเดือนของยอดค้างชำระจนถึงวันที่ชำระเงินครบถ้วน ทั้งนี้ Movemate มีสิทธิ์ที่จะยกเลิกส่วนลดที่เกิดขึ้นก่อนทั้งหมด',
-      22,
-    )
+  //   // Policy detail
+  //   doc.moveDown(3.5)
+  //   doc.fontSize(8)
+  //   doc.font(sarabunMedium).text('เงื่อนไขการชำระเงิน:', 22)
+  //   doc
+  //     .font(sarabunLight)
+  //     .text('ภายใน 7 วันปฏิทินนับจากวันที่ออกใบแจ้งหนี้ ในกรณีที่ชำระเงินไม่ตรงตามระยะเวลาที่กำหนด', 92, doc.y - 10)
+  //   doc.moveDown(0.3)
+  //   doc.text(
+  //     'บริษัทฯจะคิดค่าธรรมเนียมอัตราร้อยละ 3.0 ต่อเดือนของยอดค้างชำระจนถึงวันที่ชำระเงินครบถ้วน ทั้งนี้ Movemate มีสิทธิ์ที่จะยกเลิกส่วนลดที่เกิดขึ้นก่อนทั้งหมด',
+  //     22,
+  //   )
 
-    // Bank detail
-    doc.moveDown(3.5)
-    doc.text('ช่องทางชำระ :')
-    doc.text('ธนาคาร กสิกรไทย', 80, doc.y - 10)
-    doc.image(kbankPath, 220, doc.y - 20, { width: 100 })
-    doc.moveDown(0.5)
-    doc.text('ชื่อบัญชี :', 22)
-    doc.text('บริษัท เทพพรชัย เอ็นเทอร์ไพรส์ จำกัด', 80, doc.y - 10)
-    doc.moveDown(0.5)
-    doc.text('เลขที่บัญชี :', 22)
-    doc.text('117-1-54180-4', 80, doc.y - 10)
-    doc.moveDown(0.5)
-    doc.text('ประเภทบัญชี :', 22)
-    doc.text('ออมทรัพย์', 80, doc.y - 10)
-    doc.moveDown(0.5)
-    doc.text('สาขา :', 22)
-    doc.text('เซ็นทรัล บางนา', 80, doc.y - 10)
+  //   // Bank detail
+  //   doc.moveDown(3.5)
+  //   doc.text('ช่องทางชำระ :')
+  //   doc.text('ธนาคาร กสิกรไทย', 80, doc.y - 10)
+  //   doc.image(kbankPath, 220, doc.y - 20, { width: 100 })
+  //   doc.moveDown(0.5)
+  //   doc.text('ชื่อบัญชี :', 22)
+  //   doc.text('บริษัท เทพพรชัย เอ็นเทอร์ไพรส์ จำกัด', 80, doc.y - 10)
+  //   doc.moveDown(0.5)
+  //   doc.text('เลขที่บัญชี :', 22)
+  //   doc.text('117-1-54180-4', 80, doc.y - 10)
+  //   doc.moveDown(0.5)
+  //   doc.text('ประเภทบัญชี :', 22)
+  //   doc.text('ออมทรัพย์', 80, doc.y - 10)
+  //   doc.moveDown(0.5)
+  //   doc.text('สาขา :', 22)
+  //   doc.text('เซ็นทรัล บางนา', 80, doc.y - 10)
 
-    // After transfer detail
-    doc.moveDown(1)
-    doc.fontSize(6).fillColor('#212B36')
-    doc.text('เมื่อท่านได้ชำระแล้วกรุณาส่งหลักฐานการชำระ มาที่ acc@movemateth.com พร้อมอ้างอิงเลขที่ใบแจ้งหนี้', 22)
-    doc.moveDown(1)
-    doc.text('*หากต้องการแก้ไขใบแจ้งหนี้และใบเสร็จรับเงิน กรุณาติตต่อ acc@movemateth.com ภายใน 3 วันทำการ')
-    doc.moveDown(1)
-    doc.text(
-      'หลังจากได้รับเอกสาร มิเช่นนั้นทำงบริษัทฯ จะถือว่าเอกสารดังกล่าวถูกต้อง ครบถ้วน สมบูรณ์ เป็นที่เรียบร้อยแล้ว',
-    )
+  //   // After transfer detail
+  //   doc.moveDown(1)
+  //   doc.fontSize(6).fillColor('#212B36')
+  //   doc.text('เมื่อท่านได้ชำระแล้วกรุณาส่งหลักฐานการชำระ มาที่ acc@movemateth.com พร้อมอ้างอิงเลขที่ใบแจ้งหนี้', 22)
+  //   doc.moveDown(1)
+  //   doc.text('*หากต้องการแก้ไขใบแจ้งหนี้และใบเสร็จรับเงิน กรุณาติตต่อ acc@movemateth.com ภายใน 3 วันทำการ')
+  //   doc.moveDown(1)
+  //   doc.text(
+  //     'หลังจากได้รับเอกสาร มิเช่นนั้นทำงบริษัทฯ จะถือว่าเอกสารดังกล่าวถูกต้อง ครบถ้วน สมบูรณ์ เป็นที่เรียบร้อยแล้ว',
+  //   )
 
-    const halfWidth = doc.page.width / 2
+  //   const halfWidth = doc.page.width / 2
 
-    // Signatures
-    doc.moveDown(7)
-    doc.fontSize(7).fillColor('#000')
-    doc
-      .fillColor('#919EAB')
-      .text('______________________________________________________________', 0, doc.y, {
-        width: halfWidth,
-        align: 'center',
-      })
-      .text('______________________________________________________________', halfWidth, doc.y - 9, {
-        width: halfWidth,
-        align: 'center',
-      })
-    doc.moveDown(0.8)
-    doc
-      .fillColor('#000')
-      .text('(.............................................................................)', 0, doc.y, {
-        width: halfWidth,
-        align: 'center',
-      })
-      .text('(.............................................................................)', halfWidth, doc.y - 9, {
-        width: halfWidth,
-        align: 'center',
-      })
-    doc.moveDown(0.6)
-    doc
-      .text('วันที่ .................... / ............................ / ...................', 0, doc.y, {
-        width: halfWidth,
-        align: 'center',
-      })
-      .text('วันที่ .................... / ............................ / ...................', halfWidth, doc.y - 9, {
-        width: doc.page.width / 2,
-        align: 'center',
-      })
-    doc.moveDown(0.6)
-    doc
-      .fillColor('#212B36')
-      .text('(ผู้ใช้บริการ)', 0, doc.y, { width: halfWidth, align: 'center' })
-      .text('(ผู้ให้บริการ)', halfWidth, doc.y - 9, { width: halfWidth, align: 'center' })
+  //   // Signatures
+  //   doc.moveDown(7)
+  //   doc.fontSize(7).fillColor('#000')
+  //   doc
+  //     .fillColor('#919EAB')
+  //     .text('______________________________________________________________', 0, doc.y, {
+  //       width: halfWidth,
+  //       align: 'center',
+  //     })
+  //     .text('______________________________________________________________', halfWidth, doc.y - 9, {
+  //       width: halfWidth,
+  //       align: 'center',
+  //     })
+  //   doc.moveDown(0.8)
+  //   doc
+  //     .fillColor('#000')
+  //     .text('(.............................................................................)', 0, doc.y, {
+  //       width: halfWidth,
+  //       align: 'center',
+  //     })
+  //     .text('(.............................................................................)', halfWidth, doc.y - 9, {
+  //       width: halfWidth,
+  //       align: 'center',
+  //     })
+  //   doc.moveDown(0.6)
+  //   doc
+  //     .text('วันที่ .................... / ............................ / ...................', 0, doc.y, {
+  //       width: halfWidth,
+  //       align: 'center',
+  //     })
+  //     .text('วันที่ .................... / ............................ / ...................', halfWidth, doc.y - 9, {
+  //       width: doc.page.width / 2,
+  //       align: 'center',
+  //     })
+  //   doc.moveDown(0.6)
+  //   doc
+  //     .fillColor('#212B36')
+  //     .text('(ผู้ใช้บริการ)', 0, doc.y, { width: halfWidth, align: 'center' })
+  //     .text('(ผู้ให้บริการ)', halfWidth, doc.y - 9, { width: halfWidth, align: 'center' })
 
-  }
+  // }
 
   // ==============
   ContentComponent()
-  FooterComponent()
+  // FooterComponent()
   doc.addPage()
   ContentComponent(false)
-  FooterComponent()
+  // FooterComponent()
 
   doc.end()
 
   await new Promise((resolve) => writeStream.on('finish', resolve))
 
-  await BillingCycleModel.findByIdAndUpdate(billingCycle._id, { issueInvoiceFilename: fileName })
+  const _document = new BillingDocumentModel({ filename: fileName })
+  await _document.save({ session })
+  await InvoiceModel.findByIdAndUpdate(_invoice._id, { document: _document }, { session })
 
-  return { fileName, filePath }
+  return { fileName, filePath, document: _document }
 }

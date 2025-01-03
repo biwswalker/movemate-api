@@ -15,6 +15,7 @@ import BusinessCustomerCashPaymentModel from './customerBusinessCashPayment.mode
 import DriverDetailModel, { DriverDetail } from './driverDetail.model'
 import { EUpdateUserStatus, EUserRole, EUserType } from '@enums/users'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
+import { get } from 'lodash'
 
 @plugin(autopopulate)
 @plugin(mongoosePagination)
@@ -76,20 +77,24 @@ export class UserPending extends TimeStamps {
      * TODO:
      * Add approved admin user
      */
-    const userModel = await UserModel.findById(this.userId).lean()
-    if (this.profileImage) {
-      await UserModel.findByIdAndUpdate(userModel._id, { profileImage: this.profileImage })
+    const _userId = get(this, '_doc.userId', '') || this.userId
+    const _profileImage = get(this, '_doc.profileImage', '') || this.profileImage
+    const userModel = await UserModel.findById(_userId).lean()
+    if (_profileImage) {
+      await UserModel.findByIdAndUpdate(userModel._id, { profileImage: _profileImage })
     }
     if (userModel.userRole === EUserRole.CUSTOMER) {
       if (userModel.userType === EUserType.INDIVIDUAL && userModel.individualDetail) {
         const individualCustomerModel = await IndividualCustomerModel.findById(userModel.individualDetail).lean()
         if (individualCustomerModel) {
-          await IndividualCustomerModel.findByIdAndUpdate(individualCustomerModel._id, this.individualDetail)
+          const _individualDetail = get(this, '_doc.individualDetail', '') || this.individualDetail
+          await IndividualCustomerModel.findByIdAndUpdate(individualCustomerModel._id, _individualDetail)
         }
       } else if (userModel.userType === EUserType.BUSINESS) {
         const businessCustomerModel = await BusinessCustomerModel.findById(userModel.businessDetail).lean()
         if (businessCustomerModel) {
-          const { changePaymentMethodRequest, creditPayment, ...detail } = this.businessDetail
+          const _businessDetail = get(this, '_doc.businessDetail', '') || this.businessDetail
+          const { changePaymentMethodRequest, creditPayment, ...detail } = _businessDetail
           let creditId = null
           let cashId = null
           if (detail.paymentMethod === EPaymentMethod.CREDIT) {

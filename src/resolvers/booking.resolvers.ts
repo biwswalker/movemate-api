@@ -1,19 +1,20 @@
-import { Resolver, Ctx, UseMiddleware, Query, Mutation, Arg, Args } from 'type-graphql'
+import { Resolver, Ctx, UseMiddleware, Query, Mutation, Arg } from 'type-graphql'
 import { GraphQLContext } from '@configs/graphQL.config'
 import { isEmpty } from 'lodash'
-import { BookingConfigPayload, SubtotalCalculatedPayload } from '@payloads/booking.payloads'
+import { BookingConfigPayload } from '@payloads/booking.payloads'
 import { AllowGuard, AuthGuard } from '@guards/auth.guards'
 import VehicleCostModel from '@models/vehicleCost.model'
-import { PODAddressInput, SubtotalCalculationArgs } from '@inputs/booking.input'
+import { CalculationInput, PODAddressInput } from '@inputs/booking.input'
 import PODAddressModel, { PODAddress } from '@models/podAddress.model'
 import UserModel from '@models/user.model'
 import { BusinessCustomer } from '@models/customerBusiness.model'
 import { Types } from 'mongoose'
-import ShipmentModel from '@models/shipment.model'
 import SearchHistoryModel from '@models/searchHistory.model'
 import { ELimiterType, getLatestCount } from '@configs/rateLimit'
 import { EPaymentMethod } from '@enums/payments'
 import { EUserRole, EUserType } from '@enums/users'
+import { calculateQuotation } from '@controllers/quotation'
+import { CalculateQuotationResultPayload } from '@payloads/quotation.payloads'
 
 @Resolver()
 export default class BookingResolver {
@@ -108,14 +109,15 @@ export default class BookingResolver {
     }
   }
 
-  @Mutation(() => SubtotalCalculatedPayload)
+  @Mutation(() => CalculateQuotationResultPayload)
   @UseMiddleware(AllowGuard)
   async subtotalCalculation(
     @Ctx() ctx: GraphQLContext,
-    @Args() args: SubtotalCalculationArgs,
-  ): Promise<SubtotalCalculatedPayload> {
+    @Arg('data') data: CalculationInput,
+  ): Promise<CalculateQuotationResultPayload> {
+    const customerId = ctx.req.user_id
     try {
-      const calculate = await ShipmentModel.calculate(args)
+      const result = await calculateQuotation(data, customerId)
 
       const ip = ctx.ip
       const type: TSearchType = 'pricing'
@@ -123,16 +125,18 @@ export default class BookingResolver {
       const searchHistory = new SearchHistoryModel({
         ipaddress: ip,
         isCache: false,
-        inputRaw: JSON.stringify(args),
-        resultRaw: JSON.stringify(calculate),
-        count,
+        inputRaw: JSON.stringify(data),
+        resultRaw: JSON.stringify(result),
         limit: ctx.req.limit,
         type: type,
+        count,
       })
 
       await searchHistory.save()
-      return calculate
+
+      return result
     } catch (error) {
+      console.log('error: ', error)
       throw error
     }
   }

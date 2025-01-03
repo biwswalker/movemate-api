@@ -1,12 +1,13 @@
 import { Field, Int, ObjectType } from 'type-graphql'
 import { PaginationPayload } from './pagination.payloads'
 import { AggregatePaginateResult } from 'mongoose'
-import { BillingCycle, EBillingStatus } from '@models/billingCycle.model'
+import { EBillingCriteriaStatus } from '@enums/billing'
+import { Billing } from '@models/finance/billing.model'
 
 @ObjectType()
-export class BillingCyclePaginationAggregatePayload extends PaginationPayload implements AggregatePaginateResult<BillingCycle> {
-  @Field(() => [BillingCycle])
-  docs: BillingCycle[]
+export class BillingListPayload extends PaginationPayload implements AggregatePaginateResult<Billing> {
+  @Field(() => [Billing])
+  docs: Billing[]
 }
 
 @ObjectType()
@@ -15,7 +16,7 @@ export class TotalBillingRecordPayload {
   label: string
 
   @Field()
-  key: EBillingStatus | 'all'
+  key: EBillingCriteriaStatus
 
   @Field(() => Int)
   count: number

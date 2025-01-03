@@ -10,6 +10,221 @@ import { GetUserArgs } from '@inputs/user.input'
 import { format } from 'date-fns'
 import { toNumber } from 'lodash'
 import { PipelineStage, Types } from 'mongoose'
+import { filePipelineStage } from './file.pipline'
+
+export function GET_USER_LOOKUPS() {
+  const businessDetailLookup: PipelineStage.Lookup = {
+    $lookup: {
+      from: 'businesscustomers',
+      localField: 'businessDetail',
+      foreignField: '_id',
+      as: 'businessDetail',
+      pipeline: [
+        {
+          $lookup: {
+            from: 'businesscustomercreditpayments',
+            localField: 'creditPayment',
+            foreignField: '_id',
+            as: 'creditPayment',
+            pipeline: [
+              ...filePipelineStage('businessRegistrationCertificateFile'),
+              ...filePipelineStage('copyIDAuthorizedSignatoryFile'),
+              ...filePipelineStage('certificateValueAddedTaxRegistrationFile'),
+            ],
+          },
+        },
+        {
+          $unwind: {
+            path: '$creditPayment',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $lookup: {
+            from: 'businesscustomercashpayments',
+            localField: 'cashPayment',
+            foreignField: '_id',
+            as: 'cashPayment',
+          },
+        },
+        {
+          $unwind: {
+            path: '$cashPayment',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+      ],
+    },
+  }
+
+  const businessDetailUnwind: PipelineStage.Unwind = {
+    $unwind: {
+      path: '$businessDetail',
+      preserveNullAndEmptyArrays: true,
+    },
+  }
+
+  const individualDetailLookup: PipelineStage.Lookup = {
+    $lookup: {
+      from: 'individualcustomers',
+      localField: 'individualDetail',
+      foreignField: '_id',
+      as: 'individualDetail',
+    },
+  }
+
+  const individualDetailUnwind: PipelineStage.Unwind = {
+    $unwind: {
+      path: '$individualDetail',
+      preserveNullAndEmptyArrays: true,
+    },
+  }
+
+  const driverDetailLookup: PipelineStage.Lookup = {
+    $lookup: {
+      from: 'driverdetails',
+      localField: 'driverDetail',
+      foreignField: '_id',
+      as: 'driverDetail',
+      pipeline: [
+        {
+          $lookup: {
+            from: 'vehicletypes',
+            localField: 'serviceVehicleTypes',
+            foreignField: '_id',
+            as: 'serviceVehicleTypes',
+            pipeline: [
+              {
+                $lookup: {
+                  from: 'files',
+                  localField: 'image',
+                  foreignField: '_id',
+                  as: 'image',
+                },
+              },
+              {
+                $unwind: {
+                  path: '$image',
+                  preserveNullAndEmptyArrays: true,
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  }
+
+  const driverDetailUnwind: PipelineStage.Unwind = {
+    $unwind: {
+      path: '$driverDetail',
+      preserveNullAndEmptyArrays: true,
+    },
+  }
+
+  const adminDetailLookup: PipelineStage.Lookup = {
+    $lookup: {
+      from: 'admins',
+      localField: 'adminDetail',
+      foreignField: '_id',
+      as: 'adminDetail',
+    },
+  }
+
+  const adminDetailUnwind: PipelineStage.Unwind = {
+    $unwind: {
+      path: '$adminDetail',
+      preserveNullAndEmptyArrays: true,
+    },
+  }
+
+  const upgradeRequestLookup: PipelineStage.Lookup = {
+    $lookup: {
+      from: 'businesscustomers',
+      localField: 'upgradeRequest',
+      foreignField: '_id',
+      as: 'upgradeRequest',
+      pipeline: [
+        {
+          $lookup: {
+            from: 'businesscustomercreditpayments',
+            localField: 'creditPayment',
+            foreignField: '_id',
+            as: 'creditPayment',
+          },
+        },
+        {
+          $unwind: {
+            path: '$creditPayment',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $lookup: {
+            from: 'businesscustomercashpayments',
+            localField: 'cashPayment',
+            foreignField: '_id',
+            as: 'cashPayment',
+          },
+        },
+        {
+          $unwind: {
+            path: '$cashPayment',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+      ],
+    },
+  }
+
+  const upgradeRequestUnwind: PipelineStage.Unwind = {
+    $unwind: {
+      path: '$upgradeRequest',
+      preserveNullAndEmptyArrays: true,
+    },
+  }
+
+  return [
+    businessDetailLookup,
+    businessDetailUnwind,
+    individualDetailLookup,
+    individualDetailUnwind,
+    driverDetailLookup,
+    driverDetailUnwind,
+    adminDetailLookup,
+    adminDetailUnwind,
+    upgradeRequestLookup,
+    upgradeRequestUnwind,
+    ...filePipelineStage('profileImage'),
+  ]
+}
+
+export function userLookup(fieldName: string): PipelineStage.Lookup {
+  const lookup: PipelineStage.Lookup = {
+    $lookup: {
+      from: 'users',
+      localField: fieldName,
+      foreignField: '_id',
+      as: fieldName,
+      pipeline: GET_USER_LOOKUPS(),
+    },
+  }
+  return lookup
+}
+
+export function userPipelineStage(fieldName: string) {
+  const path = `$${fieldName}`
+
+  const lookup = userLookup(fieldName)
+  const unwind: PipelineStage.Unwind = {
+    $unwind: {
+      path,
+      preserveNullAndEmptyArrays: true,
+    },
+  }
+
+  return [lookup, unwind]
+}
 
 export const GET_USERS = (
   {
@@ -112,176 +327,7 @@ export const GET_USERS = (
 
   return [
     ...(prematch.$match ? [prematch] : []),
-    {
-      $lookup: {
-        from: 'businesscustomers',
-        localField: 'businessDetail',
-        foreignField: '_id',
-        as: 'businessDetail',
-        pipeline: [
-          {
-            $lookup: {
-              from: 'businesscustomercreditpayments',
-              localField: 'creditPayment',
-              foreignField: '_id',
-              as: 'creditPayment',
-            },
-          },
-          {
-            $unwind: {
-              path: '$creditPayment',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $lookup: {
-              from: 'businesscustomercashpayments',
-              localField: 'cashPayment',
-              foreignField: '_id',
-              as: 'cashPayment',
-            },
-          },
-          {
-            $unwind: {
-              path: '$cashPayment',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-        ],
-      },
-    },
-    {
-      $unwind: {
-        path: '$businessDetail',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: 'businesscustomers',
-        localField: 'upgradeRequest',
-        foreignField: '_id',
-        as: 'upgradeRequest',
-        pipeline: [
-          {
-            $lookup: {
-              from: 'businesscustomercreditpayments',
-              localField: 'creditPayment',
-              foreignField: '_id',
-              as: 'creditPayment',
-            },
-          },
-          {
-            $unwind: {
-              path: '$creditPayment',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $lookup: {
-              from: 'businesscustomercashpayments',
-              localField: 'cashPayment',
-              foreignField: '_id',
-              as: 'cashPayment',
-            },
-          },
-          {
-            $unwind: {
-              path: '$cashPayment',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-        ],
-      },
-    },
-    {
-      $unwind: {
-        path: '$upgradeRequest',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: 'individualcustomers',
-        localField: 'individualDetail',
-        foreignField: '_id',
-        as: 'individualDetail',
-      },
-    },
-    {
-      $unwind: {
-        path: '$individualDetail',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: 'admins',
-        localField: 'adminDetail',
-        foreignField: '_id',
-        as: 'adminDetail',
-      },
-    },
-    {
-      $unwind: {
-        path: '$adminDetail',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: 'driverdetails',
-        localField: 'driverDetail',
-        foreignField: '_id',
-        as: 'driverDetail',
-        pipeline: [
-          {
-            $lookup: {
-              from: 'vehicletypes',
-              localField: 'serviceVehicleTypes',
-              foreignField: '_id',
-              as: 'serviceVehicleTypes',
-              pipeline: [
-                {
-                  $lookup: {
-                    from: 'files',
-                    localField: 'image',
-                    foreignField: '_id',
-                    as: 'image',
-                  },
-                },
-                {
-                  $unwind: {
-                    path: '$image',
-                    preserveNullAndEmptyArrays: true,
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      $unwind: {
-        path: '$driverDetail',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: 'files',
-        localField: 'profileImage',
-        foreignField: '_id',
-        as: 'profileImage',
-      },
-    },
-    {
-      $unwind: {
-        path: '$profileImage',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
+    ...GET_USER_LOOKUPS(),
     {
       $addFields: {
         statusWeight: {

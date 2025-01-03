@@ -1,5 +1,4 @@
 import { prop as Property, getModelForClass } from '@typegoose/typegoose'
-import { get } from 'lodash'
 import { Field, ObjectType, ID } from 'type-graphql'
 
 @ObjectType()

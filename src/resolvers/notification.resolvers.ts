@@ -18,7 +18,6 @@ import { AuthGuard } from '@guards/auth.guards'
 import { AdminNotificationCountPayload, UnreadCountPayload } from '@payloads/notification.payloads'
 import ShipmentModel from '@models/shipment.model'
 import UserModel from '@models/user.model'
-import BillingCycleModel, { EBillingStatus } from '@models/billingCycle.model'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 import { sum } from 'lodash'
 import { Repeater } from '@graphql-yoga/subscription'
@@ -27,6 +26,8 @@ import { EShipmentStatus } from '@enums/shipments'
 import { EUserRole, EUserStatus, EUserType } from '@enums/users'
 import TransactionModel from '@models/transaction.model'
 import { TRANSACTION_DRIVER_LIST } from '@pipelines/transaction.pipeline'
+import { EBillingStatus } from '@enums/billing'
+import BillingModel from '@models/finance/billing.model'
 
 export async function getAdminMenuNotificationCount(): Promise<AdminNotificationCountPayload> {
   const individualCustomer = await UserModel.countDocuments({
@@ -52,12 +53,12 @@ export async function getAdminMenuNotificationCount(): Promise<AdminNotification
   const shipment = await ShipmentModel.countDocuments({
     $or: [{ status: EShipmentStatus.IDLE }, { status: EShipmentStatus.REFUND }],
   }).catch(() => 0)
-  const financialCash = await BillingCycleModel.countDocuments({
-    billingStatus: { $in: [EBillingStatus.VERIFY, EBillingStatus.OVERDUE, EBillingStatus.REFUND] },
+  const financialCash = await BillingModel.countDocuments({
+    status: { $in: [EBillingStatus.VERIFY, EBillingStatus.PENDING] },
     paymentMethod: EPaymentMethod.CASH,
   }).catch(() => 0)
-  const financialCredit = await BillingCycleModel.countDocuments({
-    billingStatus: { $in: [EBillingStatus.VERIFY, EBillingStatus.OVERDUE, EBillingStatus.REFUND] },
+  const financialCredit = await BillingModel.countDocuments({
+    status: { $in: [EBillingStatus.VERIFY, EBillingStatus.PENDING] },
     paymentMethod: EPaymentMethod.CREDIT,
   }).catch(() => 0)
   const financialPayment = await TransactionModel.aggregate(TRANSACTION_DRIVER_LIST({ isPending: true }))

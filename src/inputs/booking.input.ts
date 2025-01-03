@@ -58,10 +58,10 @@ export class SubtotalCalculationArgs {
     isBusinessCashPayment: boolean
 }
 
-@ArgsType()
-export class CalculationExistingArgs {
-    @Field()
-    shipmentId: string
+@InputType()
+export class CalculationInput {
+    @Field({ nullable: true })
+    shipmentId?: string
     
     @Field(() => [DestinationInput])
     locations: DestinationInput[]
@@ -74,4 +74,7 @@ export class CalculationExistingArgs {
 
     @Field(() => [String], { nullable: true })
     serviceIds?: string[]
+
+    @Field({ nullable: true })
+    discountId?: string
 }

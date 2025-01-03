@@ -4,168 +4,19 @@ import {
   EShipmentStatus,
   EShipmentStatusCriteria,
 } from '@enums/shipments'
-import { GetShipmentArgs } from '@inputs/shipment.input'
+import { GetShipmentInput } from '@inputs/shipment.input'
 import { PipelineStage, Types } from 'mongoose'
 import { isEmpty } from 'lodash'
 import { EUserRole } from '@enums/users'
+import { fileLookup, filePipelineStage } from './file.pipline'
+import { userPipelineStage } from './user.pipeline'
 
 const LOOKUPs: PipelineStage[] = [
-  {
-    $lookup: {
-      from: 'users',
-      localField: 'customer',
-      foreignField: '_id',
-      as: 'customer',
-      pipeline: [
-        {
-          $lookup: {
-            from: 'individualcustomers',
-            localField: 'individualDetail',
-            foreignField: '_id',
-            as: 'individualDetail',
-          },
-        },
-        {
-          $unwind: {
-            path: '$individualDetail',
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $lookup: {
-            from: 'businesscustomers',
-            localField: 'businessDetail',
-            foreignField: '_id',
-            as: 'businessDetail',
-          },
-        },
-        {
-          $unwind: {
-            path: '$businessDetail',
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-        {
-          $lookup: {
-            from: 'files',
-            localField: 'profileImage',
-            foreignField: '_id',
-            as: 'profileImage',
-          },
-        },
-        {
-          $unwind: {
-            path: '$profileImage',
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-      ],
-    },
-  },
-  {
-    $unwind: {
-      path: '$customer',
-      preserveNullAndEmptyArrays: true,
-    },
-  },
-  {
-    $lookup: {
-      from: 'users',
-      localField: 'driver',
-      foreignField: '_id',
-      as: 'driver',
-      pipeline: [
-        {
-          $lookup: {
-            from: 'driverdetails',
-            localField: 'driverDetail',
-            foreignField: '_id',
-            as: 'driverDetail',
-          },
-        },
-        {
-          $unwind: {
-            path: '$driverDetail',
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-      ],
-    },
-  },
-  {
-    $unwind: {
-      path: '$driver',
-      preserveNullAndEmptyArrays: true,
-    },
-  },
-  {
-    $lookup: {
-      from: 'users',
-      localField: 'agentDriver',
-      foreignField: '_id',
-      as: 'agentDriver',
-      pipeline: [
-        {
-          $lookup: {
-            from: 'driverdetails',
-            localField: 'driverDetail',
-            foreignField: '_id',
-            as: 'driverDetail',
-          },
-        },
-        {
-          $unwind: {
-            path: '$driverDetail',
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-      ],
-    },
-  },
-  {
-    $unwind: {
-      path: '$agentDriver',
-      preserveNullAndEmptyArrays: true,
-    },
-  },
-  {
-    $lookup: {
-      from: 'users',
-      localField: 'requestedDriver',
-      foreignField: '_id',
-      as: 'requestedDriver',
-      pipeline: [
-        {
-          $lookup: {
-            from: 'driverdetails',
-            localField: 'driverDetail',
-            foreignField: '_id',
-            as: 'driverDetail',
-          },
-        },
-        {
-          $unwind: {
-            path: '$driverDetail',
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-      ],
-    },
-  },
-  {
-    $unwind: {
-      path: '$requestedDriver',
-      preserveNullAndEmptyArrays: true,
-    },
-  },
-  {
-    $lookup: {
-      from: 'files',
-      localField: 'additionalImages',
-      foreignField: '_id',
-      as: 'additionalImages',
-    },
-  },
+  ...userPipelineStage('customer'),
+  ...userPipelineStage('driver'),
+  ...userPipelineStage('agentDriver'),
+  ...userPipelineStage('requestedDriver'),
+  fileLookup('additionalImages'),
   {
     $lookup: {
       from: 'vehicletypes',
@@ -230,15 +81,25 @@ const LOOKUPs: PipelineStage[] = [
                               localField: 'vehicleTypes',
                               foreignField: '_id',
                               as: 'vehicleTypes',
+                              pipeline: [
+                                {
+                                  $lookup: {
+                                    from: 'files',
+                                    localField: 'image',
+                                    foreignField: '_id',
+                                    as: 'image',
+                                  },
+                                },
+                                {
+                                  $unwind: {
+                                    path: '$image',
+                                    preserveNullAndEmptyArrays: true,
+                                  },
+                                },
+                              ],
                             },
                           },
                         ],
-                      },
-                    },
-                    {
-                      $unwind: {
-                        path: '$descriptions',
-                        preserveNullAndEmptyArrays: true,
                       },
                     },
                   ],
@@ -287,14 +148,14 @@ const LOOKUPs: PipelineStage[] = [
   {
     $lookup: {
       from: 'directionsresults',
-      localField: 'directionId',
+      localField: 'route',
       foreignField: '_id',
-      as: 'directionId',
+      as: 'route',
     },
   },
   {
     $unwind: {
-      path: '$directionId',
+      path: '$route',
       preserveNullAndEmptyArrays: true,
     },
   },
@@ -318,16 +179,13 @@ const LOOKUPs: PipelineStage[] = [
   },
   {
     $lookup: {
-      from: 'payments',
-      localField: 'payment',
+      from: 'quotations',
+      localField: 'quotations',
       foreignField: '_id',
-      as: 'payment',
-    },
-  },
-  {
-    $unwind: {
-      path: '$payment',
-      preserveNullAndEmptyArrays: true,
+      as: 'quotations',
+      pipeline: [
+        ...userPipelineStage('updatedBy')
+      ]
     },
   },
 ]
@@ -342,14 +200,14 @@ export const SHIPMENT_LIST = (
     startWorkingDate,
     endWorkingDate,
     paymentMethod,
-    paymentNumber,
-    paymentStatus,
+    // paymentNumber,
+    // paymentStatus,
     customerName,
     driverName,
     driverAgentName,
     customerId,
     driverId,
-  }: GetShipmentArgs,
+  }: GetShipmentInput,
   user_role: string | undefined,
   user_id: string | undefined,
   sort = {},
@@ -417,18 +275,20 @@ export const SHIPMENT_LIST = (
       : []),
   ]
 
-  const payments =
-    paymentMethod || paymentNumber || paymentStatus
-      ? [
-          {
-            $match: {
-              ...(paymentMethod ? { 'payment.paymentMethod': paymentMethod } : {}),
-              ...(paymentNumber ? { 'payment.paymentNumber': { $regex: paymentNumber, $options: 'i' } } : {}),
-              ...(paymentStatus ? { 'payment.status': paymentStatus } : {}),
-            },
-          },
-        ]
-      : []
+  // TODO: Refactor this
+  const payments = paymentMethod ? [{ $match: { paymentMethod } }] : []
+  // const payments =
+  //   paymentMethod || paymentNumber || paymentStatus
+  //     ? [
+  //         {
+  //           $match: {
+  //             ...(paymentMethod ? { 'paymentMethod': paymentMethod } : {}),
+  //             ...(paymentNumber ? { 'payments.paymentNumber': { $regex: paymentNumber, $options: 'i' } } : {}),
+  //             ...(paymentStatus ? { 'payments.status': paymentStatus } : {}),
+  //           },
+  //         },
+  //       ]
+  //     : []
 
   const customers = customerName
     ? [

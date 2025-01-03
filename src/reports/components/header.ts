@@ -1,19 +1,20 @@
-import { BillingCycle } from '@models/billingCycle.model'
-import { BillingReceipt } from '@models/billingReceipt.model'
 import PDFDocument from 'pdfkit-table'
 import { ASSETS, FONTS } from './constants'
 import { fDate } from '@utils/formatTime'
-import { get, toNumber } from 'lodash'
+import { get, last, sortBy, toNumber } from 'lodash'
 import { User } from '@models/user.model'
 import { BusinessCustomer } from '@models/customerBusiness.model'
 import { BusinessCustomerCreditPayment } from '@models/customerBusinessCreditPayment.model'
 import { IndividualCustomer } from '@models/customerIndividual.model'
 import { EPaymentMethod } from '@enums/payments'
 import { EUserType } from '@enums/users'
+import { Billing } from '@models/finance/billing.model'
+import { Receipt } from '@models/finance/receipt.model'
+import { Invoice } from '@models/finance/invoice.model'
 
 export function HeaderComponent(
   doc: PDFDocument,
-  billingCycle: BillingCycle,
+  billing: Billing,
   type: 'invoice' | 'receipt',
   page: number,
   totalPage: number,
@@ -22,7 +23,7 @@ export function HeaderComponent(
   const marginLeft = doc.page.margins.left
   const marginRight = doc.page.margins.right
   const maxWidth = doc.page.width - marginRight
-  const isCreditPayment = billingCycle.paymentMethod === EPaymentMethod.CREDIT
+  const isCreditPayment = billing.paymentMethod === EPaymentMethod.CREDIT
   // Logo
   doc.image(ASSETS.LOGO, doc.page.margins.left, 60, { width: 80 })
 
@@ -67,19 +68,19 @@ export function HeaderComponent(
     .lineTo(maxWidth, doc.y + 3)
     .stroke()
   doc.moveDown(0.5)
-
   if (isCreditPayment) {
     if (type === 'invoice') {
+      const _invoice = billing.invoice as Invoice | undefined
       // 1
       doc.fontSize(8)
       doc
         .font(FONTS.SARABUN_MEDIUM)
         .text('Invoice No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-      doc.font(FONTS.SARABUN_LIGHT).text(billingCycle.billingNumber, 499, doc.y - 10, { align: 'left' })
+      doc.font(FONTS.SARABUN_LIGHT).text(_invoice.invoiceNumber, 499, doc.y - 10, { align: 'left' })
 
       // 2
-      const issueInBEDateMonth = fDate(billingCycle.issueDate, 'dd/MM')
-      const issueInBEYear = toNumber(fDate(billingCycle.issueDate, 'yyyy')) + 543
+      const issueInBEDateMonth = fDate(_invoice.invoiceDate, 'dd/MM')
+      const issueInBEYear = toNumber(fDate(_invoice.invoiceDate, 'yyyy')) + 543
       doc.moveDown(0.3)
       doc
         .font(FONTS.SARABUN_MEDIUM)
@@ -87,8 +88,8 @@ export function HeaderComponent(
       doc.font(FONTS.SARABUN_LIGHT).text(`${issueInBEDateMonth}/${issueInBEYear}`, 499, doc.y - 10, { align: 'left' })
 
       // 3
-      const duedateInBEDateMonth = fDate(billingCycle.paymentDueDate, 'dd/MM')
-      const duedateInBEYear = toNumber(fDate(billingCycle.paymentDueDate, 'yyyy')) + 543
+      const duedateInBEDateMonth = fDate(billing.paymentDueDate, 'dd/MM')
+      const duedateInBEYear = toNumber(fDate(billing.paymentDueDate, 'yyyy')) + 543
       doc.moveDown(0.3)
       doc
         .font(FONTS.SARABUN_MEDIUM)
@@ -97,25 +98,27 @@ export function HeaderComponent(
         .font(FONTS.SARABUN_LIGHT)
         .text(`${duedateInBEDateMonth}/${duedateInBEYear}`, 499, doc.y - 10, { align: 'left' })
     } else {
-      // 1
-      const billingReceipt = billingCycle.billingReceipt as BillingReceipt
+      // ---
+      const _receipts = billing.receipts as Receipt[]
+      const _latestReceipt = last(sortBy(_receipts, 'createdAt')) as Receipt | undefined
+      const _invoice = billing.invoice as Invoice | undefined
 
       doc.fontSize(8)
       doc
         .font(FONTS.SARABUN_MEDIUM)
         .text('Receipt No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-      doc.font(FONTS.SARABUN_LIGHT).text(billingReceipt.receiptNumber, 499, doc.y - 10, { align: 'left' })
+      doc.font(FONTS.SARABUN_LIGHT).text(_latestReceipt.receiptNumber, 499, doc.y - 10, { align: 'left' })
 
-      // 2
+      // ---
       doc.moveDown(0.3)
       doc
         .font(FONTS.SARABUN_MEDIUM)
-        .text('Issue No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-      doc.font(FONTS.SARABUN_LIGHT).text(billingCycle.billingNumber, 499, doc.y - 10, { align: 'left' })
+        .text('Invoice No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
+      doc.font(FONTS.SARABUN_LIGHT).text(_invoice.invoiceNumber, 499, doc.y - 10, { align: 'left' })
 
-      // 3
-      const receiptInBEDateMonth = fDate(billingReceipt.receiptDate, 'dd/MM')
-      const receiptInBEYear = toNumber(fDate(billingReceipt.receiptDate, 'yyyy')) + 543
+      // ---
+      const receiptInBEDateMonth = fDate(_latestReceipt.receiptDate, 'dd/MM')
+      const receiptInBEYear = toNumber(fDate(_latestReceipt.receiptDate, 'yyyy')) + 543
       doc.moveDown(0.3)
       doc
         .font(FONTS.SARABUN_MEDIUM)
@@ -134,16 +137,18 @@ export function HeaderComponent(
       .stroke()
     doc.moveDown(2.2)
   } else {
-    const billingReceipt = billingCycle.billingReceipt as BillingReceipt
+    const _receipts = billing.receipts as Receipt[]
+    const _latestReceipt = last(sortBy(_receipts, 'createdAt')) as Receipt | undefined
+
     // Receipt No
     doc.fontSize(8)
     doc
       .font(FONTS.SARABUN_MEDIUM)
       .text('Receipt No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-    doc.font(FONTS.SARABUN_LIGHT).text(billingReceipt.receiptNumber, 499, doc.y - 10, { align: 'left' })
+    doc.font(FONTS.SARABUN_LIGHT).text(_latestReceipt.receiptNumber, 499, doc.y - 10, { align: 'left' })
 
-    const receiptInBEDateMonth = fDate(billingReceipt.receiptDate, 'dd/MM')
-    const receiptInBEYear = toNumber(fDate(billingReceipt.receiptDate, 'yyyy')) + 543
+    const receiptInBEDateMonth = fDate(_latestReceipt.receiptDate, 'dd/MM')
+    const receiptInBEYear = toNumber(fDate(_latestReceipt.receiptDate, 'yyyy')) + 543
     // Date
     doc.moveDown(0.3)
     doc
@@ -164,31 +169,18 @@ export function HeaderComponent(
 
   // Seperate line
 
-  let address = '-'
-  const user = get(billingCycle, 'user', undefined) as User | undefined
-  const businessDetail = get(user, 'businessDetail', undefined) as BusinessCustomer | undefined
-  const paymentMethod = get(businessDetail, 'paymentMethod', '')
-  if (paymentMethod === EPaymentMethod.CASH) {
-    address = `${businessDetail.address} แขวง/ตำบล ${businessDetail.subDistrict} เขต/อำเภอ ${businessDetail.district} จังหวัด ${businessDetail.province} ${businessDetail.postcode}`
-  } else if (paymentMethod === EPaymentMethod.CREDIT && businessDetail.creditPayment) {
-    const creditPayment = businessDetail.creditPayment as BusinessCustomerCreditPayment | undefined
-    address = `${creditPayment.financialAddress} แขวง/ตำบล ${creditPayment.financialSubDistrict} เขต/อำเภอ ${creditPayment.financialDistrict} จังหวัด ${creditPayment.financialProvince} ${creditPayment.financialPostcode}`
-  } else if (user.individualDetail) {
-    const individualDetail = user.individualDetail as IndividualCustomer | undefined
-    if (individualDetail.address) {
-      address = `${individualDetail.address} แขวง/ตำบล ${individualDetail.subDistrict} เขต/อำเภอ ${individualDetail.district} จังหวัด ${individualDetail.province} ${individualDetail.postcode}`
-    }
-  }
-
+  const user = billing.user as User | undefined
   const isBusiness = user.userType === EUserType.BUSINESS
-  const businessBranch = get(user, 'businessDetail.businessBranch', '-')
+  const address = user.address
   const taxId = isBusiness ? get(user, 'businessDetail.taxNumber', '-') : get(user, 'individualDetail.taxId', '-')
+
   // Customer detail
   doc.font(FONTS.SARABUN_MEDIUM).fontSize(7)
   doc.text('ชื่อลูกค้า :', 22)
   doc.text(user.fullname, 110, doc.y - 9)
   doc.font(FONTS.SARABUN_LIGHT)
   if (isBusiness) {
+    const businessBranch = get(user, 'businessDetail.businessBranch', '-')
     doc.text('สาขา :', 280, doc.y - 9)
     doc.text(businessBranch || '-', 308, doc.y - 9)
   }

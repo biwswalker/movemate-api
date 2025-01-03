@@ -5,7 +5,7 @@ import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { IsEnum, IsNotEmpty } from "class-validator";
 import mongooseAutoPopulate from "mongoose-autopopulate";
 import { get, map, reduce, sum } from "lodash";
-import { PriceItem } from "@payloads/booking.payloads";
+import { PriceItem } from "./finance/objects";
 
 enum EAdditionalServiceCostPricingUnit {
     PERCENT = "percent",

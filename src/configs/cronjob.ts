@@ -1,27 +1,24 @@
-import BillingCycleModel, {
+import {
   checkBillingStatus,
-  issueBillingCycle,
-  issueEmailToCustomer,
-  notifyDuedate,
-  notifyIssueEmailToCustomer,
-  notifyNearby1Duedate,
-  notifyNearby3Duedate,
-  notifyOverdue,
-} from '@models/billingCycle.model'
+  emailIssueBillingToCustomer,
+  issueCreditBilling,
+  notifyIssueBillingToCustomer,
+  notifyNearbyDuedate,
+  notifyOverdueBilling,
+} from '@controllers/billing'
 import cron from 'node-cron'
-import { generateReceiptCashWithNonTax } from 'reports/receiptWithCashNonTax'
 
 export default async function configureCronjob() {
   cron.schedule(
     '0 0 * * *',
     async () => {
-      await issueBillingCycle()
+      await issueCreditBilling()
       await checkBillingStatus()
 
       /**
        * Overdue
        */
-      await notifyOverdue()
+      await notifyOverdueBilling()
     },
     { timezone: 'Asia/Bangkok' },
   )
@@ -32,15 +29,15 @@ export default async function configureCronjob() {
       /**
        * Invoice
        */
-      await issueEmailToCustomer()
-      await notifyIssueEmailToCustomer()
+      await emailIssueBillingToCustomer()
+      await notifyIssueBillingToCustomer()
 
       /**
        * Due Date
        */
-      await notifyNearby3Duedate()
-      await notifyNearby1Duedate()
-      await notifyDuedate()
+      await notifyNearbyDuedate(3)
+      await notifyNearbyDuedate(1)
+      await notifyOverdueBilling()
     },
     { timezone: 'Asia/Bangkok' },
   )

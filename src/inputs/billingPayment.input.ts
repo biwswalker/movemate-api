@@ -1,32 +1,27 @@
-import { ArgsType, Field } from "type-graphql";
-import { FileInput } from "./file.input";
+import { Field, InputType } from 'type-graphql'
+import { FileInput } from './file.input'
 
-@ArgsType()
-export class ApprovalCashPaymentArgs {
+@InputType()
+export class ApprovalBillingPaymentInput {
   @Field()
-  billingCycleId: string;
+  billingId: string
 
   @Field()
-  result: 'approve' | 'reject';
+  paymentId: string
+
+  @Field()
+  result: 'approve' | 'reject'
 
   @Field({ nullable: true })
-  reason?: string;
+  reason?: string
 
-  @Field({ nullable: true })
-  otherReason?: string;
-}
-
-@ArgsType()
-export class ApproveCreditPaymentArgs {
-  @Field()
-  billingCycleId: string
-
+  // For credit payment
   @Field(() => FileInput, { nullable: true })
   imageEvidence?: FileInput
 
-  @Field()
-  paymentDate: Date
+  @Field({ nullable: true })
+  paymentDate?: Date
 
-  @Field()
-  paymentTime: Date
+  @Field({ nullable: true })
+  paymentTime?: Date
 }

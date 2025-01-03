@@ -10,13 +10,15 @@ import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { AdditionalServiceCostPricing } from "./additionalServiceCostPricing.model";
 import { DistanceCostPricing, EDistanceCostPricingUnit } from "./distanceCostPricing.model";
 import mongooseAutoPopulate from "mongoose-autopopulate";
-import { Types } from "mongoose";
+import { ClientSession, Types } from "mongoose";
 import { filter, find, forEach, get, isEmpty, some, sum } from "lodash";
 import { PricingCalculationMethodArgs } from "@inputs/vehicle-cost.input";
 import { GraphQLError } from "graphql";
 import { CalculationResultPayload, PricingCalculationMethodPayload } from "@payloads/pricing.payloads";
 import { AdditionalService } from "./additionalService.model";
 import { GET_VEHICLE_COST } from "@pipelines/pricing.pipeline";
+import { calculateStep } from "@controllers/quotation";
+import { VALUES } from "constants/values";
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()
@@ -49,8 +51,8 @@ export class VehicleCost extends TimeStamps {
   @Property({ default: Date.now })
   updatedAt: Date;
 
-  static async findByVehicleId(id: string): Promise<VehicleCost> {
-    const vehicleCost = await VehicleCostModel.aggregate(GET_VEHICLE_COST(id))
+  static async findByVehicleId(id: string, session?: ClientSession): Promise<VehicleCost> {
+    const vehicleCost = await VehicleCostModel.aggregate(GET_VEHICLE_COST(id)).session(session)
     return vehicleCost[0]
   }
 
@@ -121,38 +123,7 @@ export class VehicleCost extends TimeStamps {
       });
     }
 
-    function calculateStep(distanceInput: number) {
-      let _subTotalCost = 0
-      let _subTotalPrice = 0
-      const _calculations: CalculationResultPayload[] = []
-
-      // Calculate for each distance
-      forEach(steps, (step) => {
-        if (distanceInput >= step.from) {
-          const stepTo = step.to === step.from ? Infinity : step.to
-          const applicableDistance = Math.min(distanceInput, stepTo ?? distanceInput) - step.from + 1
-          const calculatedCost = step.unit === EDistanceCostPricingUnit.KM ? step.cost * applicableDistance : step.cost
-          const calculatedPrice = step.unit === EDistanceCostPricingUnit.KM ? step.price * applicableDistance : step.price
-
-          _subTotalCost += calculatedCost
-          _subTotalPrice += calculatedPrice
-
-          _calculations.push({
-            ...step,
-            costResult: calculatedCost,
-            priceResult: calculatedPrice,
-          })
-        }
-      })
-
-      return {
-        calculations: _calculations,
-        cost: _subTotalCost,
-        price: _subTotalPrice,
-      }
-    }
-
-    const originCalculation = calculateStep(data.distance)
+    const originCalculation = calculateStep(data.distance, steps)
     const subTotalCost = originCalculation.cost
     const subTotalPrice = originCalculation.price
 
@@ -186,7 +157,7 @@ export class VehicleCost extends TimeStamps {
     if (data.isRounded) {
       const additionalServiceRouned = find(additionalServices, (service: AdditionalServiceCostPricing) => {
         const coreService = service.additionalService as AdditionalService
-        return coreService.name === 'ไป-กลับ'
+        return coreService.name === VALUES.ROUNDED_RETURN
       })
 
       // As percent
@@ -197,7 +168,7 @@ export class VehicleCost extends TimeStamps {
         const roundedPricePercentCal = (additionalServiceRouned.price || 0) / 100
 
         // Round calculation
-        const roundedCalculation = calculateStep(data.returnedDistance)
+        const roundedCalculation = calculateStep(data.returnedDistance, steps)
 
         subTotalRoundedCost = roundedCostPercentCal * roundedCalculation.cost
         subTotalRoundedPrice = roundedPricePercentCal * roundedCalculation.price
@@ -219,7 +190,8 @@ export class VehicleCost extends TimeStamps {
       roundedPricePercent,
       totalCost,
       totalPrice,
-      calculations: originCalculation.calculations
+      calculations: originCalculation.calculations,
+      totalTax: 0 // TODO: Check again
     }
   }
 }

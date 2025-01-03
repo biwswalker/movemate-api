@@ -25,6 +25,8 @@ import {
   EUserType,
   EUserValidationStatus,
 } from '@enums/users'
+import { EPaymentMethod } from '@enums/payments'
+import { BusinessCustomerCreditPayment } from './customerBusinessCreditPayment.model'
 
 @plugin(autopopulate)
 @plugin(mongoosePagination)
@@ -159,7 +161,7 @@ export class User extends TimeStamps {
   resetPasswordCode?: string
 
   @Field(() => [Notification], { nullable: true })
-  @Property({ ref: () => Notification, default: [] })
+  @Property({ ref: () => Notification, default: [], autopopulate: true })
   notifications: Ref<Notification>[]
 
   @Field(() => String, { nullable: true, defaultValue: '' })
@@ -303,6 +305,31 @@ export class User extends TimeStamps {
       const driverDetail: DriverDetail | undefined =
         get(this, '_doc.driverDetail', undefined) || this.driverDetail || undefined
       return driverDetail.phoneNumber
+    }
+    return ''
+  }
+
+  @Field({ nullable: true })
+  get address(): string {
+    const userRole = get(this, '_doc.userRole', '') || this.userRole || ''
+    const userType = get(this, '_doc.userType', '') || this.userType || ''
+    if (userRole === EUserRole.CUSTOMER) {
+      if (userType === EUserType.INDIVIDUAL) {
+        const _individualDetail = (get(this, '_doc.individualDetail', '') || this.individualDetail) as IndividualCustomer | undefined
+        if (_individualDetail) {
+          return `${_individualDetail.address} แขวง/ตำบล ${_individualDetail.subDistrict} เขต/อำเภอ ${_individualDetail.district} จังหวัด ${_individualDetail.province} ${_individualDetail.postcode}`
+        }
+      } else if (userType === EUserType.BUSINESS) {
+        const _businessDetail = (get(this, '_doc.businessDetail', '') || this.businessDetail) as BusinessCustomer | undefined
+        if (_businessDetail) {
+          if (_businessDetail.paymentMethod === EPaymentMethod.CREDIT) {
+            const creditPayment = _businessDetail.creditPayment as BusinessCustomerCreditPayment | undefined
+            return `${creditPayment.financialAddress} แขวง/ตำบล ${creditPayment.financialSubDistrict} เขต/อำเภอ ${creditPayment.financialDistrict} จังหวัด ${creditPayment.financialProvince} ${creditPayment.financialPostcode}`
+          } else {
+            return `${_businessDetail.address} แขวง/ตำบล ${_businessDetail.subDistrict} เขต/อำเภอ ${_businessDetail.district} จังหวัด ${_businessDetail.province} ${_businessDetail.postcode}`
+          }
+        }
+      }
     }
     return ''
   }

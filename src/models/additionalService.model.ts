@@ -14,16 +14,9 @@ import { VehicleType } from "./vehicleType.model";
 import mongoose, { Types } from "mongoose";
 import mongoosePagination from 'mongoose-paginate-v2'
 import aggregatePaginate from 'mongoose-aggregate-paginate-v2'
+import { EServiceStatus, EServiceType } from "@enums/additionalService";
 
-enum EServiceType {
-  SERVICES = "services",
-  ACCESSORIES = "accessories",
-}
 
-enum EServiceStatus {
-  ACTIVE = "active",
-  INACTIVE = "inactive",
-}
 
 @plugin(mongooseAutoPopulate)
 @plugin(mongoosePagination)

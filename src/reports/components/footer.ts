@@ -1,12 +1,12 @@
-import { BillingCycle } from '@models/billingCycle.model'
 import PDFDocument from 'pdfkit-table'
 import { ASSETS, COLORS, FONTS } from './constants'
 import { fCurrency } from '@utils/formatNumber'
 import ThaiBahtText from 'thai-baht-text'
 import { fDate } from '@utils/formatTime'
 import { toNumber } from 'lodash'
+import { Billing } from '@models/finance/billing.model'
 
-export async function CashNoTaxReceiptFooterComponent(doc: PDFDocument, billingCycle: BillingCycle) {
+export async function CashNoTaxReceiptFooterComponent(doc: PDFDocument, billing: Billing) {
   const marginLeft = doc.page.margins.left
   const marginRight = doc.page.margins.right
   const maxWidth = doc.page.width - marginRight
@@ -37,7 +37,7 @@ export async function CashNoTaxReceiptFooterComponent(doc: PDFDocument, billingC
   doc
     .font(FONTS.SARABUN_SEMI_BOLD)
     .fontSize(10)
-    .text(fCurrency(billingCycle.totalAmount), 400, doc.y - 12, { align: 'right', width: maxWidth - 400 })
+    .text(fCurrency(billing.amount.total), 400, doc.y - 12, { align: 'right', width: maxWidth - 400 })
   doc
     .lineCap('butt')
     .lineWidth(1)
@@ -47,7 +47,7 @@ export async function CashNoTaxReceiptFooterComponent(doc: PDFDocument, billingC
   doc
     .fontSize(7)
     .font(FONTS.SARABUN_LIGHT)
-    .text(`( ${ThaiBahtText(billingCycle.totalAmount)} )`, 0, doc.y + 8, {
+    .text(`( ${ThaiBahtText(billing.amount.total)} )`, 0, doc.y + 8, {
       align: 'right',
       width: maxWidth,
     })
@@ -64,9 +64,9 @@ export async function CashNoTaxReceiptFooterComponent(doc: PDFDocument, billingC
       marginLeft,
     )
 
-  const issueBEDate = fDate(billingCycle.issueDate, 'dd')
-  const issueBEMonth = fDate(billingCycle.issueDate, 'MM')
-  const issueBEYear = toNumber(fDate(billingCycle.issueDate, 'yyyy')) + 543
+  const issueBEDate = fDate(billing.issueDate, 'dd')
+  const issueBEMonth = fDate(billing.issueDate, 'MM')
+  const issueBEYear = toNumber(fDate(billing.issueDate, 'yyyy')) + 543
 
   const signatureX = maxWidth / 2
   const signatureWidth = maxWidth - signatureX

@@ -1,49 +1,36 @@
 import { GraphQLContext } from '@configs/graphQL.config'
+import { cancelledShipment, driverCancelledShipment } from '@controllers/shipmentOperation'
 import { EUserRole } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
-import BillingCycleModel from '@models/billingCycle.model'
-import { REPONSE_NAME } from 'constants/status'
-import { GraphQLError } from 'graphql'
+import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
 import { Arg, Ctx, Mutation, Resolver, UseMiddleware } from 'type-graphql'
 
 @Resolver()
 export default class CancellationResolver {
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]), RetryTransactionMiddleware)
   async makeCancellation(
     @Ctx() ctx: GraphQLContext,
     @Arg('shipmentId') shipmentId: string,
     @Arg('reason') reason: string,
-    @Arg('reasonDetail') reasonDetail: string,
   ): Promise<boolean> {
-    const userId = ctx.req.user_id
-    if (!userId) {
-      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
-      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
-    }
+    const session = ctx.session
+    const customerId = ctx.req.user_id
     // Handle Refund
-    await BillingCycleModel.customerRefund(shipmentId, userId, reason, reasonDetail)
-
+    await cancelledShipment({ shipmentId, reason }, customerId, session)
     return true
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
   async driverCalcellation(
     @Ctx() ctx: GraphQLContext,
     @Arg('shipmentId') shipmentId: string,
     @Arg('reason') reason: string,
-    @Arg('reasonDetail') reasonDetail: string,
   ): Promise<boolean> {
-    const userId = ctx.req.user_id
-    if (!userId) {
-      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
-      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
-    }
-
-    // Handle Refund
-    await BillingCycleModel.driverCancelled(shipmentId, userId, reason, reasonDetail)
-
+    const session = ctx.session
+    // Handle make new Matching
+    await driverCancelledShipment({ shipmentId, reason }, session)
     return true
   }
 }

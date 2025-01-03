@@ -30,30 +30,6 @@ export class DestinationInput {
 }
 
 @InputType()
-class PaymentDetailInput {
-  @Field()
-  name: string
-
-  @Field()
-  address: string
-
-  @Field()
-  province: string
-
-  @Field()
-  district: string
-
-  @Field()
-  subDistrict: string
-
-  @Field()
-  postcode: string
-
-  @Field()
-  contactNumber: string
-}
-
-@InputType()
 class TransferPaymentDetailInput {
   @Field(() => FileInput)
   imageEvidence: FileInput
@@ -109,9 +85,6 @@ export class ShipmentInput {
   @Field(() => EPaymentMethod)
   paymentMethod: EPaymentMethod
 
-  @Field(() => PaymentDetailInput, { nullable: true })
-  paymentDetail?: PaymentDetailInput
-
   @Field(() => TransferPaymentDetailInput, { nullable: true })
   cashPaymentDetail?: TransferPaymentDetailInput
 
@@ -139,8 +112,8 @@ export class ShipmentInput {
   directionRoutes: string
 }
 
-@ArgsType()
-export class GetShipmentArgs {
+@InputType()
+export class GetShipmentInput {
   @Field({ nullable: true })
   _id?: string
 
@@ -171,11 +144,11 @@ export class GetShipmentArgs {
   endWorkingDate?: Date
 
   // Recheck
-  @Field(() => EPaymentStatus, { nullable: true })
-  paymentStatus?: EPaymentStatus
+  // @Field(() => EPaymentStatus, { nullable: true })
+  // paymentStatus?: EPaymentStatus
 
-  @Field({ nullable: true })
-  paymentNumber?: string
+  // @Field({ nullable: true })
+  // paymentNumber?: string
 
   @Field({ nullable: true })
   customerName?: string

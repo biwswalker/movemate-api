@@ -13,9 +13,9 @@ import { EUserRole } from '@enums/users'
 
 @Resolver(VehicleType)
 export default class VehicleTypeResolver {
-  @Mutation(() => VehicleType)
+  @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
-  async addVehicleType(@Arg('data') data: VehicleTypeInput): Promise<VehicleType> {
+  async addVehicleType(@Arg('data') data: VehicleTypeInput): Promise<boolean> {
     const { image, ...values } = data
     try {
       await VehicleTypeSchema().validate(data, { abortEarly: false })
@@ -29,7 +29,7 @@ export default class VehicleTypeResolver {
       })
       await vehicleTypeModel.save()
 
-      return vehicleTypeModel
+      return true
     } catch (errors) {
       console.log('error: ', errors)
       if (errors instanceof ValidationError) {

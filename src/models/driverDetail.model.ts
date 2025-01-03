@@ -160,9 +160,10 @@ export class DriverDetail {
   }
 
   async updateBalance(session?: ClientSession) {
-    const transactions = await TransactionModel.calculateTransaction(this._id, undefined, undefined)
-    console.log('New user balance: ', this._id, transactions.totalPending)
-    await DriverDetailModel.findByIdAndUpdate(this._id, { balance: transactions.totalPending }, { session })
+    const userId = get(this, '_doc._id', '') || this._id
+    const transactions = await TransactionModel.calculateTransaction(userId, undefined, undefined)
+    console.log('New user balance: ', userId, transactions.totalPending)
+    await DriverDetailModel.findByIdAndUpdate(userId, { balance: transactions.totalPending }, { session })
   }
 }
 

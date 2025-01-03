@@ -2,13 +2,21 @@ import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
 import redis from './redis'
 import pubsub, { LOCATIONS } from './pubsub'
+import { includes } from 'lodash'
 
 export enum ELimiterType {
   LOCATION = 'location-search',
 }
 
-export async function verifyRequestLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 10, userId: string = "") {
-  const redisKey = `${userId}${_type}:${ip}` // Generate Key
+function generatedRediskey(ip: string, type: ELimiterType, key: string) {
+  if(includes('::1', key)) {
+    return `${type}:localhost:${ip}`
+  }
+  return `${type}:${key}:${ip}`
+}
+
+export async function verifyRequestLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 10, userId: string = '') {
+  const redisKey = generatedRediskey(ip, _type, userId) // Generate Key
 
   const currentCount = await redis.get(redisKey)
   const count = currentCount ? parseInt(currentCount, 10) : 0
@@ -21,8 +29,8 @@ export async function verifyRequestLimiter(ip: string, _type: ELimiterType, RATE
   }
 }
 
-export async function rateLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 10, userId: string = "") {
-  const redisKey = `${userId}${_type}:${ip}` // Generate Key
+export async function rateLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 10, userId: string = '') {
+  const redisKey = generatedRediskey(ip, _type, userId) // Generate Key
 
   const currentCount = await redis.get(redisKey)
   const count = currentCount ? parseInt(currentCount, 10) : 0
@@ -44,15 +52,14 @@ export async function rateLimiter(ip: string, _type: ELimiterType, RATE_LIMIT = 
   return { count, limit }
 }
 
-export async function getLatestCount(ip: string, _type: ELimiterType, userId: string = "") {
-  const redisKey = `${userId}${_type}:${ip}` // Generate Key
+export async function getLatestCount(ip: string, _type: ELimiterType, userId: string = '') {
+  const redisKey = generatedRediskey(ip, _type, userId) // Generate Key
   const currentCount = await redis.get(redisKey)
   const count = currentCount ? parseInt(currentCount, 10) : 0
   return count
 }
 
-export async function clearLimiter(ip: string, _type: ELimiterType, userId: string = "") {
-  const redisKey = `${userId}${_type}:${ip}` // Generate Key
+export async function clearLimiter(ip: string, _type: ELimiterType, userId: string = '') {
+  const redisKey = generatedRediskey(ip, _type, userId) // Generate Key
   redis.set(redisKey, 0)
 }
-

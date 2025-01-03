@@ -1,11 +1,13 @@
-import { GetBillingCycleArgs } from '@inputs/billingCycle.input'
-import { EBillingStatus } from '@models/billingCycle.model'
+import { EBillingCriteriaState, EBillingCriteriaStatus, EBillingState, EBillingStatus } from '@enums/billing'
+import { GetBillingInput } from '@inputs/billingCycle.input'
 import { get, isEmpty } from 'lodash'
 import { PipelineStage, Types } from 'mongoose'
+import { pipeline } from 'nodemailer/lib/xoauth2'
 
-export const BILLING_CYCLE_LIST = (
-  {
+export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {}) => {
+  const {
     status,
+    state,
     billingNumber,
     shipmentNumber,
     customerName,
@@ -15,20 +17,9 @@ export const BILLING_CYCLE_LIST = (
     issueDate,
     receiptDate,
     customerId,
-  }: GetBillingCycleArgs,
-  sort = {},
-) => {
-  const statusFilter =
-    status === 'all'
-      ? [
-          EBillingStatus.VERIFY,
-          EBillingStatus.CURRENT,
-          EBillingStatus.OVERDUE,
-          EBillingStatus.PAID,
-          EBillingStatus.REFUND,
-          EBillingStatus.REFUNDED,
-        ]
-      : [status]
+  } = data
+  const statusFilter = status !== EBillingCriteriaStatus.ALL ? [status] : []
+  const stateFilter = state && state !== EBillingCriteriaState.ALL ? [state] : []
 
   const customerNameMatch = customerName
     ? [
@@ -78,7 +69,7 @@ export const BILLING_CYCLE_LIST = (
         ...(shipmentNumber ? { 'shipments.trackingNumber': { $regex: shipmentNumber, $options: 'i' } } : {}),
         ...(billingNumber ? { billingNumber: { $regex: billingNumber, $options: 'i' } } : {}),
         ...(paymentMethod ? { paymentMethod } : {}),
-        ...(receiptNumber ? { 'billingReceipt.receiptNumber': { $regex: receiptNumber, $options: 'i' } } : {}),
+        ...(receiptNumber ? { 'receipts.receiptNumber': { $regex: receiptNumber, $options: 'i' } } : {}),
         ...(startIssueDate || endIssueDate
           ? {
               createdAt: {
@@ -87,7 +78,8 @@ export const BILLING_CYCLE_LIST = (
               },
             }
           : {}),
-        ...(!isEmpty(statusFilter) ? { billingStatus: { $in: statusFilter } } : {}),
+        ...(!isEmpty(statusFilter) ? { status: { $in: statusFilter } } : {}),
+        ...(!isEmpty(stateFilter) ? { state: { $in: stateFilter } } : {}),
       },
     },
     {
@@ -95,38 +87,21 @@ export const BILLING_CYCLE_LIST = (
         statusWeight: {
           $switch: {
             branches: [
-              {
-                case: {
-                  $eq: ['$billingStatus', EBillingStatus.VERIFY],
-                },
-                then: 0,
-              },
-              {
-                case: {
-                  $eq: ['$billingStatus', EBillingStatus.REFUND],
-                },
-                then: 1,
-              },
-              {
-                case: {
-                  $eq: ['$billingStatus', EBillingStatus.OVERDUE],
-                },
-                then: 2,
-              },
-              {
-                case: {
-                  $eq: ['$billingStatus', EBillingStatus.CURRENT],
-                },
-                then: 3,
-              },
-              {
-                case: {
-                  $eq: ['$billingStatus', EBillingStatus.PAID],
-                },
-                then: 4,
-              },
+              { case: { $eq: ['$status', EBillingStatus.VERIFY] }, then: 0 },
+              { case: { $eq: ['$status', EBillingStatus.PENDING] }, then: 1 },
+              { case: { $eq: ['$status', EBillingStatus.COMPLETE] }, then: 2 },
+              { case: { $eq: ['$status', EBillingStatus.CANCELLED] }, then: 3 },
             ],
-            default: 5,
+            default: 4,
+          },
+        },
+        stateWeight: {
+          $switch: {
+            branches: [
+              { case: { $eq: ['$state', EBillingState.REFUND] }, then: 0 },
+              { case: { $eq: ['$state', EBillingState.OVERDUE] }, then: 1 },
+            ],
+            default: 2,
           },
         },
       },
@@ -134,10 +109,13 @@ export const BILLING_CYCLE_LIST = (
     {
       $sort: {
         statusWeight: 1,
+        stateWeight: 1,
         ...sort,
       },
     },
   ]
+
+  const projects: PipelineStage[] = !isEmpty(project) ? [{ $project: project as any }] : []
 
   return [
     ...beforeMatch,
@@ -176,6 +154,20 @@ export const BILLING_CYCLE_LIST = (
               preserveNullAndEmptyArrays: true,
             },
           },
+          {
+            $lookup: {
+              from: 'files',
+              localField: 'profileImage',
+              foreignField: '_id',
+              as: 'profileImage',
+            },
+          },
+          {
+            $unwind: {
+              path: '$profileImage',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
         ],
       },
     },
@@ -187,29 +179,65 @@ export const BILLING_CYCLE_LIST = (
     },
     {
       $lookup: {
-        from: 'billingpayments',
-        localField: 'billingPayment',
+        from: 'payments',
+        localField: 'payments',
         foreignField: '_id',
-        as: 'billingPayment',
-      },
-    },
-    {
-      $unwind: {
-        path: '$billingPayment',
-        preserveNullAndEmptyArrays: true,
+        as: 'payments',
+        pipeline: [
+          {
+            $lookup: {
+              from: 'paymentevidences',
+              localField: 'evidence',
+              foreignField: '_id',
+              as: 'evidence',
+              pipeline: [
+                {
+                  $lookup: {
+                    from: 'files',
+                    localField: 'image',
+                    foreignField: '_id',
+                    as: 'image',
+                  },
+                },
+                {
+                  $unwind: {
+                    path: '$image',
+                    preserveNullAndEmptyArrays: true,
+                  },
+                },
+              ],
+            },
+          },
+          {
+            $lookup: {
+              from: 'quotations',
+              localField: 'quotations',
+              foreignField: '_id',
+              as: 'quotations',
+            },
+          },
+        ],
       },
     },
     {
       $lookup: {
-        from: 'billingreceipts',
-        localField: 'billingReceipt',
+        from: 'receipts',
+        localField: 'receipts',
         foreignField: '_id',
-        as: 'billingReceipt',
+        as: 'receipts',
+      },
+    },
+    {
+      $lookup: {
+        from: 'invoice',
+        localField: 'invoice',
+        foreignField: '_id',
+        as: 'invoice',
       },
     },
     {
       $unwind: {
-        path: '$billingReceipt',
+        path: '$invoice',
         preserveNullAndEmptyArrays: true,
       },
     },
@@ -222,11 +250,28 @@ export const BILLING_CYCLE_LIST = (
       },
     },
     {
+      $lookup: {
+        from: 'billingadjustmentnotes',
+        localField: 'adjustmentNotes',
+        foreignField: '_id',
+        as: 'adjustmentNotes',
+      },
+    },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'updatedBy',
+        foreignField: '_id',
+        as: 'updatedBy',
+      },
+    },
+    {
       $unwind: {
-        path: '$billingReceipt',
+        path: '$updatedBy',
         preserveNullAndEmptyArrays: true,
       },
     },
     ...query,
+    ...projects,
   ]
 }

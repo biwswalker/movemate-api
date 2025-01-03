@@ -1,1 +1,0 @@
-type TBillingCriteriaStatus = 'all' | 'waiting_verify' | 'waiting_payment' | 'paid' | 'refunded' | 'cancelled'

@@ -21,20 +21,30 @@ import {
 import { addSeconds, format } from 'date-fns'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { Repeater } from '@graphql-yoga/subscription'
-import BillingCycleModel from '@models/billingCycle.model'
 import addEmailQueue from '@utils/email.utils'
 import { EPaymentMethod } from '@enums/payments'
 import { EDriverAcceptanceStatus, EShipmentMatchingCriteria, EShipmentStatus } from '@enums/shipments'
 import { EDriverStatus, EUserRole, EUserStatus, EUserType } from '@enums/users'
 import { decryption } from '@utils/encryption'
 import { th } from 'date-fns/locale'
-import mongoose, { FilterQuery } from 'mongoose'
+import { FilterQuery } from 'mongoose'
 import StepDefinitionModel, {
   EStepDefinition,
   EStepDefinitionName,
   EStepStatus,
 } from '@models/shipmentStepDefinition.model'
 import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
+import { generateTrackingNumber } from '@utils/string.utils'
+import {
+  getAcceptedShipmentForDriverQuery,
+  getNewAllAvailableShipmentForDriver,
+  getNewAllAvailableShipmentForDriverQuery,
+} from '@controllers/shipmentGet'
+import { addStep, finishJob, nextStep, podSent } from '@controllers/shipmentOperation'
+import BillingModel from '@models/finance/billing.model'
+import ReceiptModel from '@models/finance/receipt.model'
+import _ from 'mongoose-paginate-v2'
+import { generateBillingReceipt } from '@controllers/billingReceipt'
 
 @Resolver()
 export default class MatchingResolver {
@@ -44,7 +54,7 @@ export default class MatchingResolver {
       console.log('ListenAvailableShipment Subscribe: ')
       const repeater = new Repeater(async (push, stop) => {
         try {
-          const shipments = await ShipmentModel.getNewAllAvailableShipmentForDriver(context.user_id)
+          const shipments = await getNewAllAvailableShipmentForDriver(context.user_id)
           push(shipments)
           await stop
         } catch (error) {
@@ -112,7 +122,7 @@ export default class MatchingResolver {
    */
   @Query(() => Boolean)
   async trigNewAvailableShipment(): Promise<boolean> {
-    const shipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
+    const shipments = await getNewAllAvailableShipmentForDriver()
     pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, shipments)
     return true
   }
@@ -139,11 +149,11 @@ export default class MatchingResolver {
     }
 
     if (status && status !== EShipmentMatchingCriteria.NEW) {
-      const query = await ShipmentModel.getAcceptedShipmentForDriverQuery(status, userId)
+      const query = await getAcceptedShipmentForDriverQuery(status, userId)
       const shipments = await ShipmentModel.find(query, undefined, { skip, limit })
       return shipments
     }
-    const shipments = await ShipmentModel.getNewAllAvailableShipmentForDriver(userId, { skip, limit })
+    const shipments = await getNewAllAvailableShipmentForDriver(userId, { skip, limit })
     return shipments
   }
 
@@ -221,11 +231,11 @@ export default class MatchingResolver {
     }
 
     if (status && status !== EShipmentMatchingCriteria.NEW) {
-      const query = await ShipmentModel.getAcceptedShipmentForDriverQuery(status, userId)
+      const query = await getAcceptedShipmentForDriverQuery(status, userId)
       const shipmentCount = await ShipmentModel.countDocuments(query)
       return shipmentCount
     }
-    const query = await ShipmentModel.getNewAllAvailableShipmentForDriverQuery(userId)
+    const query = await getNewAllAvailableShipmentForDriverQuery(userId)
     const shipmentCount = await ShipmentModel.countDocuments(query)
     return shipmentCount
   }
@@ -255,11 +265,15 @@ export default class MatchingResolver {
       shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING
     ) {
       const isBusinessUser = user.userType === EUserType.BUSINESS
-      await ShipmentModel.findByIdAndUpdate(shipmentId, {
-        status: EShipmentStatus.PROGRESSING,
-        driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
-        ...(isBusinessUser ? { agentDriver: userId } : { driver: userId }),
-      }, { session })
+      await ShipmentModel.findByIdAndUpdate(
+        shipmentId,
+        {
+          status: EShipmentStatus.PROGRESSING,
+          driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
+          ...(isBusinessUser ? { agentDriver: userId } : { driver: userId }),
+        },
+        { session },
+      )
 
       if (isBusinessUser) {
         /**
@@ -274,31 +288,34 @@ export default class MatchingResolver {
           driverMessage: 'บริษัทมอบหมายงานให้พนักงาน',
           stepStatus: EStepStatus.IDLE,
         })
-        await shipment.addStep(assignShipmentStep, session)
+        await addStep(shipmentId, assignShipmentStep, session)
       }
 
       /**
        * Trigger next step
        */
       const freshShipment = await ShipmentModel.findById(shipmentId)
-      await freshShipment.nextStep(undefined, session)
+      await nextStep(shipmentId, undefined, session)
       if (!isBusinessUser) {
         await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.WORKING }, { session })
         // Notification
         const customerId = get(freshShipment, 'customer._id', '')
         if (customerId) {
-          await NotificationModel.sendNotification({
-            userId: customerId,
-            varient: ENotificationVarient.MASTER,
-            title: `${freshShipment.trackingNumber} คนขับตอบรับแล้ว`,
-            message: [
-              `งานขนส่งเลขที่ ${freshShipment.trackingNumber} ได้รับการตอบรับจากคนขับแล้ว คนขับจะติดต่อหาท่านเพื่อนัดหมาย`,
-            ],
-          }, session)
+          await NotificationModel.sendNotification(
+            {
+              userId: customerId,
+              varient: ENotificationVarient.MASTER,
+              title: `${freshShipment.trackingNumber} คนขับตอบรับแล้ว`,
+              message: [
+                `งานขนส่งเลขที่ ${freshShipment.trackingNumber} ได้รับการตอบรับจากคนขับแล้ว คนขับจะติดต่อหาท่านเพื่อนัดหมาย`,
+              ],
+            },
+            session,
+          )
         }
       }
 
-      const newShipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
+      const newShipments = await getNewAllAvailableShipmentForDriver()
       await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
 
       return true
@@ -327,7 +344,7 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    await shipment.nextStep(undefined, session)
+    await nextStep(shipment._id, undefined, session)
     await shipment.updateOne(
       {
         bookingDateTime: data.datetime,
@@ -354,7 +371,7 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    await shipment.nextStep(data.images || [], session)
+    await nextStep(shipment._id, data.images || [], session)
 
     return true
   }
@@ -376,7 +393,7 @@ export default class MatchingResolver {
       const message = 'ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
-    
+
     if (!data.trackingNumber) {
       const message = 'ไม่สามารถบันทึกได้ เนื่องจากต้องระบุหมายเลขติดตาม'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -386,7 +403,7 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    await shipment.podSent(data.images || [], data.trackingNumber, data.provider, session)
+    await podSent(shipment._id, data.images || [], data.trackingNumber, data.provider, session)
 
     return true
   }
@@ -395,9 +412,9 @@ export default class MatchingResolver {
   @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
   async markAsFinish(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
     const session = ctx.session
-    const userId = ctx.req.user_id
+    const driverId = ctx.req.user_id
 
-    if (!userId) {
+    if (!driverId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
@@ -407,16 +424,36 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    await shipment.finishJob(session)
+    await finishJob(shipment._id, session)
 
-    const paymentMethod = get(shipment, 'payment.paymentMethod', '')
-    const customer = await UserModel.findById(shipment.customer)
+    const paymentMethod = shipment.paymentMethod
+
     if (paymentMethod === EPaymentMethod.CASH) {
+      const customer = await UserModel.findById(shipment.customer)
+      const _billing = await BillingModel.findOne({ billingNumber: shipment.trackingNumber }).session(session)
+
+      const today = new Date()
+      const generateMonth = format(today, 'yyMM')
+      const _receiptNumber = await generateTrackingNumber(`RE${generateMonth}`, 'receipt', 3)
+
+      const _receipt = new ReceiptModel({
+        receiptNumber: _receiptNumber,
+        receiptDate: today,
+        document: null,
+      })
+      await _receipt.save({ session })
+
+      await BillingModel.findByIdAndUpdate(_billing._id, { receipts: [_receipt] }, { session })
+
+      /**
+       * generate receipt
+       */
+      await generateBillingReceipt(_billing._id, true, session)
+
       if (customer.userType === EUserType.BUSINESS) {
-        const billingCycle = await BillingCycleModel.findOne({ shipments: { $in: [shipmentId] } }).lean()
-        if (billingCycle.taxAmount > 0) {
+        if (_billing.amount.tax > 0) {
           // Sent email
-          const customerModel = await UserModel.findById(billingCycle.user)
+          const customerModel = await UserModel.findById(_billing.user)
           if (shipment && customerModel) {
             const financialEmails = get(customerModel, 'businessDetail.creditPayment.financialContactEmails', [])
             const emails = uniq([customerModel.email, ...financialEmails])
@@ -455,17 +492,10 @@ export default class MatchingResolver {
               `[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Billing Cycle has sent for ${emails.join(', ')}`,
             )
           }
-        } else {
-          await BillingCycleModel.generateShipmentReceipt(shipmentId, true, session)
         }
-      } else {
-        console.log('0000. returnedddd................................= ======> Mark as finish')
-        await BillingCycleModel.generateShipmentReceipt(shipmentId, true, session)
-        console.log('111. returnedddd................................= ======> Mark as finish')
       }
     }
-    await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.IDLE }, { session })
-    console.log('returnedddd................................= ======> Mark as finish')
+    await UserModel.findByIdAndUpdate(driverId, { drivingStatus: EDriverStatus.IDLE }, { session })
     return true
   }
 
@@ -530,7 +560,7 @@ export default class MatchingResolver {
       const isBusinessUser = user.userType === EUserType.BUSINESS
       if (isBusinessUser) {
         await ShipmentModel.findByIdAndUpdate(shipmentId, { driver: driverId }, { session })
-        await shipment.nextStep(undefined, session)
+        await nextStep(shipment._id, undefined, session)
         await UserModel.findByIdAndUpdate(driverId, { drivingStatus: EDriverStatus.WORKING }, { session })
         const customerId = get(shipment, 'customer._id', '')
         if (driver.fcmToken) {
@@ -561,7 +591,7 @@ export default class MatchingResolver {
           })
         }
       }
-      const newShipments = await ShipmentModel.getNewAllAvailableShipmentForDriver()
+      const newShipments = await getNewAllAvailableShipmentForDriver()
       await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
 
       return true

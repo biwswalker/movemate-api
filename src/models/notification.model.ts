@@ -5,9 +5,13 @@ import UserModel from './user.model'
 import { LoadmoreArgs } from '@inputs/query.input'
 import admin from '@configs/firebase'
 import { Message } from 'firebase-admin/messaging'
-import { isArray } from 'lodash'
+import lodash, { isArray } from 'lodash'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 import { ClientSession } from 'mongoose'
+import { EUserRole } from '@enums/users'
+import Aigle from 'aigle'
+
+Aigle.mixin(lodash, {})
 
 export enum ENavigationType {
   INDEX = 'index',
@@ -56,7 +60,7 @@ export class Notification extends TimeStamps {
   @Field(() => ID)
   readonly _id: string
 
-  @Field(() => ID)
+  @Field()
   @Property({ required: true })
   userId: string
 
@@ -120,6 +124,18 @@ export class Notification extends TimeStamps {
     await pubsub.publish(NOTFICATIONS.COUNT, data.userId, unreadCount)
     // Publish to new noti
   }
+
+  static async sendNotificationToAdmins(data: Omit<INotification, 'userId'>, session?: ClientSession): Promise<void> {
+    const adminUserIds = await UserModel.find({ role: EUserRole.ADMIN }).distinct('_id')
+    await Aigle.each(adminUserIds, async (adminUser) => {
+      const _notification = new NotificationModel({ ...data, read: false, userId: adminUser })
+      await _notification.save({ session })
+      await UserModel.findByIdAndUpdate(adminUser, { $push: { notifications: _notification._id } }, { session })
+      const unreadCount = await NotificationModel.countDocuments({ userId: adminUser, read: false }, { session })
+      await pubsub.publish(NOTFICATIONS.COUNT, adminUser, unreadCount)
+    })
+  }
+
   static async sendFCMNotification(data: Message | Message[]): Promise<void> {
     if (isArray(data)) {
       await admin.messaging().sendEach(data)

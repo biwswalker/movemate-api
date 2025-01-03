@@ -10,19 +10,42 @@ registerEnumType(EPaymentMethod, {
 })
 
 export enum EPaymentStatus {
-  WAITING_CONFIRM_PAYMENT = 'WAITING_CONFIRM_PAYMENT',
-  INVOICE = 'INVOICE',
-  BILLED = 'BILLED',
-  PAID = 'PAID',
-  REFUNDED = 'REFUNDED',
-  REFUND = 'REFUND',
-  CANCELLED = 'CANCELLED',
+  PENDING = 'PENDING',
+  VERIFY = 'VERIFY',
+  COMPLETE = 'COMPLETE',
+  CANCELLED = 'CANCELLED'
 }
 
 registerEnumType(EPaymentStatus, {
   name: 'EPaymentStatus',
   description: 'Payment status',
 })
+
+export enum EPaymentType {
+  PAY = 'PAY',
+  REFUND = 'REFUND',
+  CHANGE = 'CHANGE',
+}
+
+registerEnumType(EPaymentType, {
+  name: 'EPaymentType',
+  description: 'Payment type',
+})
+
+// export enum _deprecated_EPaymentStatus {
+//   WAITING_CONFIRM_PAYMENT = 'WAITING_CONFIRM_PAYMENT',
+//   INVOICE = 'INVOICE',
+//   BILLED = 'BILLED',
+//   PAID = 'PAID',
+//   REFUNDED = 'REFUNDED',
+//   REFUND = 'REFUND',
+//   CANCELLED = 'CANCELLED',
+// }
+
+// registerEnumType(_deprecated_EPaymentStatus, {
+//   name: 'EPaymentStatus',
+//   description: 'Payment status',
+// })
 
 // Not update in client
 export enum EPaymentRejectionReason {

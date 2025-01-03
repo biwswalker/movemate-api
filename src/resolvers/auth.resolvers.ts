@@ -16,7 +16,6 @@ import { yupValidationThrow } from '@utils/error.utils'
 import bcrypt from 'bcrypt'
 import addEmailQueue from '@utils/email.utils'
 import { EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
-import mongoose from 'mongoose'
 
 @Resolver()
 export default class AuthResolver {
@@ -87,7 +86,6 @@ export default class AuthResolver {
           requireAcceptedPolicy = true
         }
       }
-
       return {
         token,
         user,

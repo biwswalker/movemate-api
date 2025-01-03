@@ -1,11 +1,15 @@
-import { ArgsType, Field } from 'type-graphql'
+import { Field, InputType } from 'type-graphql'
 import { FileInput } from './file.input'
 import { EPaymentMethod } from '@enums/payments'
+import { EBillingCriteriaState, EBillingCriteriaStatus, EBillingState } from '@enums/billing'
 
-@ArgsType()
-export class GetBillingCycleArgs {
-  @Field({ nullable: true })
-  status?: TBillingCriteriaStatus
+@InputType()
+export class GetBillingInput {
+  @Field(() => EBillingCriteriaStatus, { nullable: true })
+  status?: EBillingCriteriaStatus
+
+  @Field(() => EBillingCriteriaState, { nullable: true })
+  state?: EBillingCriteriaState
 
   @Field({ nullable: true })
   billingNumber?: string
@@ -35,17 +39,26 @@ export class GetBillingCycleArgs {
   customerId?: string
 }
 
-@ArgsType()
-export class BillingCycleRefundArgs {
+@InputType()
+export class ProcessBillingRefundInput {
   @Field()
-  billingCycleId: string
+  billingId: string
 
-  @Field(() => FileInput)
+  @Field()
+  paymentId: string
+
+  @Field(() => Boolean)
+  isRefunded: boolean
+
+  @Field({ nullable: true })
+  reason: string
+
+  @Field(() => FileInput, { nullable: true })
   imageEvidence: FileInput
 
-  @Field()
+  @Field({ nullable: true })
   paymentDate: Date
 
-  @Field()
+  @Field({ nullable: true })
   paymentTime: Date
 }
