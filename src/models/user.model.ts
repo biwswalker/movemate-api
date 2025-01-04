@@ -304,7 +304,7 @@ export class User extends TimeStamps {
     } else if (userRole === EUserRole.DRIVER) {
       const driverDetail: DriverDetail | undefined =
         get(this, '_doc.driverDetail', undefined) || this.driverDetail || undefined
-      return driverDetail.phoneNumber
+      return driverDetail ? driverDetail.phoneNumber : ''
     }
     return ''
   }
@@ -315,12 +315,16 @@ export class User extends TimeStamps {
     const userType = get(this, '_doc.userType', '') || this.userType || ''
     if (userRole === EUserRole.CUSTOMER) {
       if (userType === EUserType.INDIVIDUAL) {
-        const _individualDetail = (get(this, '_doc.individualDetail', '') || this.individualDetail) as IndividualCustomer | undefined
+        const _individualDetail = (get(this, '_doc.individualDetail', '') || this.individualDetail) as
+          | IndividualCustomer
+          | undefined
         if (_individualDetail) {
           return `${_individualDetail.address} แขวง/ตำบล ${_individualDetail.subDistrict} เขต/อำเภอ ${_individualDetail.district} จังหวัด ${_individualDetail.province} ${_individualDetail.postcode}`
         }
       } else if (userType === EUserType.BUSINESS) {
-        const _businessDetail = (get(this, '_doc.businessDetail', '') || this.businessDetail) as BusinessCustomer | undefined
+        const _businessDetail = (get(this, '_doc.businessDetail', '') || this.businessDetail) as
+          | BusinessCustomer
+          | undefined
         if (_businessDetail) {
           if (_businessDetail.paymentMethod === EPaymentMethod.CREDIT) {
             const creditPayment = _businessDetail.creditPayment as BusinessCustomerCreditPayment | undefined
