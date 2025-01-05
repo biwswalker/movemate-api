@@ -6,7 +6,12 @@ import { fDate } from '@utils/formatTime'
 import { toNumber } from 'lodash'
 import { Billing } from '@models/finance/billing.model'
 
-export async function CashNoTaxReceiptFooterComponent(doc: PDFDocument, billing: Billing) {
+export default async function ReceiptFooterComponent(
+  doc: PDFDocument,
+  billing: Billing,
+  taxIncluded?: boolean,
+  isReceiveWHTDocument?: boolean,
+) {
   const marginLeft = doc.page.margins.left
   const marginRight = doc.page.margins.right
   const maxWidth = doc.page.width - marginRight
@@ -30,6 +35,31 @@ export async function CashNoTaxReceiptFooterComponent(doc: PDFDocument, billing:
     .fill(COLORS.COMMON_WHITE)
 
   doc.moveDown(2.6).fillColor(COLORS.TEXT_PRIMARY)
+
+  // Tax section
+  if (taxIncluded) {
+    doc
+      .fontSize(8)
+      .font(FONTS.SARABUN_MEDIUM)
+      .text('รวมเป็นเงิน :', 0, doc.y - 10, { width: 400, align: 'right' })
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .fontSize(8)
+      .text(fCurrency(billing.amount.subTotal), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+      .moveDown(1.5)
+    doc
+      .fontSize(8)
+      .font(FONTS.SARABUN_MEDIUM)
+      .text('ภาษีหัก ณ ที่จ่าย 1% :', 0, doc.y - 10, { width: 400, align: 'right' })
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .fontSize(8)
+      .text(fCurrency(billing.amount.tax), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+
+    doc.moveDown(2.6) //.fillColor(COLORS.TEXT_PRIMARY)
+  }
+
+  //
   doc
     .fontSize(8)
     .font(FONTS.SARABUN_MEDIUM)
@@ -53,17 +83,71 @@ export async function CashNoTaxReceiptFooterComponent(doc: PDFDocument, billing:
     })
 
   // After transfer detail
-  doc.moveDown(18)
-  doc
-    .font(FONTS.SARABUN_LIGHT)
-    .fontSize(6)
-    .text('หากต้องการแก้ไขใบเสร็จรับเงิน กรุณาติดต่อ acc@movematethailand.com ภายใน 3 วันทำการ', marginLeft)
-    .moveDown(1)
-    .text(
-      'หลังจากได้รับเอกสาร มิเช่นนั้นทางบริษัทฯ จะถือว่าเอกสารดังกล่าวถูกต้อง ครบถ้วน สมบรณ์ เป็นที่เรียบร้อยแล้ว',
-      marginLeft,
-    )
+  if (taxIncluded && !isReceiveWHTDocument) {
+    // Tax detail
+    doc.moveDown(4)
+    doc.font(FONTS.SARABUN_MEDIUM).fontSize(9).text('กรุณาออกเอกสารภาษีหัก ณ ที่จ่าย ในนาม', marginLeft).moveDown(0.8)
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .fontSize(8)
+      .text('บริษัท', marginLeft)
+      .fontSize(8)
+      .font(FONTS.SARABUN_MEDIUM)
+      .text('บริษัท เทพพรชัย เอ็นเทอร์ไพรส์ จำกัด (สำนักงานใหญ่)', 94, doc.y - 11)
+      .moveDown(0.5)
+      .text('0105564086723', 94)
+      .moveDown(0.8)
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .fontSize(8)
+      .text('ที่อยู่', marginLeft)
+      .fontSize(8)
+      .font(FONTS.SARABUN_MEDIUM)
+      .text('เลขที่ 156 ซอยลาดพร้าว 96 ถนนลาดพร้าว แขวงพลับพลา เขตวังทองหลาง', 94, doc.y - 11)
+      .moveDown(0.5)
+      .text('จังหวัดกรุงเทพมหานคร 10310', 94)
 
+    doc.moveDown(4)
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .fontSize(7)
+      .text('1. หากต้องการแก้ไขใบเสร็จรับเงิน กรุณาติดต่อ acc@movematethailand.com ภายใน 3 วันทำการ', marginLeft)
+      .moveDown(1)
+      .text(
+        'หลังจากได้รับเอกสาร มิเช่นนั้นทางบริษัทฯ จะถือว่าเอกสารดังกล่าวถูกต้อง ครบถ้วน สมบรณ์ เป็นที่เรียบร้อยแล้ว',
+        marginLeft + 6,
+      )
+      .moveDown(1)
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .fontSize(7)
+      .text(
+        '2. เมื่อท่านได้ออกเอกสารภาษี หัก ณ ที่จ่ายแล้วให้ส่งเอกสารดังกล่าว มาที่ acc@movematethailand.com พร้อมอ้างอิงเลขที่ใบเสร็จรับเงิน',
+        marginLeft,
+      )
+      .moveDown(1)
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .fontSize(7)
+      .text('3. รบกวนส่งเอกสารภาษีหัก ณ ที่จ่ายฉบับจริงมาตามที่อยู่ในการออกเอกสารดังกล่าว', marginLeft)
+      .moveDown(8)
+  } else {
+    // Non tax detail
+    doc.moveDown(18)
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .fontSize(7)
+      .text('หากต้องการแก้ไขใบเสร็จรับเงิน กรุณาติดต่อ acc@movematethailand.com ภายใน 3 วันทำการ', marginLeft)
+      .moveDown(1)
+      .text(
+        'หลังจากได้รับเอกสาร มิเช่นนั้นทางบริษัทฯ จะถือว่าเอกสารดังกล่าวถูกต้อง ครบถ้วน สมบรณ์ เป็นที่เรียบร้อยแล้ว',
+        marginLeft,
+      )
+  }
+
+  /**
+   * Signature
+   */
   const issueBEDate = fDate(billing.issueDate, 'dd')
   const issueBEMonth = fDate(billing.issueDate, 'MM')
   const issueBEYear = toNumber(fDate(billing.issueDate, 'yyyy')) + 543

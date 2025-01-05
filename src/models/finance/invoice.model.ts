@@ -60,7 +60,7 @@ export class Invoice extends PaymentAmounts {
   updatedAt: Date
 
   @Field(() => User, { nullable: true })
-  @Property({ ref: () => User, required: false })
+  @Property({ ref: () => User, required: false, autopopulate: true })
   updatedBy: Ref<User>
 }
 

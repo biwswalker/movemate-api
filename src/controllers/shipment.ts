@@ -251,6 +251,7 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
   const _driverAcceptanceStatus = isCreditPaymentMethod ? EDriverAcceptanceStatus.PENDING : EDriverAcceptanceStatus.IDLE
 
   const _shipment = new ShipmentModel({
+    _id: _shipmentId,
     trackingNumber: _trackingNumber,
     status: EShipmentStatus.IDLE,
     adminAcceptanceStatus: _adminAcceptanceStatus,

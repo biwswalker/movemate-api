@@ -429,70 +429,31 @@ export default class MatchingResolver {
     const paymentMethod = shipment.paymentMethod
 
     if (paymentMethod === EPaymentMethod.CASH) {
-      const customer = await UserModel.findById(shipment.customer)
       const _billing = await BillingModel.findOne({ billingNumber: shipment.trackingNumber }).session(session)
 
-      const today = new Date()
-      const generateMonth = format(today, 'yyMM')
-      const _receiptNumber = await generateTrackingNumber(`RE${generateMonth}`, 'receipt', 3)
+      if (_billing) {
+        const today = new Date()
+        const generateMonth = format(today, 'yyMM')
+        const _receiptNumber = await generateTrackingNumber(`RE${generateMonth}`, 'receipt', 3)
 
-      const _receipt = new ReceiptModel({
-        receiptNumber: _receiptNumber,
-        receiptDate: today,
-        document: null,
-      })
-      await _receipt.save({ session })
+        const amount = _billing.amount
+        const _receipt = new ReceiptModel({
+          receiptNumber: _receiptNumber,
+          receiptDate: today,
+          document: null,
+          subTotal: amount.subTotal,
+          total: amount.total,
+          tax: amount.tax,
+        })
+        await _receipt.save({ session })
 
-      await BillingModel.findByIdAndUpdate(_billing._id, { receipts: [_receipt] }, { session })
+        await BillingModel.findByIdAndUpdate(_billing._id, { receipts: [_receipt] }, { session, new: true })
 
-      /**
-       * generate receipt
-       */
-      await generateBillingReceipt(_billing._id, true, session)
-
-      if (customer.userType === EUserType.BUSINESS) {
-        if (_billing.amount.tax > 0) {
-          // Sent email
-          const customerModel = await UserModel.findById(_billing.user)
-          if (shipment && customerModel) {
-            const financialEmails = get(customerModel, 'businessDetail.creditPayment.financialContactEmails', [])
-            const emails = uniq([customerModel.email, ...financialEmails])
-
-            const pickup = head(shipment.destinations)?.name || ''
-            const dropoffs = reduce(
-              tail(shipment.destinations),
-              (prev, curr) => {
-                if (curr.name) {
-                  return prev ? `${prev}, ${curr.name}` : curr.name
-                }
-                return prev
-              },
-              '',
-            )
-            const tracking_link = `https://www.movematethailand.com/main/tracking?tracking_number=${shipment.trackingNumber}`
-            await addEmailQueue({
-              from: process.env.NOREPLY_EMAIL,
-              to: emails,
-              subject: `ขอบคุณที่ใช้บริการ Movemate Thailand | Shipment No. ${shipment.trackingNumber}`,
-              template: 'cash_wht_receipt',
-              context: {
-                tracking_number: shipment.trackingNumber,
-                fullname: customerModel.fullname,
-                phone_number: customerModel.contactNumber,
-                email: customerModel.email,
-                customer_type: customerModel.userType === EUserType.INDIVIDUAL ? 'ส่วนบุคคล' : 'บริษัท/องค์กร',
-                pickup,
-                dropoffs,
-                tracking_link,
-                contact_number: '02-xxx-xxxx',
-                movemate_link: `https://www.movematethailand.com`,
-              },
-            })
-            console.log(
-              `[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Billing Cycle has sent for ${emails.join(', ')}`,
-            )
-          }
-        }
+        /**
+         * generate receipt
+         */
+        const documentId = await generateBillingReceipt(_billing._id, true, session)
+        await ReceiptModel.findByIdAndUpdate(_receipt._id, { document: documentId })
       }
     }
     await UserModel.findByIdAndUpdate(driverId, { drivingStatus: EDriverStatus.IDLE }, { session })

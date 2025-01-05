@@ -1,9 +1,11 @@
 import { Field, Float, ID, ObjectType } from 'type-graphql'
-import { prop as Property, Ref, getModelForClass } from '@typegoose/typegoose'
+import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { EAdjustmentNoteType, EBillingStatus } from '@enums/billing'
 import { IsEnum } from 'class-validator'
 import { Payment } from './payment.model'
+import mongooseAutoPopulate from 'mongoose-autopopulate'
 
+@plugin(mongooseAutoPopulate)
 @ObjectType()
 export class BillingAdjustmentNote {
   @Field(() => ID)

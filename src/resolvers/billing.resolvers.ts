@@ -24,7 +24,7 @@ import { addDays, endOfMonth, format, parse, startOfMonth } from 'date-fns'
 import { th } from 'date-fns/locale'
 import path from 'path'
 import addEmailQueue from '@utils/email.utils'
-import { generateNonTaxCashReceipt, generateReceipt } from 'reports/receipt'
+import { generateReceipt } from 'reports/receipt'
 import { ApprovalBillingPaymentInput } from '@inputs/billingPayment.input'
 import TransactionModel, {
   ERefType,
@@ -119,7 +119,6 @@ export default class BillingResolver {
         const message = `ไม่สามารถเรียกข้อมูลใบแจ้งหนี้`
         throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
       }
-      console.log('_billing: ', JSON.stringify(_billing.payments, undefined, 2))
       return _billing
     } catch (error) {
       console.log(error)
@@ -168,19 +167,26 @@ export default class BillingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
-  async confirmReceiveWHTDocument(@Ctx() ctx: GraphQLContext, @Arg('documentId') documentId: string): Promise<boolean> {
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
+  async confirmReceiveWHTDocument(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('billingId') billingId: string,
+    @Arg('documentId') documentId: string,
+  ): Promise<boolean> {
+    const session = ctx.session
     const adminId = ctx.req.user_id
-    try {
-      await BillingDocumentModel.findByIdAndUpdate(documentId, {
+    const _billing = await BillingModel.findById(billingId).session(session)
+    const _document = await BillingDocumentModel.findByIdAndUpdate(
+      documentId,
+      {
         receviedWHTDocumentDate: new Date(),
         updatedBy: adminId,
-      })
-      return true
-    } catch (error) {
-      console.log(error)
-      throw error
-    }
+      },
+      { session, new: true },
+    )
+    // Regenerate receipt
+    await generateReceipt(_billing, _document.filename, session)
+    return true
   }
 
   @Mutation(() => Boolean)
@@ -329,11 +335,7 @@ export default class BillingResolver {
   ): Promise<boolean> {
     const _billing = await BillingModel.findById(billingId)
     const _document = await BillingDocumentModel.findById(documentId)
-    const generateCashReceiptNonTax = _billing.paymentMethod === EPaymentMethod.CASH && _billing.amount.tax <= 0
-    const _ = generateCashReceiptNonTax
-      ? await generateNonTaxCashReceipt(_billing, _document.filename)
-      : await generateReceipt(_billing, _document.filename)
-
+    await generateReceipt(_billing, _document.filename)
     return true
   }
 

@@ -2,7 +2,9 @@ import { EBillingCriteriaState, EBillingCriteriaStatus, EBillingState, EBillingS
 import { GetBillingInput } from '@inputs/billingCycle.input'
 import { get, isEmpty } from 'lodash'
 import { PipelineStage, Types } from 'mongoose'
-import { pipeline } from 'nodemailer/lib/xoauth2'
+import { userPipelineStage } from './user.pipeline'
+import { filePipelineStage } from './file.pipline'
+import { billingDocumentPipelineStage } from './document.pipeline'
 
 export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {}) => {
   const {
@@ -119,64 +121,8 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
 
   return [
     ...beforeMatch,
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'user',
-        foreignField: '_id',
-        as: 'user',
-        pipeline: [
-          {
-            $lookup: {
-              from: 'individualcustomers',
-              localField: 'individualDetail',
-              foreignField: '_id',
-              as: 'individualDetail',
-            },
-          },
-          {
-            $unwind: {
-              path: '$individualDetail',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $lookup: {
-              from: 'businesscustomers',
-              localField: 'businessDetail',
-              foreignField: '_id',
-              as: 'businessDetail',
-            },
-          },
-          {
-            $unwind: {
-              path: '$businessDetail',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $lookup: {
-              from: 'files',
-              localField: 'profileImage',
-              foreignField: '_id',
-              as: 'profileImage',
-            },
-          },
-          {
-            $unwind: {
-              path: '$profileImage',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-        ],
-      },
-    },
-    {
-      $unwind: {
-        path: '$user',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
+    ...userPipelineStage('user'),
+    ...userPipelineStage('updatedBy'),
     {
       $lookup: {
         from: 'payments',
@@ -190,22 +136,7 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
               localField: 'evidence',
               foreignField: '_id',
               as: 'evidence',
-              pipeline: [
-                {
-                  $lookup: {
-                    from: 'files',
-                    localField: 'image',
-                    foreignField: '_id',
-                    as: 'image',
-                  },
-                },
-                {
-                  $unwind: {
-                    path: '$image',
-                    preserveNullAndEmptyArrays: true,
-                  },
-                },
-              ],
+              pipeline: filePipelineStage('image'),
             },
           },
           {
@@ -216,6 +147,7 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
               as: 'quotations',
             },
           },
+          ...userPipelineStage('updatedBy'),
         ],
       },
     },
@@ -225,6 +157,7 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
         localField: 'receipts',
         foreignField: '_id',
         as: 'receipts',
+        pipeline: billingDocumentPipelineStage('document'),
       },
     },
     {
@@ -233,6 +166,7 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
         localField: 'invoice',
         foreignField: '_id',
         as: 'invoice',
+        pipeline: [...billingDocumentPipelineStage('document'), ...userPipelineStage('updatedBy')],
       },
     },
     {
@@ -255,20 +189,6 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
         localField: 'adjustmentNotes',
         foreignField: '_id',
         as: 'adjustmentNotes',
-      },
-    },
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'updatedBy',
-        foreignField: '_id',
-        as: 'updatedBy',
-      },
-    },
-    {
-      $unwind: {
-        path: '$updatedBy',
-        preserveNullAndEmptyArrays: true,
       },
     },
     ...query,

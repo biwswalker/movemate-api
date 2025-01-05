@@ -7,6 +7,11 @@ import {
   notifyOverdueBilling,
 } from '@controllers/billing'
 import cron from 'node-cron'
+// import BillingModel from '@models/finance/billing.model'
+// import { BillingDocument } from '@models/finance/documents.model'
+// import { Receipt } from '@models/finance/receipt.model'
+// import { last, sortBy } from 'lodash'
+// import { generateReceipt } from 'reports/receipt'
 
 export default async function configureCronjob() {
   cron.schedule(
@@ -47,8 +52,10 @@ export default async function configureCronjob() {
   // await notifyIssueEmailToCustomer()
   // await BillingCycleModel.createBillingCycleForUser("66cdac28ae254a56f48c843e")
   // await issueEmailToCustomer()
-  // const biili = await BillingCycleModel.findOne({ billingNumber: 'MMTH000037' })
-  // const { fileName } = await generateReceiptCashWithNonTax(biili, biili.issueReceiptFilename)
+  // const _billing = await BillingModel.findOne({ billingNumber: 'MMTH000069' })
+  // const _receipt = last(sortBy(_billing.receipts, 'createdAt')) as Receipt
+  // const _document = _receipt.document as BillingDocument
   // const { fileName } = await generateInvoice(biili)
+  // const { fileName } = await generateReceipt(_billing, _document.filename)
   // console.log('fileName: ', fileName)
 }
