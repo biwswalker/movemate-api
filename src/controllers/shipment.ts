@@ -4,7 +4,22 @@ import VehicleTypeModel from '@models/vehicleType.model'
 import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
 import { AnyBulkWriteOperation, ClientSession, Types } from 'mongoose'
-import lodash, { filter, find, get, head, includes, isEmpty, map, reduce, tail, values } from 'lodash'
+import lodash, {
+  filter,
+  find,
+  get,
+  groupBy,
+  head,
+  includes,
+  isEqual,
+  last,
+  map,
+  range,
+  reduce,
+  sortBy,
+  tail,
+  values,
+} from 'lodash'
 import { Destination } from '@models/shipment/objects'
 import { extractThaiAddress, getPlaceDetail } from '@services/maps/location'
 import { calculateQuotation } from './quotation'
@@ -23,7 +38,7 @@ import FileModel from '@models/file.model'
 import DirectionsResultModel from '@models/directionResult.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import { format } from 'date-fns'
-import PaymentModel from '@models/finance/payment.model'
+import PaymentModel, { Payment } from '@models/finance/payment.model'
 import { BillingReason } from '@models/finance/objects'
 import QuotationModel from '@models/finance/quotation.model'
 import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
@@ -33,10 +48,19 @@ import ShipmentModel from '@models/shipment.model'
 import { initialStepDefinition } from './steps'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import addEmailQueue from '@utils/email.utils'
-import { CalculationInput } from '@inputs/booking.input'
+import { UpdateShipmentInput } from '@inputs/booking.input'
 import { fCurrency } from '@utils/formatNumber'
 import { addCustomerCreditUsage } from './customer'
 import PaymentEvidenceModel from '@models/finance/evidence.model'
+import { AdditionalService } from '@models/additionalService.model'
+import { VALUES } from 'constants/values'
+import { addStep, removeStep } from './shipmentOperation'
+import StepDefinitionModel, {
+  EStepDefinition,
+  EStepDefinitionName,
+  EStepStatus,
+  StepDefinition,
+} from '@models/shipmentStepDefinition.model'
 
 Aigle.mixin(lodash, {})
 
@@ -356,11 +380,17 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
  * @param customerId
  * @param session
  */
-export async function updateShipment(data: CalculationInput, adminId: string, session?: ClientSession) {
-  const { isRounded, locations, vehicleTypeId, serviceIds, discountId, shipmentId } = data
+export async function updateShipment(data: UpdateShipmentInput, adminId: string, session?: ClientSession) {
+  const { isRounded, locations, vehicleTypeId, serviceIds, discountId, shipmentId, podDetail } = data
 
   const _shipment = await ShipmentModel.findById(shipmentId).session(session)
   const _customer = _shipment.customer as User | undefined
+
+  const _isRoundedChanged = _shipment.isRoundedReturn === isRounded
+
+  const _oldDropoffLocationsPlaceID = map(tail(_shipment.destinations), (location) => location.placeId)
+  const _newDropoffLocationsPlaceID = map(tail(locations), (location) => location.placeId)
+  const _locationDropoffChanged = !isEqual(_oldDropoffLocationsPlaceID, _newDropoffLocationsPlaceID)
 
   const _destinations = await Aigle.map<DestinationInput, Destination>(locations, async (location) => {
     const { place } = await getPlaceDetail(location.placeId)
@@ -387,34 +417,39 @@ export async function updateShipment(data: CalculationInput, adminId: string, se
     session,
   )
 
-  // Duplicate additional service cost for invoice data
-  const oldServices = filter(_shipment.additionalServices as ShipmentAdditionalServicePrice[], (service) => {
-    const _id = get(service, 'reference._id', '')
-    return includes(serviceIds, _id.toString())
-  }).map((service) => service._id.toString())
-
-  const excludeServices = filter(serviceIds, (serviceId) => {
-    const service = find(_shipment.additionalServices, ['reference._id', serviceId])
-    return isEmpty(service)
-  })
-  const serviceBulkOperations = await Aigle.map<string, AnyBulkWriteOperation>(
-    excludeServices,
-    async (serviceCostId) => {
-      const serviceCost = await AdditionalServiceCostPricingModel.findById(serviceCostId).lean()
-      return {
-        insertOne: {
-          document: {
-            cost: serviceCost.cost,
-            price: serviceCost.price,
-            reference: serviceCost._id,
-          },
-        },
+  /**
+   * Additional Service Cost Pricng
+   */
+  const _isExistingPODService = find(_shipment.additionalServices, ['reference.additionalService.name', VALUES.POD])
+  let _isPODServiceIncluded = false
+  const _shipmentAdditionalServicesPricing = await Aigle.map(serviceIds, async (serviceId) => {
+    const service = find(_shipment.additionalServices || [], ['reference._id', serviceId]) as
+      | ShipmentAdditionalServicePrice
+      | undefined
+    if (service) {
+      const serviceName = get(service, 'reference.additionalService.name', '')
+      if (serviceName === VALUES.POD) {
+        _isPODServiceIncluded = true
       }
-    },
-  )
-
-  const serviceBulkResult = await ShipmentAdditionalServicePriceModel.bulkWrite(serviceBulkOperations)
-  const _additionalServices = values(serviceBulkResult.insertedIds)
+      return service._id
+    } else {
+      const _newService = await AdditionalServiceCostPricingModel.findById(serviceId) //.session(session)
+      if (_newService) {
+        const additionalService = _newService.additionalService as AdditionalService
+        if (additionalService.name === VALUES.POD) {
+          _isPODServiceIncluded = true
+        }
+        const _shipmentAddtionalService = new ShipmentAdditionalServicePriceModel({
+          cost: _newService.cost,
+          price: _newService.price,
+          reference: _newService._id,
+        })
+        await _shipmentAddtionalService.save()
+        return _shipmentAddtionalService._id
+      }
+      return ''
+    }
+  })
 
   const today = new Date()
   const generateMonth = format(today, 'yyMM')
@@ -461,6 +496,8 @@ export async function updateShipment(data: CalculationInput, adminId: string, se
           type: EBillingReason.REFUND_PAYMENT,
         }
       : undefined
+    const _cashBilling = await BillingModel.findOne({ billingNumber: _shipment.trackingNumber })
+    const _lastPayment = last(sortBy(_cashBilling.payments, 'createdAt')) as Payment | undefined
     await BillingModel.findOneAndUpdate(
       { billingNumber: _shipment.trackingNumber },
       {
@@ -474,6 +511,15 @@ export async function updateShipment(data: CalculationInput, adminId: string, se
       },
       { session },
     )
+
+    /**
+     * Update if old exisiting is not complete
+     */
+    if (_lastPayment) {
+      if (includes([EPaymentStatus.PENDING, EPaymentStatus.VERIFY], _lastPayment.status)) {
+        await PaymentModel.findByIdAndUpdate(_lastPayment._id, { status: EPaymentStatus.CANCELLED, updatedBy: adminId }, { session })
+      }
+    }
   } else {
     /**
      * Update customer usage credit
@@ -484,7 +530,8 @@ export async function updateShipment(data: CalculationInput, adminId: string, se
   await DirectionsResultModel.findByIdAndUpdate(get(_shipment, 'route._id', ''), {
     rawData: JSON.stringify(_quotationCalculation.routes),
   })
-  await ShipmentModel.findByIdAndUpdate(
+
+  const _updatedShipment = await ShipmentModel.findByIdAndUpdate(
     _shipment._id,
     {
       distance: _quotationCalculation.distance,
@@ -495,13 +542,167 @@ export async function updateShipment(data: CalculationInput, adminId: string, se
       destinations: _destinations,
       isRoundedReturn: isRounded,
       vehicleId: vehicleTypeId,
-      additionalServices: [...oldServices, ..._additionalServices],
+      additionalServices: _shipmentAdditionalServicesPricing,
+      ...(podDetail ? { podDetail } : {}),
       $push: {
         quotations: [_quotation],
       },
     },
-    { session },
+    { session, new: true },
   )
+
+  if (includes([EShipmentStatus.IDLE, EShipmentStatus.PROGRESSING], _updatedShipment.status)) {
+    /**
+     * Updating Step Definition
+     */
+    const _steps = _updatedShipment.steps
+    if (_isExistingPODService && !_isPODServiceIncluded) {
+      const existingPOD = find(_steps, ['step', EStepDefinition.POD]) as StepDefinition | undefined
+      if (existingPOD) {
+        // Removal POD step
+        await removeStep(_updatedShipment._id, existingPOD.seq, session)
+      }
+    } else if (!_isExistingPODService && _isPODServiceIncluded) {
+      // Add POD step
+      const existingPOD = find(_steps, ['step', EStepDefinition.POD])
+      if (!existingPOD) {
+        const dropoffLocationSteps = filter(_steps, (step: StepDefinition) => step.step === EStepDefinition.DROPOFF)
+        const lastDropoff = last(sortBy(dropoffLocationSteps, 'seq')) as StepDefinition | undefined
+        const _index = lastDropoff.seq || 0
+        const podStep = new StepDefinitionModel({
+          seq: _index + 1,
+          step: EStepDefinition.POD,
+          stepName: EStepDefinitionName.POD,
+          customerMessage: 'แนบเอกสารและส่งเอกสาร POD',
+          driverMessage: 'แนบเอกสารและส่งเอกสาร POD',
+          stepStatus: EStepStatus.IDLE,
+        })
+        await addStep(_updatedShipment._id, podStep, session)
+      }
+    }
+
+    /**
+     * Update ไป - กลับ
+     * - Check ถ้าดำเนินการส่งของกลับแล้ว(ARRIVAL_DROPOFF และ DROPOFF) จะแก้ไขไปกลับไม่ได้ ทั้ง
+     * - เพิ่มลด step
+     */
+    if (_isRoundedChanged) {
+      const _roundedSteps = await ShipmentModel.findById(_shipment._id).distinct('steps').session(session)
+      if (isRounded) {
+        /**
+         * New returned steps
+         */
+        const dropoffLocationSteps = filter(
+          _roundedSteps,
+          (step: StepDefinition) => step.step === EStepDefinition.DROPOFF,
+        )
+        const lastDropoff = last(sortBy(dropoffLocationSteps, 'seq')) as StepDefinition | undefined
+        if (lastDropoff) {
+          const _arrivalDropoffStep = new StepDefinitionModel({
+            seq: lastDropoff.seq + 1,
+            step: EStepDefinition.ARRIVAL_DROPOFF,
+            stepName: EStepDefinitionName.ARRIVAL_DROPOFF,
+            customerMessage: 'ถึงจุดส่งสินค้ากลับ',
+            driverMessage: 'จุดส่งสินค้า(กลับไปยังต้นทาง)',
+            stepStatus: EStepStatus.IDLE,
+            meta: -1,
+          })
+          await addStep(_updatedShipment._id, _arrivalDropoffStep, session)
+          const _dropoffStep = new StepDefinitionModel({
+            seq: lastDropoff.seq + 2,
+            step: EStepDefinition.DROPOFF,
+            stepName: EStepDefinitionName.DROPOFF,
+            customerMessage: 'จัดส่งสินค้ากลับ',
+            driverMessage: 'จุดส่งสินค้า (กลับไปยังต้นทาง)',
+            stepStatus: EStepStatus.IDLE,
+            meta: -1,
+          })
+          await addStep(_updatedShipment._id, _dropoffStep, session)
+        }
+      } else {
+        /**
+         * Remove returned steps
+         */
+        const existingArrivalDropoff = find(_roundedSteps, { step: EStepDefinition.ARRIVAL_DROPOFF, meta: -1 })
+        const existingDropoff = find(_roundedSteps, { step: EStepDefinition.DROPOFF, meta: -1 })
+        if (existingArrivalDropoff && existingDropoff) {
+          const arrivalDropoff = existingArrivalDropoff as StepDefinition
+          const _removeStepIndex = arrivalDropoff.seq
+          // Remove ARRIVAL_DROPOFF
+          await removeStep(_updatedShipment._id, _removeStepIndex, session)
+          // Remove DROPOFF
+          await removeStep(_updatedShipment._id, _removeStepIndex, session)
+        }
+      }
+    }
+
+    /**
+     * - Update direction Dropoff Locations
+     * - Check ถ้าดำเนินการแล้วจะแก้เส้นทางไม่ได้
+     * - เพิ่มลด step
+     */
+    if (_locationDropoffChanged) {
+      const isMultiple = locations.length > 2
+      const _locationSteps = await ShipmentModel.findById(_shipment._id).distinct('steps').session(session)
+      const _dropoffStepsFilter = filter(_locationSteps, (step: StepDefinition) => {
+        return step.step === EStepDefinition.ARRIVAL_DROPOFF || step.step === EStepDefinition.DROPOFF
+      })
+
+      const oldLength = _shipment.destinations.length
+      const newLength = locations.length
+      const differenceLength = oldLength - newLength
+
+      const _dropoffStepsSort = sortBy(_dropoffStepsFilter, ['seq', 'meta'])
+      const _lastDropoffSteps = last(_dropoffStepsSort) as StepDefinition
+      const lastSeq = _lastDropoffSteps.seq
+      const lastMeta = _lastDropoffSteps.meta
+
+      if (differenceLength > 0) {
+        // Add new by len
+        const ranges = range(1, differenceLength)
+        const range_length = ranges.length
+        await Aigle.map(ranges, async (seq, index) => {
+          const isLast = range_length - 1 >= index
+          const newSeq = lastSeq + seq
+          const newMeta = lastMeta + seq
+          const _newArrivalDropoffStep = new StepDefinitionModel({
+            step: EStepDefinition.ARRIVAL_DROPOFF,
+            seq: newSeq,
+            stepName: EStepDefinitionName.ARRIVAL_DROPOFF,
+            customerMessage: isMultiple ? `ถึงจุดส่งสินค้าที่ ${newMeta}` : 'ถึงจุดส่งสินค้า',
+            driverMessage: isMultiple ? `จุดส่งสินค้าที่ ${newMeta}${isLast ? ' (จุดสุดท้าย)' : ''}` : 'จุดส่งสินค้า',
+            stepStatus: EStepStatus.IDLE,
+            meta: newMeta,
+          })
+          await addStep(_updatedShipment._id, _newArrivalDropoffStep, session)
+          const _newDropoffStep = new StepDefinitionModel({
+            step: EStepDefinition.DROPOFF,
+            seq: newSeq + 1,
+            stepName: EStepDefinitionName.DROPOFF,
+            customerMessage: isMultiple ? `จัดส่งสินค้าจุดที่ ${newMeta}` : 'จัดส่งสินค้า',
+            driverMessage: isMultiple ? `จุดส่งสินค้าที่ ${newMeta}${isLast ? ' (จุดสุดท้าย)' : ''}` : 'จุดส่งสินค้า',
+            stepStatus: EStepStatus.IDLE,
+            meta: newMeta,
+          })
+          await addStep(_updatedShipment._id, _newDropoffStep, session)
+        })
+      } else if (differenceLength < 0) {
+        /**
+         * Removal Step
+         */
+        const startRemovalMeta = lastMeta - Math.abs(differenceLength) + 1
+        const removalSteps = filter(_dropoffStepsSort, (step: StepDefinition) => step.meta >= startRemovalMeta)
+        const _removalStepGroup = groupBy(removalSteps, 'meta')
+        const _removalValues = values(_removalStepGroup)
+        await Aigle.map(_removalValues, async (_) => {
+          // Remove ARRIVAL_DROPOFF
+          await removeStep(_updatedShipment._id, startRemovalMeta, session)
+          // Remove DROPOFF
+          await removeStep(_updatedShipment._id, startRemovalMeta, session)
+        })
+      }
+    }
+  }
 
   // Noti
   await NotificationModel.sendNotification({

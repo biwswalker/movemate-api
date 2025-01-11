@@ -27,7 +27,7 @@ import {
   EShipmentStatusCriteria,
 } from '@enums/shipments'
 import { EUserRole } from '@enums/users'
-import { CalculationInput } from '@inputs/booking.input'
+import { CalculationInput, UpdateShipmentInput } from '@inputs/booking.input'
 import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
 import { createShipment, updateShipment } from '@controllers/shipment'
 import { calculateQuotation, calculateStep } from '@controllers/quotation'
@@ -438,7 +438,7 @@ export default class ShipmentResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
-  async updateShipment(@Arg('data') data: CalculationInput, @Ctx() ctx: GraphQLContext): Promise<boolean> {
+  async updateShipment(@Arg('data') data: UpdateShipmentInput, @Ctx() ctx: GraphQLContext): Promise<boolean> {
     try {
       const user_id = ctx.req.user_id
       const session = ctx.session

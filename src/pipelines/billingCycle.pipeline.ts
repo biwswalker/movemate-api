@@ -145,6 +145,7 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
               localField: 'quotations',
               foreignField: '_id',
               as: 'quotations',
+              pipeline: userPipelineStage('updatedBy'),
             },
           },
           ...userPipelineStage('updatedBy'),

@@ -78,3 +78,27 @@ export class CalculationInput {
     @Field({ nullable: true })
     discountId?: string
 }
+
+@InputType()
+export class UpdateShipmentInput {
+    @Field({ nullable: true })
+    shipmentId?: string
+    
+    @Field(() => [DestinationInput])
+    locations: DestinationInput[]
+
+    @Field(() => Boolean)
+    isRounded: boolean
+
+    @Field()
+    vehicleTypeId: string
+
+    @Field(() => [String], { nullable: true })
+    serviceIds?: string[]
+
+    @Field({ nullable: true })
+    discountId?: string
+
+    @Field(() => PODAddressInput, { nullable: true })
+    podDetail?: PODAddressInput
+}

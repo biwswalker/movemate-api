@@ -21,6 +21,12 @@ import TransactionModel, {
 } from '@models/transaction.model'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import PaymentEvidenceModel from '@models/finance/evidence.model'
+import { format } from 'date-fns'
+import { generateTrackingNumber } from '@utils/string.utils'
+import ReceiptModel from '@models/finance/receipt.model'
+import { generateBillingReceipt } from './billingReceipt'
+import { MakePayBillingInput } from '@inputs/payment.input'
+import FileModel from '@models/file.model'
 
 Aigle.mixin(lodash, {})
 
@@ -91,30 +97,21 @@ export async function markBillingAsPaid(
   const today = new Date()
   if (_billing.paymentMethod === EPaymentMethod.CREDIT) {
     /**
-     * TODO: Recheck receipt
-     * ถ้าเป็น business credit มี tax จะต้องรอ 50 Tawi มาก่อนถึงจะส่งเอกสาร ?
+     * สร้าง Receipt สำหรับ Credit payment
      */
-    // const generateMonth = format(today, 'yyMM')
-    // const _receiptNumber = await generateTrackingNumber(`RE${generateMonth}`, 'receipt', 3)
-    // const _document = new BillingDocumentModel({
-    //     emailTime: '',
-    //     filename: '',
-    //     postalTime: '',
-    //     provider: '',
-    //     trackingNumber: '',
-    //     updatedBy: '',
-    // })
-    // await _document.save({ session })
-    // const _receipt = new ReceiptModel({
-    //   receiptNumber: _receiptNumber,
-    //   receiptDate: today,
-    //   total: _payment.total,
-    //   subTotal: _payment.subTotal,
-    //   tax: _payment.tax,
-    //   updatedBy: adminId,
-    // })
-    // await _receipt.save({ session })
-    // _receiptId = _receipt._id
+    const generateMonth = format(today, 'yyMM')
+    const _receiptNumber = await generateTrackingNumber(`RE${generateMonth}`, 'receipt', 3)
+    const _receipt = new ReceiptModel({
+      receiptNumber: _receiptNumber,
+      receiptDate: today,
+      document: null,
+      total: _payment.total,
+      subTotal: _payment.subTotal,
+      tax: _payment.tax,
+      updatedBy: adminId,
+    })
+    await _receipt.save({ session })
+    _receiptId = _receipt._id
   }
 
   /**
@@ -125,9 +122,8 @@ export async function markBillingAsPaid(
     {
       status: EBillingStatus.COMPLETE,
       state: EBillingState.CURRENT,
-      //   receipts: _receiptId ? [_receiptId] : [],
-      billingStatus: EBillingStatus.COMPLETE,
       updatedBy: adminId,
+      $push: { receipts: _receiptId },
     },
     { session, new: true },
   )
@@ -147,9 +143,11 @@ export async function markBillingAsPaid(
     const amount = -_payment.total
     const customerId = get(_billing, 'user._id', '')
     await updateCustomerCreditUsageBalance(customerId, amount, session)
-    // TODO: Recheck ** Generate receipt sent at Finish job shipment **
-    // const billingCycleAfterSave = await BillingCycleModel.findById(billingCycle._id)
-    // await generateReceipt(billingCycleAfterSave)
+    /**
+     * generate receipt
+     */
+    const documentId = await generateBillingReceipt(_billing._id, true, session)
+    await ReceiptModel.findByIdAndUpdate(_receiptId, { document: documentId }, { session })
   }
 
   await getAdminMenuNotificationCount()
@@ -207,6 +205,13 @@ export async function markBillingAsRejected(
 
   if (_billing.paymentMethod === EPaymentMethod.CASH) {
     await Aigle.forEach(_billing.shipments as Shipment[], async (shipment) => {
+      /**
+       * TODO:
+       * When Payment type PAY rejected
+       * - So what we do -> (Cancelled shipment or not action with shipment) หรือเพิ่ม ADDITONAL_PAY และจับจากตัวนี้และไม่เข้าสู่การ cancelled
+       * - ถ้า Reject addditional pay จะเข้า process การคืนเงิน driver เลยไหมหรือยังไง
+       *
+       */
       await markShipmentVerified({ result: 'reject', shipmentId: shipment._id, reason }, adminId, session)
     })
   }
@@ -340,4 +345,51 @@ export async function markBillingAsRefunded(input: MarkBillingAsRefundInput, adm
     infoText,
     infoLink,
   })
+}
+
+export async function makePayBilling(
+  data: MakePayBillingInput,
+  billingId: string,
+  paymentId: string,
+  session?: ClientSession | null,
+) {
+  const { bank, bankName, bankNumber, image, paymentDate, paymentTime } = data
+  const _billing = await BillingModel.findById(billingId).session(session).lean()
+  const _payment = await PaymentModel.findById(paymentId).session(session)
+
+  if (!_billing || !_payment) {
+    const message = 'ไม่สามารถดำเนินการชำระได้ เนื่องจากไม่พบการชำระ'
+    throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+  }
+
+  if (_payment.status !== EPaymentStatus.PENDING || _payment.type !== EPaymentType.PAY) {
+    const message = 'ไม่สามารถดำเนินการชำระได้ เนื่องจากท่านยังไม่ได้อยู่ขั้นตอนการชำระ'
+    throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+  }
+
+  /**
+   * Create evidence image
+   */
+  const _evidenceImage = new FileModel(image)
+  await _evidenceImage.save({ session })
+  const _evidence = new PaymentEvidenceModel({
+    image: _evidenceImage,
+    bank,
+    bankName,
+    bankNumber,
+    paymentDate,
+    paymentTime,
+  })
+  await _evidence.save({ session })
+  /**
+   * Update Payment status
+   */
+  await PaymentModel.findByIdAndUpdate(paymentId, {
+    status: EPaymentStatus.VERIFY,
+    $push: { evidence: _evidence },
+  })
+
+  await getAdminMenuNotificationCount()
+
+  return true
 }

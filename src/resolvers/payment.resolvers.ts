@@ -8,16 +8,18 @@ import { EQRPaymentType } from '@enums/payments'
 import { EUserRole } from '@enums/users'
 import { generate } from 'promptparse'
 import { REPONSE_NAME } from 'constants/status'
+import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
+import { MakePayBillingInput } from '@inputs/payment.input'
+import { makePayBilling } from '@controllers/billingPayment'
 
 @Resolver()
 export default class PaymentResolver {
-
   /**
    * [WIP]
-   * @param amount 
-   * @param data 
-   * @param ctx 
-   * @returns 
+   * @param amount
+   * @param data
+   * @param ctx
+   * @returns
    */
   @Mutation(() => String)
   @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
@@ -50,5 +52,18 @@ export default class PaymentResolver {
       }
       throw errors
     }
+  }
+
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]), RetryTransactionMiddleware)
+  async makeAdditionalPayment(
+    @Arg('billingId') billingId: string,
+    @Arg('paymentId') paymentId: string,
+    @Arg('data', () => MakePayBillingInput) data: MakePayBillingInput,
+    @Ctx() ctx: GraphQLContext,
+  ): Promise<boolean> {
+    await makePayBilling(data, billingId, paymentId)
+    return true
   }
 }

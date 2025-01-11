@@ -148,8 +148,12 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
+    console.log('----------')
+
     if (status && status !== EShipmentMatchingCriteria.NEW) {
       const query = await getAcceptedShipmentForDriverQuery(status, userId)
+      console.log('shipment query: ', query)
+
       const shipments = await ShipmentModel.find(query, undefined, { skip, limit })
       return shipments
     }

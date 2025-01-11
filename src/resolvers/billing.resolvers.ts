@@ -382,13 +382,15 @@ export default class BillingResolver {
       })
       await movemateTransaction.save({ session })
 
-      const _shipment = head(_billing.shipments) as Shipment
-      if (_shipment) {
-        shipmentNotify(_shipment._id, get(_shipment, 'requestedDriver._id', ''))
-        const newShipments = await getNewAllAvailableShipmentForDriver()
-        await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
-        const adminNotificationCount = await getAdminMenuNotificationCount()
-        await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+      if(_billing.paymentMethod === EPaymentMethod.CASH) {
+        const _shipment = head(_billing.shipments) as Shipment
+        if (_shipment) {
+          shipmentNotify(_shipment._id, get(_shipment, 'requestedDriver._id', ''))
+          const newShipments = await getNewAllAvailableShipmentForDriver()
+          await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
+          const adminNotificationCount = await getAdminMenuNotificationCount()
+          await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+        }
       }
       return true
     } else if (data.result === 'reject') {

@@ -265,8 +265,6 @@ export async function calculateQuotation(
     isPaymentComplete ? 0 : latestTotalPrice?.acturePrice || 0,
   ])
 
-  console.log('3. ====================> Calculate +++', acturePriceToPay)
-
   const _price: Price = {
     acturePrice: acturePriceToPay,
     droppoint: droppointPrice,

@@ -38,6 +38,7 @@ import DriverPaymentResolver from '@resolvers/driverpayment.resolvers'
 import UserPendingResolver from '@resolvers/userPending.resolvers'
 import { ClientSession } from 'mongoose'
 import BillingResolver from '@resolvers/billing.resolvers'
+import PaymentResolver from '@resolvers/payment.resolvers'
 
 export interface GraphQLContext {
   req: Request
@@ -84,6 +85,7 @@ export async function createGraphQLServer(httpServer: http.Server) {
       DriverPaymentResolver,
       UserPendingResolver,
       BillingResolver,
+      PaymentResolver,
     ],
     pubSub: pubSub,
     authChecker: ({ context }: { context: GraphQLContext }) => {

@@ -30,7 +30,7 @@ import Aigle from 'aigle'
 import { REPONSE_NAME } from 'constants/status'
 import { differenceInMinutes, format } from 'date-fns'
 import { GraphQLError } from 'graphql'
-import lodash, { filter, find, get, head, isEmpty, isEqual, last, reduce, sortBy, sum, tail } from 'lodash'
+import lodash, { filter, find, get, head, isArray, isEmpty, isEqual, last, reduce, sortBy, sum, tail } from 'lodash'
 import { ClientSession } from 'mongoose'
 import { getNewAllAvailableShipmentForDriver } from './shipmentGet'
 import { initialStepDefinition } from './steps'
@@ -63,6 +63,59 @@ export async function addStep(shipmentId: string, data: StepDefinition, session?
   })
   await ShipmentModel.findByIdAndUpdate(shipment?._id, { steps: newStep }, { session })
   return true
+}
+
+export async function removeStep(
+  shipmentId: string,
+  stepIndex: number,
+  session?: ClientSession,
+): Promise<StepDefinition[]> {
+  const shipment = await ShipmentModel.findById(shipmentId)
+  const removeStep = get(shipment?.steps, stepIndex, undefined) as StepDefinition | undefined
+  if (removeStep) {
+    let newStep = []
+    await Aigle.forEach(shipment?.steps, async (step, index: number) => {
+      const currentStepId = get(step, '_id', '')
+      if (index < stepIndex) {
+        newStep.push(currentStepId)
+      } else if (stepIndex === index) {
+        // Skip
+      } else if (index > stepIndex) {
+        if (currentStepId) {
+          const newSeq = index - 1
+          await StepDefinitionModel.findByIdAndUpdate(currentStepId, { seq: newSeq }, { session })
+          newStep.push(currentStepId)
+        }
+      }
+    })
+    await StepDefinitionModel.findByIdAndDelete(removeStep._id, { session })
+    const _newShipment = await ShipmentModel.findByIdAndUpdate(
+      shipment?._id,
+      { steps: newStep },
+      { session, new: true },
+    )
+    return (_newShipment.steps || []) as StepDefinition[]
+  }
+  return []
+}
+
+export async function replaceStep(
+  shipmentId: string,
+  replaceStep: StepDefinition,
+  session?: ClientSession,
+): Promise<StepDefinition[]> {
+  const _shipment = await ShipmentModel.findById(shipmentId).session(session).exec()
+  const oldStep = find(_shipment?.steps, ['step', replaceStep.step]) as StepDefinition | undefined
+  if (oldStep) {
+    const _newStep = new StepDefinitionModel(replaceStep)
+    await _newStep.save({ session })
+    _shipment.steps[replaceStep.step] = _newStep
+    await _shipment.save({ session })
+    await StepDefinitionModel.findByIdAndDelete(oldStep._id, { session })
+    const _newSteps = await ShipmentModel.findById(shipmentId).distinct('steps')
+    return _newSteps as StepDefinition[]
+  }
+  return _shipment.steps as StepDefinition[]
 }
 
 export async function nextStep(shipmentId: string, images?: FileInput[], session?: ClientSession): Promise<boolean> {
