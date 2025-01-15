@@ -22,7 +22,7 @@ import lodash, {
 } from 'lodash'
 import { Destination } from '@models/shipment/objects'
 import { extractThaiAddress, getPlaceDetail } from '@services/maps/location'
-import { calculateQuotation } from './quotation'
+import { calculateExistingQuotation, calculateQuotation } from './quotation'
 import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
 import { REPONSE_NAME } from 'constants/status'
 import { EDriverStatus, EUserRole } from '@enums/users'
@@ -39,7 +39,7 @@ import DirectionsResultModel from '@models/directionResult.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import { format } from 'date-fns'
 import PaymentModel, { Payment } from '@models/finance/payment.model'
-import { BillingReason } from '@models/finance/objects'
+import { BillingReason, Price } from '@models/finance/objects'
 import QuotationModel from '@models/finance/quotation.model'
 import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
 import BillingModel from '@models/finance/billing.model'
@@ -381,7 +381,7 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
  * @param session
  */
 export async function updateShipment(data: UpdateShipmentInput, adminId: string, session?: ClientSession) {
-  const { isRounded, locations, vehicleTypeId, serviceIds, discountId, shipmentId, podDetail } = data
+  const { isRounded, locations, vehicleTypeId, serviceIds, discountId, shipmentId, podDetail, quotation } = data
 
   const _shipment = await ShipmentModel.findById(shipmentId).session(session)
   const _customer = _shipment.customer as User | undefined
@@ -404,18 +404,7 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
     }
   })
 
-  const _quotationCalculation = await calculateQuotation(
-    {
-      isRounded: isRounded,
-      locations: locations,
-      vehicleTypeId: vehicleTypeId,
-      discountId: discountId,
-      serviceIds: serviceIds,
-      shipmentId: shipmentId,
-    },
-    _customer?._id,
-    session,
-  )
+  const _calculated = await calculateExistingQuotation(data, session)
 
   /**
    * Additional Service Cost Pricng
@@ -451,18 +440,19 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
     }
   })
 
+  const _calculateQuotation = _calculated.quotation
   const today = new Date()
   const generateMonth = format(today, 'yyMM')
   const _quotationNumber = await generateTrackingNumber(`QU${generateMonth}`, 'quotation', 5)
   const _quotation = new QuotationModel({
     quotationNumber: _quotationNumber,
     quotationDate: today,
-    price: _quotationCalculation.price,
-    cost: _quotationCalculation.cost,
-    detail: _quotationCalculation.detail,
-    subTotal: _quotationCalculation.price.subTotal,
-    tax: _quotationCalculation.price.tax,
-    total: _quotationCalculation.price.total,
+    price: _calculateQuotation.price,
+    cost: _calculateQuotation.cost,
+    detail: _calculateQuotation.detail,
+    subTotal: _calculateQuotation.subTotal,
+    tax: _calculateQuotation.tax,
+    total: _calculateQuotation.total,
     updatedBy: adminId,
   })
   await _quotation.save({ session })
@@ -471,7 +461,7 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
     /**
      * Payment
      */
-    const acturePrice = _quotationCalculation.price.acturePrice
+    const acturePrice = _calculateQuotation.price.acturePrice
     const isRefundProcesss = acturePrice < 0
     const trackingText = isRefundProcesss ? 'PAYRFU' : 'PAYCAS'
     const generateMonth = format(new Date(), 'yyMM')
@@ -517,7 +507,11 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
      */
     if (_lastPayment) {
       if (includes([EPaymentStatus.PENDING, EPaymentStatus.VERIFY], _lastPayment.status)) {
-        await PaymentModel.findByIdAndUpdate(_lastPayment._id, { status: EPaymentStatus.CANCELLED, updatedBy: adminId }, { session })
+        await PaymentModel.findByIdAndUpdate(
+          _lastPayment._id,
+          { status: EPaymentStatus.CANCELLED, updatedBy: adminId },
+          { session },
+        )
       }
     }
   } else {
@@ -528,16 +522,16 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
   }
 
   await DirectionsResultModel.findByIdAndUpdate(get(_shipment, 'route._id', ''), {
-    rawData: JSON.stringify(_quotationCalculation.routes),
+    rawData: JSON.stringify(_calculated.routes),
   })
 
   const _updatedShipment = await ShipmentModel.findByIdAndUpdate(
     _shipment._id,
     {
-      distance: _quotationCalculation.distance,
-      returnDistance: _quotationCalculation.returnDistance,
-      displayDistance: _quotationCalculation.displayDistance,
-      displayTime: _quotationCalculation.displayTime,
+      distance: _calculated.distance,
+      returnDistance: _calculated.returnDistance,
+      displayDistance: _calculated.displayDistance,
+      displayTime: _calculated.displayTime,
       discountId: discountId,
       destinations: _destinations,
       isRoundedReturn: isRounded,

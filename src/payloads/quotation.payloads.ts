@@ -1,8 +1,11 @@
-import { Price, QuotationDetail } from '@models/finance/objects'
+import { Price, QuotationDetail, QuotationEditorDetail } from '@models/finance/objects'
 import { Field, Float, ObjectType } from 'type-graphql'
 
 @ObjectType()
 export class CalculateQuotationResultPayload {
+  @Field(() => QuotationEditorDetail)
+  editDetail: QuotationEditorDetail
+
   @Field(() => QuotationDetail)
   detail: QuotationDetail
 

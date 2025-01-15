@@ -16,6 +16,7 @@ export function getAdditionalServicePrice(
   if (additionalExistingServiceDroppoint) {
     const service = additionalExistingServiceDroppoint as ShipmentAdditionalServicePrice
     return {
+      serviceId: get(service, 'reference._id', ''),
       price: service.price || 0,
       cost: service.cost || 0,
     }
@@ -27,11 +28,13 @@ export function getAdditionalServicePrice(
 
     if (additionalServiceDroppoint) {
       return {
+        serviceId: additionalServiceDroppoint._id,
         price: additionalServiceDroppoint.price || 0,
         cost: additionalServiceDroppoint.cost || 0,
       }
     }
     return {
+      serviceId: '',
       price: 0,
       cost: 0,
     }

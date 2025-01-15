@@ -291,7 +291,10 @@ export default class ShipmentResolver {
     const user_id = ctx.req.user_id
     if (user_id) {
       if (user_role === EUserRole.ADMIN) {
-        const customerFilter = data.customerId ? { customer: data.customerId } : {}
+        const customerFilter = {
+          ...(data.customerId ? { customer: data.customerId } : {}),
+          ...(data.driverId ? { driver: data.driverId } : {}),
+        }
         const all = await ShipmentModel.countDocuments({ ...customerFilter })
         const paymentVerify = await ShipmentModel.countDocuments({
           status: EShipmentStatus.IDLE,

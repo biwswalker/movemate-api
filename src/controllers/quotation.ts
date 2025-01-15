@@ -1,5 +1,5 @@
 import { EPaymentMethod, EPaymentStatus } from '@enums/payments'
-import { CalculationInput } from '@inputs/booking.input'
+import { CalculationInput, QuotationEditorDetailInput, UpdateShipmentInput } from '@inputs/booking.input'
 import AdditionalServiceCostPricingModel, {
   AdditionalServiceCostPricing,
 } from '@models/additionalServiceCostPricing.model'
@@ -13,7 +13,7 @@ import { VehicleType } from '@models/vehicleType.model'
 import { CalculationResultPayload } from '@payloads/pricing.payloads'
 import { getRoute } from '@services/maps/location'
 import { GraphQLError } from 'graphql'
-import { find, forEach, get, head, last, min, random, reduce, sortBy, sum, tail } from 'lodash'
+import { find, forEach, get, head, last, min, omit, random, reduce, sortBy, sum, tail } from 'lodash'
 import { getAdditionalServicePrice } from './servicces'
 import Aigle from 'aigle'
 import { EPrivilegeDiscountUnit } from '@enums/privilege'
@@ -21,10 +21,11 @@ import PrivilegeModel from '@models/privilege.model'
 import { EUserType } from '@enums/users'
 import UserModel from '@models/user.model'
 import { fNumber } from '@utils/formatNumber'
-import { Price, PriceItem, QuotationDetail } from '@models/finance/objects'
+import { Price, PriceItem, QuotationDetail, QuotationEditorDetail } from '@models/finance/objects'
 import { ClientSession } from 'mongoose'
 import { CalculateQuotationResultPayload } from '@payloads/quotation.payloads'
 import { VALUES } from 'constants/values'
+import { EPriceItemType } from '@enums/billing'
 
 export async function calculateQuotation(
   data: CalculationInput,
@@ -98,6 +99,7 @@ export async function calculateQuotation(
    * Droppoint Price/Cost
    */
   const dropPoint = locations.length - 1
+  let droppointId = ''
   let droppointCost = 0
   let droppointPrice = 0
   if (dropPoint > 1) {
@@ -106,6 +108,7 @@ export async function calculateQuotation(
       (shipment?.additionalServices as ShipmentAdditionalServicePrice[]) || [],
       (vehicleCost.additionalServices as AdditionalServiceCostPricing[]) || [],
     )
+    droppointId = droppointCalculation.serviceId
     droppointCost = dropPoint * droppointCalculation.cost
     droppointPrice = dropPoint * droppointCalculation.price
   }
@@ -156,7 +159,7 @@ export async function calculateQuotation(
         label: label === 'POD' ? `บริการคืนใบส่งสินค้า (POD)` : label,
         cost: service.cost,
         price: service.price,
-        isNew: false,
+        refId: serviceId,
       }
     } else {
       const newService = await AdditionalServiceCostPricingModel.findById(serviceId) //.session(session)
@@ -166,14 +169,13 @@ export async function calculateQuotation(
           label: label === 'POD' ? `บริการคืนใบส่งสินค้า (POD)` : label,
           cost: newService.cost,
           price: newService.price,
-          isNew: true,
+          refId: newService._id,
         }
       } else {
         return {
           label: '',
           cost: 0,
           price: 0,
-          isNew: false,
         }
       }
     }
@@ -318,11 +320,199 @@ export async function calculateQuotation(
     tax: whtPrice,
     total: totalPrice,
   }
+  const _editDetail: QuotationEditorDetail = {
+    shipping: {
+      label: `${vehicleName} (${fNumber(distanceKMText)} กม.)`,
+      cost: distanceCost,
+      price: distancePrice,
+      type: EPriceItemType.SHIPPING,
+    },
+    rounded: isRounded
+      ? {
+          label: `${VALUES.ROUNDED_RETURN} ${roundedPricePercent}% (${distanceReturnKMText} กม.)`,
+          cost: roundedCost,
+          price: roundedPrice,
+          type: EPriceItemType.RETURN,
+        }
+      : null,
+    services: [
+      ...(droppointId
+        ? [
+            {
+              label: 'หลายจุดส่ง',
+              price: droppointPrice,
+              cost: droppointCost,
+              type: EPriceItemType.SERVICES,
+              refId: droppointId,
+            },
+          ]
+        : []),
+      ...additionalServicesPricing.map((service) => ({ ...service, type: EPriceItemType.SERVICES })),
+    ],
+    discounts: discountId
+      ? {
+          label: discountName,
+          cost: 0,
+          price: totalDiscount,
+          type: EPriceItemType.DISCOUNT,
+          refId: discountId,
+        }
+      : null,
+    taxs: isTaxCalculation
+      ? {
+          label: whtName,
+          cost: whtCost,
+          price: whtPrice,
+          type: EPriceItemType.TAX,
+        }
+      : null,
+    subTotalCost: subTotalCost,
+    subTotal: subTotalPrice,
+    taxCost: whtCost,
+    tax: whtPrice,
+    totalCost: totalCost,
+    total: totalPrice,
+  }
 
   return {
     detail: _detail,
+    editDetail: _editDetail,
     price: _price,
     cost: _cost,
+    displayDistance,
+    displayTime,
+    returnDistance: returnDistanceMeter,
+    distance: distanceMeter,
+    routes: computeRoutes,
+  }
+}
+
+export async function calculateExistingQuotation(
+  data: UpdateShipmentInput,
+  session?: ClientSession,
+): Promise<{
+  quotation: Partial<Quotation>
+  displayDistance: number
+  displayTime: number
+  returnDistance: number
+  distance: number
+  routes: google.maps.DirectionsResult
+}> {
+  const { isRounded, locations, vehicleTypeId, shipmentId, quotation } = data
+
+  const {
+    shipping,
+    rounded,
+    services,
+    discounts,
+    taxs,
+    // Float
+    subTotal,
+    subTotalCost,
+    taxCost,
+    totalCost,
+    tax,
+    total,
+  } = quotation
+
+  const shipment = await ShipmentModel.findById(shipmentId).session(session)
+
+  const latestQuotation = last(sortBy(shipment.quotations, ['createdAt'])) as Quotation | undefined
+  let _isPaymentComplete = false
+  if (latestQuotation) {
+    if (shipment.paymentMethod === EPaymentMethod.CREDIT) {
+      _isPaymentComplete = true
+    } else {
+      const quotationsPayment = await PaymentModel.findOne({ quotations: { $in: [latestQuotation._id] } }).session(
+        session,
+      )
+      _isPaymentComplete = quotationsPayment?.status === EPaymentStatus.COMPLETE
+    }
+  }
+
+  const vehicleCost = await VehicleCostModel.findByVehicleId(vehicleTypeId, session)
+  if (!vehicleCost) {
+    const message = `ไม่สามารถเรียกข้อมูลต้นทุนขนส่งได้`
+    throw new GraphQLError(message, {
+      extensions: { code: 'NOT_FOUND', errors: [{ message }] },
+    })
+  }
+
+  const original = head(locations)
+  const destinationsRaw = tail(locations).map((destination) => destination.location)
+  const destinations = isRounded ? [...destinationsRaw, original.location] : destinationsRaw
+
+  /**
+   * Get Routes detail from Google APIs
+   */
+  const computeRoutes = await getRoute(original.location, destinations).catch((error) => {
+    console.log(JSON.stringify(error, undefined, 2))
+    throw error
+  })
+  const directionRoutes = head(computeRoutes.routes)
+
+  const {
+    displayDistance,
+    displayTime,
+    distance: distanceMeter,
+    returnDistance: returnDistanceMeter,
+  } = handleGetDistanceDetail(directionRoutes, vehicleCost.vehicleType as VehicleType, isRounded)
+
+  const latestTotalPrice = get(latestQuotation, 'price', undefined) as Price | undefined
+  const latestTotalCost = get(latestQuotation, 'cost', undefined) as Price | undefined
+
+  const actureCostToPay = sum([
+    totalCost,
+    -(latestTotalCost?.total || 0),
+    _isPaymentComplete ? 0 : latestTotalCost?.acturePrice || 0,
+  ])
+  const acturePriceToPay = sum([
+    total,
+    -(latestTotalPrice?.total || 0),
+    _isPaymentComplete ? 0 : latestTotalPrice?.acturePrice || 0,
+  ])
+
+  const _price: Price = {
+    acturePrice: acturePriceToPay,
+    droppoint: 0, // Can not get where comform
+    rounded: rounded?.price || 0,
+    roundedPercent: latestTotalPrice?.roundedPercent,
+    subTotal: subTotal,
+    tax: tax,
+    total: total,
+  }
+  const _cost: Price = {
+    acturePrice: actureCostToPay,
+    droppoint: 0, // Can not get where comform
+    rounded: rounded?.cost,
+    roundedPercent: latestTotalCost?.roundedPercent,
+    subTotal: subTotalCost,
+    tax: taxCost,
+    total: totalCost,
+  }
+
+  const _quotation: Partial<Quotation> = {
+    cost: _cost,
+    price: _price,
+    detail: {
+      shippingPrices: [
+        { label: shipping.label, cost: shipping.cost, price: shipping.price },
+        ...(rounded ? [{ label: rounded.label, cost: rounded.cost, price: rounded.price }] : []),
+      ],
+      additionalServices: services.map((service) => omit(service, ['refId', 'type'])),
+      discounts: discounts ? [{ label: discounts.label, cost: discounts.cost, price: discounts.price }] : [],
+      taxs: taxs ? [{ label: taxs.label, cost: taxs.cost, price: taxs.price }] : [],
+      subTotal,
+      tax,
+      total,
+    },
+    subTotal,
+    tax,
+    total,
+  }
+
+  return {
+    quotation: _quotation,
     displayDistance,
     displayTime,
     returnDistance: returnDistanceMeter,

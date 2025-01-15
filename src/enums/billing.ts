@@ -73,3 +73,15 @@ registerEnumType(EBillingPaymentStatus, {
   name: 'EBillingPaymentStatus',
   description: 'Billing payment status',
 })
+
+export enum EPriceItemType {
+  SHIPPING = 'SHIPPING',
+  RETURN = 'RETURN',
+  SERVICES = 'SERVICES',
+  DISCOUNT = 'DISCOUNT',
+  TAX = 'TAX',
+}
+registerEnumType(EPriceItemType, {
+  name: 'EPriceItemType',
+  description: 'Price item type',
+})

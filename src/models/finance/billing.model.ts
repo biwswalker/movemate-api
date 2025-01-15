@@ -16,6 +16,7 @@ import { Invoice } from './invoice.model'
 import { AggregatePaginateModel, PaginateModel } from 'mongoose'
 import mongoosePagination from 'mongoose-paginate-v2'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
+import { Quotation } from './quotation.model'
 
 /**
  * TODO:
@@ -120,6 +121,18 @@ export class Billing extends TimeStamps {
       subTotal: 0,
       tax: 0,
     }
+  }
+
+  @Field(() => Quotation, { nullable: true })
+  get quotation(): Quotation {
+    const _payments = get(this, '_doc.payments', this.payments || [])
+    const latestPayment = last(sortBy(_payments, ['createdAt'])) as Payment | undefined
+
+    if (latestPayment) {
+      const quotation = last(sortBy(latestPayment.quotations, 'createdAt')) as Quotation | undefined
+      return quotation
+    }
+    return undefined
   }
 
   static paginate: PaginateModel<typeof Billing>['paginate']
