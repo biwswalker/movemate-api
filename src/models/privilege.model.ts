@@ -6,7 +6,9 @@ import mongoose from 'mongoose'
 import mongoosePagination from 'mongoose-paginate-v2'
 import { User } from './user.model'
 import { EPrivilegeDiscountUnit, EPrivilegeStatus } from '@enums/privilege'
+import mongooseAutoPopulate from 'mongoose-autopopulate'
 
+@plugin(mongooseAutoPopulate)
 @plugin(mongoosePagination)
 @ObjectType()
 export class Privilege extends TimeStamps {
@@ -68,7 +70,7 @@ export class Privilege extends TimeStamps {
   description: string
 
   @Field(() => [User], { defaultValue: [] })
-  @Property({ ref: () => User, required: true, default: [] })
+  @Property({ ref: () => User, required: true, default: [], autopopulate: true })
   usedUser: Ref<User>[]
 
   @Field({ nullable: true, defaultValue: false })

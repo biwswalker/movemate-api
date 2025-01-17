@@ -8,7 +8,7 @@ import {
 } from '@enums/users'
 import { GetUserArgs } from '@inputs/user.input'
 import { format } from 'date-fns'
-import { toNumber } from 'lodash'
+import { isEmpty, toNumber } from 'lodash'
 import { PipelineStage, Types } from 'mongoose'
 import { filePipelineStage } from './file.pipline'
 
@@ -184,6 +184,62 @@ export function GET_USER_LOOKUPS() {
     },
   }
 
+  const parentsLookup: PipelineStage.Lookup = {
+    $lookup: {
+      from: 'users',
+      let: {
+        parentIds: {
+          $map: {
+            input: { $ifNull: ['$parents', []] }, 
+            as: 'p',
+            in: { $toObjectId: '$$p' },
+          },
+        },
+      },
+      pipeline: [
+        {
+          $match: {
+            $expr: {
+              $in: [
+                '$_id',
+                { $ifNull: ['$$parentIds', []] },
+              ],
+            },
+          },
+        },
+        {
+          $lookup: {
+            from: 'driverdetails',
+            localField: 'driverDetail',
+            foreignField: '_id',
+            as: 'driverDetail',
+          },
+        },
+        {
+          $unwind: {
+            path: '$driverDetail',
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+      ],
+      as: 'parentDetails',
+    },
+  }
+
+  const parentsProject: PipelineStage.AddFields = {
+    $addFields: {
+      parents: {
+        $map: {
+          input: '$parentDetails',
+          as: 'parent',
+          in: {
+            $concat: ['$$parent.driverDetail.title', '$$parent.driverDetail.businessName'],
+          },
+        },
+      },
+    },
+  }
+
   return [
     businessDetailLookup,
     businessDetailUnwind,
@@ -196,6 +252,8 @@ export function GET_USER_LOOKUPS() {
     upgradeRequestLookup,
     upgradeRequestUnwind,
     ...filePipelineStage('profileImage'),
+    parentsLookup,
+    parentsProject,
   ]
 }
 
@@ -307,19 +365,20 @@ export const GET_USERS = (
 
   const prematch: PipelineStage = {
     $match: {
-      $or: [
-        {
-          ...query,
-          ...(userType && userType !== EUserCriterialType.ALL ? { userType: userType } : {}),
-          ...(status && status !== EUserCriterialStatus.ALL ? { status: status } : {}),
-          ...(userNumber ? { userNumber: { $regex: userNumber, $options: 'i' } } : {}),
-          ...(username ? { username: { $regex: username, $options: 'i' } } : {}),
-        },
-        ...(parentId ? [{ parents: { $in: [parentId] } }] : []),
-        ...(parentId ? [{ requestedParents: { $in: [parentId] } }] : []),
-        ...statusFilter,
-      ],
+      ...query,
+      ...(userType && userType !== EUserCriterialType.ALL ? { userType: userType } : {}),
+      ...(status && status !== EUserCriterialStatus.ALL ? { status: status } : {}),
+      ...(userNumber ? { userNumber: { $regex: userNumber, $options: 'i' } } : {}),
+      ...(username ? { username: { $regex: username, $options: 'i' } } : {}),
       ...(parentId ? { $or: [{ parents: { $in: [parentId] } }, { requestedParents: { $in: [parentId] } }] } : {}),
+      ...(isEmpty(statusFilter) ? {} : { $or: statusFilter }),
+      // $or: [
+      //   {
+      //   },
+      //   ...statusFilter,
+      //   // ...(parentId ? [{ parents: { $in: [parentId] } }] : []),
+      //   // ...(parentId ? [{ requestedParents: { $in: [parentId] } }] : []),
+      // ],
     },
   }
 

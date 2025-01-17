@@ -93,7 +93,6 @@ export default class UserResolver {
       const aggregate = UserModel.aggregate(GET_USERS(query, sort))
       console.log('aggregate: ', JSON.stringify(aggregate, undefined, 2))
       const users = (await UserModel.aggregatePaginate(aggregate, pagination)) as UserPaginationAggregatePayload
-
       return users
     } catch (error) {
       console.log(error)
@@ -1232,6 +1231,20 @@ export default class UserResolver {
     } catch (errors) {
       console.log('error: ', errors)
       throw errors
+    }
+  }
+
+  @Query(() => [User])
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async getParents(@Arg('userId') userId: string): Promise<User[]> {
+    try {
+      const driver = await UserModel.findById(userId).lean()
+      const parents = await UserModel.find({ _id: { $in: driver.parents }, userType: EUserType.BUSINESS })
+      console.log('parents: ', parents)
+      return parents
+    } catch (error) {
+      console.log(error)
+      throw new GraphQLError('ไม่สามารถเรียกรายการนายหน้าได้ โปรดลองอีกครั้ง')
     }
   }
 

@@ -9,7 +9,7 @@ import { PipelineStage, Types } from 'mongoose'
 import { isEmpty } from 'lodash'
 import { EUserRole } from '@enums/users'
 import { fileLookup, filePipelineStage } from './file.pipline'
-import { userPipelineStage } from './user.pipeline'
+import { userLookup, userPipelineStage } from './user.pipeline'
 
 const LOOKUPs: PipelineStage[] = [
   ...userPipelineStage('customer'),
@@ -137,6 +137,7 @@ const LOOKUPs: PipelineStage[] = [
       localField: 'discountId',
       foreignField: '_id',
       as: 'discountId',
+      pipeline: [userLookup('usedUser')],
     },
   },
   {
@@ -183,9 +184,7 @@ const LOOKUPs: PipelineStage[] = [
       localField: 'quotations',
       foreignField: '_id',
       as: 'quotations',
-      pipeline: [
-        ...userPipelineStage('updatedBy')
-      ]
+      pipeline: [...userPipelineStage('updatedBy')],
     },
   },
 ]

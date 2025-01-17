@@ -219,6 +219,8 @@ export default class ShipmentResolver {
             user_role,
             user_id,
           ),
+          undefined,
+          2,
         ),
       )
       const shipments = await ShipmentModel.aggregate(

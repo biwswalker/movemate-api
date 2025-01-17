@@ -139,9 +139,9 @@ export class User extends TimeStamps {
   @Property({ autopopulate: true, ref: 'DriverDetail' })
   driverDetail?: Ref<DriverDetail>
 
-  @Field(() => [User], { nullable: true })
-  @Property({ autopopulate: true, ref: 'User' })
-  agents?: Ref<User>[]
+  // @Field(() => [User], { nullable: true })
+  // @Property({ autopopulate: true, ref: 'User' })
+  // agents?: Ref<User>[]
 
   @Field(() => File, { nullable: true })
   @Property({ autopopulate: true, ref: 'File' })

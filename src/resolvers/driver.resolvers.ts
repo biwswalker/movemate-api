@@ -10,13 +10,14 @@ import {
   DriverDetailInput,
   DriverRegisterInput,
   DriverReRegisterInput,
+  DriverUpdateInput,
   EmployeeDetailInput,
   EmployeeRegisterInput,
 } from '@inputs/driver.input'
 import { BusinessDriverScema, EmployeeDriverScema, IndividualDriverScema } from '@validations/driver.validations'
 import { verifyOTP } from './otp.resolvers'
 import DriverDetailModel, { DriverDetail } from '@models/driverDetail.model'
-import DriverDocumentModel from '@models/driverDocument.model'
+import DriverDocumentModel, { DriverDocument } from '@models/driverDocument.model'
 import NotificationModel, {
   ENavigationType,
   ENotificationVarient,
@@ -355,6 +356,154 @@ export default class DriverResolver {
         phoneNumber: detail.phoneNumber,
         driverType: detail.driverType,
       }
+    } catch (error) {
+      console.log('error: ', JSON.stringify(error, undefined, 2))
+      if (error instanceof ValidationError) {
+        throw yupValidationThrow(error)
+      }
+      throw error
+    }
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.DRIVER]))
+  async driverUpdate(
+    @Arg('data') data: DriverUpdateInput,
+    @Arg('driverId', { nullable: true }) driverId: string,
+    @Ctx() ctx: GraphQLContext,
+  ): Promise<Boolean> {
+    const session = ctx.session
+    const userId = ctx.req.user_id
+    const { detail, documents, status } = data
+    try {
+      // Check if the user already exists
+      const driver = await UserModel.findOne({ _id: driverId || userId, userRole: EUserRole.DRIVER }).session(session)
+      if (!driver) {
+        const message = 'ไม่พบคนขับ กรุณาลองใหม่'
+        throw new GraphQLError(message)
+      }
+      const driverDetail = driver.driverDetail as DriverDetail | undefined
+      if (!driverDetail) {
+        const message = 'ไม่พบรายละเอียดคนขับ กรุณาลองใหม่'
+        throw new GraphQLError(message)
+      }
+      const driverDocuments = driverDetail.documents as DriverDocument | undefined
+      if (!driverDocuments) {
+        const message = 'ไม่พบรายละเอียดคนขับ กรุณาลองใหม่'
+        throw new GraphQLError(message)
+      }
+
+      if (driverDetail.driverType.includes(EDriverType.BUSINESS)) {
+        await BusinessDriverScema(driverId).validate(detail, { abortEarly: false })
+      } else if (driverDetail.driverType.includes(EDriverType.INDIVIDUAL_DRIVER)) {
+        await IndividualDriverScema(driverId).validate(detail, { abortEarly: false })
+      } else {
+        throw new GraphQLError('ไม่รองรับประเภทคนขับรถนี้')
+      }
+
+      // 2. Document
+      const frontOfVehicle = documents.frontOfVehicle ? new FileModel({ ...documents.frontOfVehicle }) : null
+      const backOfVehicle = documents.backOfVehicle ? new FileModel({ ...documents.backOfVehicle }) : null
+      const leftOfVehicle = documents.leftOfVehicle ? new FileModel({ ...documents.leftOfVehicle }) : null
+      const rigthOfVehicle = documents.rigthOfVehicle ? new FileModel({ ...documents.rigthOfVehicle }) : null
+      const copyVehicleRegistration = documents.copyVehicleRegistration
+        ? new FileModel({ ...documents.copyVehicleRegistration })
+        : null
+      const copyIDCard = documents.copyIDCard ? new FileModel({ ...documents.copyIDCard }) : null
+      const copyDrivingLicense = documents.copyDrivingLicense
+        ? new FileModel({ ...documents.copyDrivingLicense })
+        : null
+      const copyBookBank = documents.copyBookBank ? new FileModel({ ...documents.copyBookBank }) : null
+      const copyHouseRegistration = documents.copyHouseRegistration
+        ? new FileModel({ ...documents.copyHouseRegistration })
+        : null
+      const insurancePolicy = documents.insurancePolicy ? new FileModel({ ...documents.insurancePolicy }) : null
+      const criminalRecordCheckCert = documents.criminalRecordCheckCert
+        ? new FileModel({ ...documents.criminalRecordCheckCert })
+        : null
+      const businessRegistrationCertificate = documents.businessRegistrationCertificate
+        ? new FileModel({ ...documents.businessRegistrationCertificate })
+        : null
+      const certificateValueAddedTaxRegistration = documents.certificateValueAddedTaxRegistration
+        ? new FileModel({ ...documents.certificateValueAddedTaxRegistration })
+        : null
+      frontOfVehicle && (await frontOfVehicle.save({ session }))
+      backOfVehicle && (await backOfVehicle.save({ session }))
+      leftOfVehicle && (await leftOfVehicle.save({ session }))
+      rigthOfVehicle && (await rigthOfVehicle.save({ session }))
+      copyVehicleRegistration && (await copyVehicleRegistration.save({ session }))
+      copyIDCard && (await copyIDCard.save({ session }))
+      copyDrivingLicense && (await copyDrivingLicense.save({ session }))
+      copyBookBank && (await copyBookBank.save({ session }))
+      copyHouseRegistration && (await copyHouseRegistration.save({ session }))
+      insurancePolicy && (await insurancePolicy.save({ session }))
+      criminalRecordCheckCert && (await criminalRecordCheckCert.save({ session }))
+      businessRegistrationCertificate && (await businessRegistrationCertificate.save({ session }))
+      certificateValueAddedTaxRegistration && (await certificateValueAddedTaxRegistration.save({ session }))
+      await DriverDocumentModel.findByIdAndUpdate(
+        driverDocuments._id,
+        {
+          ...(frontOfVehicle ? { frontOfVehicle } : {}),
+          ...(backOfVehicle ? { backOfVehicle } : {}),
+          ...(leftOfVehicle ? { leftOfVehicle } : {}),
+          ...(rigthOfVehicle ? { rigthOfVehicle } : {}),
+          ...(copyVehicleRegistration ? { copyVehicleRegistration } : {}),
+          ...(copyIDCard ? { copyIDCard } : {}),
+          ...(copyDrivingLicense ? { copyDrivingLicense } : {}),
+          ...(copyBookBank ? { copyBookBank } : {}),
+          ...(copyHouseRegistration ? { copyHouseRegistration } : {}),
+          ...(insurancePolicy ? { insurancePolicy } : {}),
+          ...(criminalRecordCheckCert ? { criminalRecordCheckCert } : {}),
+          ...(businessRegistrationCertificate ? { businessRegistrationCertificate } : {}),
+          ...(certificateValueAddedTaxRegistration ? { certificateValueAddedTaxRegistration } : {}),
+        },
+        { session },
+      )
+
+      // 3. Detail
+      await DriverDetailModel.findByIdAndUpdate(driverDetail._id, {
+        title: detail.title,
+        otherTitle: detail.otherTitle,
+        firstname: detail.firstname,
+        lastname: detail.lastname,
+        businessName: detail.businessName,
+        businessBranch: detail.businessBranch,
+        taxNumber: detail.taxNumber,
+        lineId: detail.lineId,
+        address: detail.address,
+        province: detail.province,
+        district: detail.district,
+        subDistrict: detail.subDistrict,
+        postcode: detail.postcode,
+        bank: detail.bank,
+        bankBranch: detail.bankBranch,
+        bankName: detail.bankName,
+        bankNumber: detail.bankNumber,
+        serviceVehicleTypes: detail.serviceVehicleTypes,
+      })
+
+      // 4. User
+      const profileImage = detail.profileImage ? new FileModel({ ...detail.profileImage }) : null
+      profileImage && (await profileImage.save({ session }))
+      await UserModel.findByIdAndUpdate(driver._id, {
+        // admin
+        status: status.status,
+        validationStatus: status.validationStatus,
+        drivingStatus: status.drivingStatus,
+        // detail
+        username: detail.phoneNumber,
+        ...(profileImage ? { profileImage } : {}),
+      })
+
+      // Notification
+      await NotificationModel.sendNotification({
+        userId: driverId,
+        varient: ENotificationVarient.MASTER,
+        title: 'มีการเปลี่ยนแปลงข้อมูลส่วนตัว',
+        message: [`ผู้ดูแลระบบเปลี่ยนแปลงข้อมูลส่วนตัวของท่าน`],
+      })
+
+      return true
     } catch (error) {
       console.log('error: ', JSON.stringify(error, undefined, 2))
       if (error instanceof ValidationError) {

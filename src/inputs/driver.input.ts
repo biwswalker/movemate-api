@@ -1,7 +1,7 @@
 import { Field, InputType, Int } from 'type-graphql'
 import { FileInput } from './file.input'
 import { RegisterOTPInput } from './otp.input'
-import { EDriverType } from '@enums/users'
+import { EDriverStatus, EDriverType, EUserStatus, EUserValidationStatus } from '@enums/users'
 
 @InputType()
 export class DriverDetailInput {
@@ -130,6 +130,9 @@ export class ReDriverDetailInput {
 
   @Field(() => [String])
   serviceVehicleTypes: string[]
+  
+  @Field(() => FileInput, { nullable: true })
+  profileImage: FileInput
 }
 
 @InputType()
@@ -175,6 +178,18 @@ export class DriverDocumentInput {
 }
 
 @InputType()
+export class DriverDetailForAdminInput {
+  @Field(() => EUserStatus, { nullable: true })
+  status: EUserStatus
+
+  @Field(() => EUserValidationStatus, { nullable: true })
+  validationStatus: EUserValidationStatus
+
+  @Field(() => EDriverStatus, { nullable: true })
+  drivingStatus: EDriverStatus
+}
+
+@InputType()
 export class DriverRegisterInput {
   @Field(() => DriverDetailInput)
   detail: DriverDetailInput
@@ -195,6 +210,17 @@ export class DriverReRegisterInput {
   documents: DriverDocumentInput
 }
 
+@InputType()
+export class DriverUpdateInput {
+  @Field(() => ReDriverDetailInput)
+  detail: ReDriverDetailInput
+
+  @Field(() => DriverDocumentInput)
+  documents: DriverDocumentInput
+
+  @Field(() => DriverDetailForAdminInput, { nullable: true })
+  status?: DriverDetailForAdminInput
+}
 
 @InputType()
 export class EmployeeDetailInput {

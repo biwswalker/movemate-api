@@ -39,10 +39,10 @@ export default class AuthResolver {
         throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })
       } else if (user.status === EUserStatus.INACTIVE) {
         // TODO: ยังสามารถใช้งานได้ปกติ
-      } else if (user.status === EUserStatus.BANNED) {
+      } else if (user.status === EUserStatus.BANNED && user.userRole === EUserRole.CUSTOMER) {
         // TODO: สามารถ login ได้ แต่ แจ้งชำระ และ ดูประวัติงานเก่าได้
-        // const message = `บัญชีของท่านโดนระงับการใช้งานจากผู้ดูแลระบบ โปรดติดต่อเจ้าหน้าที่หากมีข้อสงสัย`
-        // throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })
+        const message = `บัญชีของท่านโดนระงับการใช้งานจากผู้ดูแลระบบ โปรดติดต่อเจ้าหน้าที่หากมีข้อสงสัย`
+        throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })
       } else if (user.status === EUserStatus.DENIED && includes([EUserRole.ADMIN, EUserRole.CUSTOMER], user.userRole)) {
         const message = `บัญชีของท่านไม่ถูกอนุมัติ โปรดติดต่อเจ้าหน้าที่หากมีข้อสงสัย`
         throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })
