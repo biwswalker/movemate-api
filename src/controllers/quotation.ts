@@ -1,5 +1,5 @@
 import { EPaymentMethod, EPaymentStatus } from '@enums/payments'
-import { CalculationInput, QuotationEditorDetailInput, UpdateShipmentInput } from '@inputs/booking.input'
+import { CalculationInput, UpdateShipmentInput } from '@inputs/booking.input'
 import AdditionalServiceCostPricingModel, {
   AdditionalServiceCostPricing,
 } from '@models/additionalServiceCostPricing.model'

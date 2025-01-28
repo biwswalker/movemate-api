@@ -33,9 +33,11 @@ import TransactionModel, {
   ETransactionType,
   MOVEMATE_OWNER_ID,
 } from '@models/transaction.model'
-import { Shipment } from '@models/shipment.model'
+import ShipmentModel, { Shipment } from '@models/shipment.model'
 import { shipmentNotify } from '@controllers/shipmentNotification'
 import { getNewAllAvailableShipmentForDriver } from '@controllers/shipmentGet'
+import { generateBillingReceipt } from '@controllers/billingReceipt'
+import { EShipmentStatus } from '@enums/shipments'
 
 @Resolver()
 export default class BillingResolver {
@@ -366,6 +368,17 @@ export default class BillingResolver {
         session,
       )
 
+      if (_billing.paymentMethod === EPaymentMethod.CASH) {
+        const _shipment = await ShipmentModel.findOne({ trackingNumber: _billing.billingNumber }).lean()
+        if (_shipment.status === EShipmentStatus.DELIVERED) {
+          /**
+           * Handle If shipment complete
+           * CASH: Payment genrate new Receipt
+           */
+          await generateBillingReceipt(_billing._id, true, session)
+        }
+      }
+
       // For Movemate transaction
       const { subTotal, tax, total } = _billing.amount
       const movemateTransaction = new TransactionModel({
@@ -382,7 +395,7 @@ export default class BillingResolver {
       })
       await movemateTransaction.save({ session })
 
-      if(_billing.paymentMethod === EPaymentMethod.CASH) {
+      if (_billing.paymentMethod === EPaymentMethod.CASH) {
         const _shipment = head(_billing.shipments) as Shipment
         if (_shipment) {
           shipmentNotify(_shipment._id, get(_shipment, 'requestedDriver._id', ''))

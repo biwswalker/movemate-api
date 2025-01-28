@@ -4,7 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { fCurrency } from '@utils/formatNumber'
 import { fDate } from '@utils/formatTime'
-import { Shipment } from '@models/shipment.model'
+import ShipmentModel, { Shipment } from '@models/shipment.model'
 import { VehicleType } from '@models/vehicleType.model'
 import { HeaderComponent } from './components/header'
 import ReceiptFooterComponent from './components/footer'
@@ -16,6 +16,8 @@ import BillingDocumentModel, { BillingDocument } from '@models/finance/documents
 import { ClientSession } from 'mongoose'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
+import { EPaymentMethod } from '@enums/payments'
+import { EShipmentStatus } from '@enums/shipments'
 
 interface GenerateReceiptResponse {
   fileName: string
@@ -37,6 +39,20 @@ export async function generateReceipt(
   }
   const _document = _receipt.document as BillingDocument | undefined
   const isReceiveWHTDocument = !isEmpty(_document?.receviedWHTDocumentDate)
+
+  let isAdditionalPaid = false
+  if (billing.paymentMethod === EPaymentMethod.CASH) {
+    const _shipment = await ShipmentModel.findOne({
+      trackingNumber: billing.billingNumber,
+      paymentMethod: EPaymentMethod.CASH,
+    })
+    if (_shipment) {
+      if (_shipment.status === EShipmentStatus.DELIVERED) {
+        isAdditionalPaid = true
+      }
+    }
+    billing.quotation
+  }
 
   const fileName = filname ? filname : `receipt_${_receipt.receiptNumber}.pdf`
   const filePath = path.join(__dirname, '..', '..', 'generated/receipt', fileName)
@@ -132,7 +148,7 @@ export async function generateReceipt(
   })
 
   nomoredata = true
-  await ReceiptFooterComponent(doc, billing, isTaxIncluded, isReceiveWHTDocument)
+  await ReceiptFooterComponent(doc, billing, isTaxIncluded, isReceiveWHTDocument, isAdditionalPaid)
   isOiginal = false
 
   // Copy section
@@ -150,7 +166,7 @@ export async function generateReceipt(
     prepareHeader: () => doc.font(FONTS.SARABUN_MEDIUM).fontSize(7),
   })
   nomoredata = true
-  await ReceiptFooterComponent(doc, billing, isTaxIncluded, isReceiveWHTDocument)
+  await ReceiptFooterComponent(doc, billing, isTaxIncluded, isReceiveWHTDocument, isAdditionalPaid)
 
   doc.end()
   await new Promise((resolve) => writeStream.on('finish', resolve))

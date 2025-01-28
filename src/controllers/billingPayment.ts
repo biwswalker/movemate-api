@@ -88,7 +88,7 @@ export async function markBillingAsPaid(
     status: EPaymentStatus.COMPLETE,
     ...(_evidenceId ? { $push: { evidence: _evidenceId } } : {}),
     updatedBy: adminId,
-  })
+  }, { session })
   /**
    * Generate Receipt
    * Only credit customer

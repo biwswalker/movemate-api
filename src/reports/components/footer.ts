@@ -3,19 +3,23 @@ import { ASSETS, COLORS, FONTS } from './constants'
 import { fCurrency } from '@utils/formatNumber'
 import ThaiBahtText from 'thai-baht-text'
 import { fDate } from '@utils/formatTime'
-import { toNumber } from 'lodash'
+import { sum, toNumber } from 'lodash'
 import { Billing } from '@models/finance/billing.model'
+import { Quotation } from '@models/finance/quotation.model'
 
 export default async function ReceiptFooterComponent(
   doc: PDFDocument,
   billing: Billing,
   taxIncluded?: boolean,
   isReceiveWHTDocument?: boolean,
+  isAdditionalPaid?: boolean,
 ) {
   const marginLeft = doc.page.margins.left
   const marginRight = doc.page.margins.right
   const maxWidth = doc.page.width - marginRight
   const remainingHeight = doc.page.height - doc.y - doc.page.margins.bottom
+
+  const _qoutation = billing.quotation as Quotation
 
   doc
     .lineCap('butt')
@@ -59,7 +63,27 @@ export default async function ReceiptFooterComponent(
     doc.moveDown(2.6) //.fillColor(COLORS.TEXT_PRIMARY)
   }
 
-  //
+  /**
+   * กรณีเงินสด
+   * Shipment เสร็จสิ้นแล้ว และชำระก่อนหน้านี้แล้ว
+   * มีค่าใช้จ่ายเพิ่ม จะต้อง แสดงส่วนต่าง
+   */
+  if (isAdditionalPaid) {
+    const _price = _qoutation.price
+    const _paidBefore = sum([_price.total || 0, -_price.acturePrice || 0])
+
+    doc
+      .fontSize(8)
+      .font(FONTS.SARABUN_MEDIUM)
+      .text('ชำระก่อนหน้า :', 0, doc.y - 10, { width: 400, align: 'right' })
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .fontSize(8)
+      .text(fCurrency(-_paidBefore), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+
+    doc.moveDown(2.6)
+  }
+
   doc
     .fontSize(8)
     .font(FONTS.SARABUN_MEDIUM)

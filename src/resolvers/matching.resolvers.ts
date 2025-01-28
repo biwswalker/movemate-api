@@ -331,7 +331,7 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER, EUserRole.ADMIN]), RetryTransactionMiddleware)
   async confirmShipmentDatetime(
     @Ctx() ctx: GraphQLContext,
     @Arg('data') data: ConfirmShipmentDateInput,
@@ -361,7 +361,7 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER, EUserRole.ADMIN]), RetryTransactionMiddleware)
   async nextShipmentStep(@Ctx() ctx: GraphQLContext, @Arg('data') data: NextShipmentStepInput): Promise<boolean> {
     const session = ctx.session
     const userId = ctx.req.user_id
