@@ -381,7 +381,7 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER, EUserRole.ADMIN]), RetryTransactionMiddleware)
   async sentPODDocument(
     @Ctx() ctx: GraphQLContext,
     @Arg('data') data: SentPODDocumentShipmentStepInput,
@@ -413,7 +413,7 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER, EUserRole.ADMIN]), RetryTransactionMiddleware)
   async markAsFinish(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
     const session = ctx.session
     const driverId = ctx.req.user_id

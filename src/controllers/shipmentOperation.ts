@@ -159,7 +159,7 @@ export async function podSent(
   const currentStep = find(shipment?.steps, ['seq', shipment?.currentStepSeq])
   const uploadedFiles = await Aigle.map(images, async (image) => {
     const fileModel = new FileModel(image)
-    await fileModel.save({ session })
+    await fileModel.save()
     const file = await FileModel.findById(fileModel._id)
     return file
   })

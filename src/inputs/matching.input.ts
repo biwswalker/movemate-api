@@ -24,7 +24,7 @@ export class SentPODDocumentShipmentStepInput {
   @Field()
   shipmentId: string
 
-  @Field(() => [FileInput], { nullable: true })
+  @Field(() => [FileInput])
   images: FileInput[]
 
   @Field()
