@@ -515,9 +515,6 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
       }
     }
   } else {
-    /**
-     * Update customer usage credit
-     */
     await addCustomerCreditUsage(_customer?._id, _quotation.price.acturePrice)
   }
 

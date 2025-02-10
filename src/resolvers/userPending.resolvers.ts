@@ -16,7 +16,7 @@ import { BusinessCustomerSchema } from '@validations/customer.validations'
 import { ValidationError } from 'yup'
 import { yupValidationThrow } from '@utils/error.utils'
 import { EPaymentMethod } from '@enums/payments'
-import { EUserRole } from '@enums/users'
+import { EUpdateUserStatus, EUserRole } from '@enums/users'
 import UserPendingModel, { UserPending } from '@models/userPending.model'
 import { GET_PENDING_USERS } from '@pipelines/userPending.pipeline'
 
@@ -82,10 +82,10 @@ export default class UserPendingResolver {
       if (isEmpty(platform)) {
         throw new Error('Bad Request: Platform is require')
       }
-      
+
       /**
-       * 
-       * TODO: --> 
+       *
+       * TODO: -->
        */
       if (id) {
         await BusinessCustomerSchema(id).validate(data, { abortEarly: false })
@@ -160,7 +160,7 @@ export default class UserPendingResolver {
             await certificateValueAddedTaxRegistration.save()
           }
 
-          await creditDetail.updateOne({
+          const _creditPayment = new BusinessCustomerCreditPaymentModel({
             ...omit(creditPayment, [
               'businessRegistrationCertificateFile',
               'copyIDAuthorizedSignatoryFile',
@@ -174,14 +174,45 @@ export default class UserPendingResolver {
               ? { certificateValueAddedTaxRegistrationFile: certificateValueAddedTaxRegistration }
               : {}),
           })
+          await _creditPayment.save()
+
+          /**
+           * TODO:---
+           */
+          // await customerBusinesslModel.updateOne({ ...formValue, businessEmail })
+          const _business = new BusinessCustomerModel({
+            ...formValue,
+            businessEmail,
+            creditPayment: _creditPayment,
+          })
+          await _business.save()
+
+          const _userPending = new UserPendingModel({
+            user: userModel._id,
+            userId: userModel._id,
+            userNumber: userModel.userNumber,
+            businessDetail: _business,
+            ...(uploadedImage ? { profileImage: uploadedImage } : {}),
+            status: EUpdateUserStatus.PENDING,
+          })
+          await _userPending.save()
+
+          await userModel.updateOne({
+            ...formValue,
+            ...(uploadedImage ? { profileImage: uploadedImage } : {}),
+          })
+        } else {
+          await customerBusinesslModel.updateOne({ ...formValue, businessEmail })
+          const business = new BusinessCustomerModel({
+            ...formValue,
+            businessEmail,
+          })
+
+          await userModel.updateOne({
+            ...formValue,
+            ...(uploadedImage ? { profileImage: uploadedImage } : {}),
+          })
         }
-
-        await userModel.updateOne({
-          ...formValue,
-          ...(uploadedImage ? { profileImage: uploadedImage } : {}),
-        })
-
-        await customerBusinesslModel.updateOne({ ...formValue, businessEmail })
 
         return true
       }

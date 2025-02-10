@@ -13,9 +13,9 @@ import IndividualCustomerModel, { IndividualCustomer } from './customerIndividua
 import BusinessCustomerModel, { BusinessCustomer } from './customerBusiness.model'
 import BusinessCustomerCashPaymentModel from './customerBusinessCashPayment.model'
 import DriverDetailModel, { DriverDetail } from './driverDetail.model'
-import { EUpdateUserStatus, EUserRole, EUserType } from '@enums/users'
+import { EDriverType, EUpdateUserStatus, EUserRole, EUserType } from '@enums/users'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
-import { get } from 'lodash'
+import { find, get, includes } from 'lodash'
 
 @plugin(autopopulate)
 @plugin(mongoosePagination)
@@ -71,6 +71,131 @@ export class UserPending extends TimeStamps {
 
   static paginate: mongoose.PaginateModel<typeof UserPending>['paginate']
   static aggregatePaginate: mongoose.AggregatePaginateModel<typeof UserPending>['aggregatePaginate']
+
+  @Field({ nullable: true })
+  get fullname(): string {
+    const _user = get(this, '_doc.user', undefined) as User | undefined
+    const userRole = _user.userRole
+    const userType = _user.userType
+
+    if (userRole === EUserRole.CUSTOMER) {
+      if (userType === EUserType.INDIVIDUAL) {
+        const individualDetail: IndividualCustomer | undefined = get(_user, 'individualDetail', undefined)
+        if (individualDetail) {
+          const title = get(individualDetail, 'title', '')
+          const otherTitle = get(individualDetail, 'otherTitle', '')
+          const firstname = get(individualDetail, 'firstname', '')
+          const lastname = get(individualDetail, 'lastname', '')
+
+          const INDIVIDUAL_TITLE_NAME_OPTIONS = [
+            { value: 'Miss', label: 'นางสาว' },
+            { value: 'Mrs.', label: 'นาง' },
+            { value: 'Mr.', label: 'นาย' },
+            { value: 'other', label: 'อื่นๆ' },
+          ]
+          const titleName = title !== 'other' ? find(INDIVIDUAL_TITLE_NAME_OPTIONS, ['value', title]).label : otherTitle
+
+          return `${titleName}${firstname} ${lastname}`
+        }
+        return ''
+      } else if (userType === EUserType.BUSINESS) {
+        const businessDetail: BusinessCustomer | undefined = get(_user, 'businessDetail', undefined)
+        if (businessDetail) {
+          const BUSINESS_TITLE_NAME_OPTIONS = [
+            { value: 'Co', label: 'บจก.' },
+            { value: 'Part', label: 'หจก.' },
+            { value: 'Pub', label: 'บมจ.' },
+          ]
+          const title = find(BUSINESS_TITLE_NAME_OPTIONS, ['value', businessDetail.businessTitle]).label
+          return `${title} ${businessDetail.businessName}`
+        }
+        return ''
+      }
+    } else if (userRole === EUserRole.DRIVER) {
+      const driverDetail: DriverDetail | undefined = get(_user, 'driverDetail', undefined)
+      if (driverDetail) {
+        if (!driverDetail.fullname) {
+          const driverTypes = driverDetail.driverType
+          const title = driverDetail.title
+          const otherTitle = driverDetail.otherTitle
+          const titleName = `${title === 'อื่นๆ' ? otherTitle : title}`
+          if (includes(driverTypes, EDriverType.BUSINESS)) {
+            const businessName = driverDetail.businessName
+            return `${titleName}${businessName}`
+          } else {
+            const firstname = driverDetail.firstname
+            const lastname = driverDetail.lastname
+            return `${titleName}${firstname} ${lastname}`
+          }
+        }
+        return driverDetail.fullname
+      }
+    }
+    return ''
+  }
+
+  @Field({ nullable: true })
+  get email(): string {
+    const _user = get(this, '_doc.user', undefined) as User | undefined
+    const userRole = _user.userRole
+    const userType = _user.userType
+    if (userRole === EUserRole.CUSTOMER) {
+      if (userType === EUserType.INDIVIDUAL) {
+        const individualDetail: IndividualCustomer | undefined = get(_user, 'individualDetail', undefined)
+        return individualDetail ? individualDetail.email : ''
+      } else if (userType === EUserType.BUSINESS) {
+        const businessDetail: BusinessCustomer | undefined = get(_user, 'businessDetail', undefined)
+        return businessDetail ? businessDetail.businessEmail : ''
+      }
+    }
+    return ''
+  }
+
+  @Field({ nullable: true })
+  get contactNumber(): string {
+    const _user = get(this, '_doc.user', undefined) as User | undefined
+    const userRole = _user.userRole
+    const userType = _user.userType
+    if (userRole === EUserRole.CUSTOMER) {
+      if (userType === EUserType.INDIVIDUAL) {
+        const individualDetail: IndividualCustomer | undefined = get(_user, 'individualDetail', undefined)
+        return individualDetail ? individualDetail.phoneNumber : ''
+      } else if (userType === EUserType.BUSINESS) {
+        const businessDetail: BusinessCustomer | undefined = get(_user, 'businessDetail', undefined)
+        return businessDetail ? businessDetail.contactNumber : ''
+      }
+    } else if (userRole === EUserRole.DRIVER) {
+      const driverDetail: DriverDetail | undefined = get(_user, 'driverDetail', undefined)
+      return driverDetail ? driverDetail.phoneNumber : ''
+    }
+    return ''
+  }
+
+  @Field({ nullable: true })
+  get address(): string {
+    const _user = get(this, '_doc.user', undefined) as User | undefined
+    const userRole = _user.userRole
+    const userType = _user.userType
+    if (userRole === EUserRole.CUSTOMER) {
+      if (userType === EUserType.INDIVIDUAL) {
+        const _individualDetail = get(_user, 'individualDetail', '') as IndividualCustomer | undefined
+        if (_individualDetail) {
+          return `${_individualDetail.address} แขวง/ตำบล ${_individualDetail.subDistrict} เขต/อำเภอ ${_individualDetail.district} จังหวัด ${_individualDetail.province} ${_individualDetail.postcode}`
+        }
+      } else if (userType === EUserType.BUSINESS) {
+        const _businessDetail = get(_user, 'businessDetail', '') as BusinessCustomer | undefined
+        if (_businessDetail) {
+          if (_businessDetail.paymentMethod === EPaymentMethod.CREDIT) {
+            const creditPayment = _businessDetail.creditPayment as BusinessCustomerCreditPayment | undefined
+            return `${creditPayment.financialAddress} แขวง/ตำบล ${creditPayment.financialSubDistrict} เขต/อำเภอ ${creditPayment.financialDistrict} จังหวัด ${creditPayment.financialProvince} ${creditPayment.financialPostcode}`
+          } else {
+            return `${_businessDetail.address} แขวง/ตำบล ${_businessDetail.subDistrict} เขต/อำเภอ ${_businessDetail.district} จังหวัด ${_businessDetail.province} ${_businessDetail.postcode}`
+          }
+        }
+      }
+    }
+    return ''
+  }
 
   async copy(): Promise<boolean> {
     /**
