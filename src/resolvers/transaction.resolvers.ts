@@ -4,7 +4,7 @@ import { EUserRole, EUserType } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
 import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
 import { GetDriverTransactionArgs, GetTransactionsArgs } from '@inputs/transactions.input'
-import DriverPaymentModel, { DriverPayment } from '@models/driverPayment.model'
+import DriverPaymentModel from '@models/driverPayment.model'
 import ShipmentModel from '@models/shipment.model'
 import TransactionModel, {
   ERefType,
@@ -16,7 +16,6 @@ import UserModel from '@models/user.model'
 import {
   TransactionDriversAggregatePayload,
   DriverTransactionsAggregatePayload,
-  TransactionPayload,
   TransactionDriversTotalRecordPayload,
   PreparationTransactionPayload,
   DriverTransactionSummaryPayload,
@@ -28,7 +27,7 @@ import { REPONSE_NAME } from 'constants/status'
 import { GraphQLError } from 'graphql'
 import { isEmpty, map, reduce, sum } from 'lodash'
 import { PaginateOptions } from 'mongoose'
-import { Arg, Args, Ctx, Float, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
+import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 
 @Resolver(Transaction)
 export default class TransactionResolver {

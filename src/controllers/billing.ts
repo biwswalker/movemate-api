@@ -39,21 +39,27 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
     const creditPaymentDetail = get(_customer, 'businessDetail.creditPayment') as
       | BusinessCustomerCreditPayment
       | undefined
+
     if (creditPaymentDetail) {
       const today = new Date()
       /**
        * Get billing date / due date
        */
+      const prevMonth = addMonths(today, -1)
+      const prevMonthText = format(prevMonth, 'MMM').toLowerCase() as keyof BilledMonth
       const monthText = format(today, 'MMM').toLowerCase() as keyof BilledMonth
+      const prevBillingDate = creditPaymentDetail.billedDate[prevMonthText] || 1
       const billingDate = creditPaymentDetail.billedDate[monthText] || 1
       const duedateDate = creditPaymentDetail.billedRound[monthText] || 15
       /**
        * Convert Billing day number to Date and get Billing start/end date
        * Period: (Previous Month - Previous Day)
        */
+      const prevBilledDate = prevMonth.setDate(prevBillingDate)
       const billedDate = new Date().setDate(billingDate)
-      const previousMonth = addMonths(billedDate, -1).setHours(0, 0, 0, 0) // Previous Month
+      const previousMonth = addMonths(prevBilledDate, 0).setHours(0, 0, 0, 0) // Previous Month
       const previousDay = addDays(billedDate, -1).setHours(23, 59, 59, 999) // Previous Day
+
       /**
        * Get Complete Shipment
        * Complete period: (Previous Month - Previous Day)
@@ -136,7 +142,7 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
         billingNumber: _invoiceNumber,
         status: EBillingStatus.PENDING,
         state: EBillingState.CURRENT,
-        paymentMethod: EPaymentMethod.CASH,
+        paymentMethod: EPaymentMethod.CREDIT,
         user: customerId,
         shipments: _shipments,
         payments: [_payment],
@@ -272,11 +278,11 @@ export async function emailIssueBillingToCustomer(session?: ClientSession) {
     const customer = await UserModel.findById(billing.user).session(session)
     if (customer) {
       const financialEmails = get(customer, 'businessDetail.creditPayment.financialContactEmails', [])
-      const emails = uniq([customer.email, ...financialEmails])
+      const emails = uniq([customer.email, ...financialEmails]).filter((email) => !isEmpty(email))
       const month_text = format(new Date(), 'MMMM', { locale: th })
       const year_number = toNumber(format(new Date(), 'yyyy', { locale: th }))
       const year_text = toString(year_number + 543)
-      const invoice = await generateInvoice(billing, session)
+      const invoice = await generateInvoice(billing, undefined, session)
       await addEmailQueue({
         from: process.env.NOREPLY_EMAIL,
         to: emails,
@@ -292,7 +298,9 @@ export async function emailIssueBillingToCustomer(session?: ClientSession) {
         },
         attachments: [{ filename: path.basename(invoice.filePath), path: invoice.filePath }],
       })
-      await BillingDocumentModel.findByIdAndUpdate(invoice.document._id, { emailTime: new Date() }, { session })
+      const documentId = invoice?.document?._id
+      await InvoiceModel.findByIdAndUpdate(billing.invoice, { document: documentId })
+      await BillingDocumentModel.findByIdAndUpdate(documentId, { emailTime: new Date() }, { session })
       console.log(`[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Billing Cycle has sent for ${emails.join(', ')}`)
     }
   })

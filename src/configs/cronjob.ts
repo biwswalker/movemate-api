@@ -6,17 +6,14 @@ import {
   notifyNearbyDuedate,
   notifyOverdueBilling,
 } from '@controllers/billing'
+import { fDateTime } from '@utils/formatTime'
 import cron from 'node-cron'
-// import BillingModel from '@models/finance/billing.model'
-// import { BillingDocument } from '@models/finance/documents.model'
-// import { Receipt } from '@models/finance/receipt.model'
-// import { last, sortBy } from 'lodash'
-// import { generateReceipt } from 'reports/receipt'
 
 export default async function configureCronjob() {
   cron.schedule(
     '0 0 * * *',
     async () => {
+      console.log(`🟢 Start CronJob: ${fDateTime(new Date())} Issue credit billing process!`)
       await issueCreditBilling()
       await checkBillingStatus()
 
@@ -24,6 +21,7 @@ export default async function configureCronjob() {
        * Overdue
        */
       await notifyOverdueBilling()
+      console.log(`🛑 End CronJob: ${fDateTime(new Date())} Issue credit billing process!`)
     },
     { timezone: 'Asia/Bangkok' },
   )
@@ -31,6 +29,7 @@ export default async function configureCronjob() {
   cron.schedule(
     '0 8 * * *',
     async () => {
+      console.log(`🟢 Start CronJob: ${fDateTime(new Date())} Billing email notification process!`)
       /**
        * Invoice
        */
@@ -43,19 +42,10 @@ export default async function configureCronjob() {
       await notifyNearbyDuedate(3)
       await notifyNearbyDuedate(1)
       await notifyOverdueBilling()
+      console.log(`🛑 End CronJob: ${fDateTime(new Date())} Billing email notification process!`)
     },
     { timezone: 'Asia/Bangkok' },
   )
 
   console.log('🌽 Cronjob started')
-  // await checkBillingStatus()
-  // await notifyIssueEmailToCustomer()
-  // await BillingCycleModel.createBillingCycleForUser("66cdac28ae254a56f48c843e")
-  // await issueEmailToCustomer()
-  // const _billing = await BillingModel.findOne({ billingNumber: 'MMTH000069' })
-  // const _receipt = last(sortBy(_billing.receipts, 'createdAt')) as Receipt
-  // const _document = _receipt.document as BillingDocument
-  // const { fileName } = await generateInvoice(biili)
-  // const { fileName } = await generateReceipt(_billing, _document.filename)
-  // console.log('fileName: ', fileName)
 }

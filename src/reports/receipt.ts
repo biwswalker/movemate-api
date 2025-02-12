@@ -7,7 +7,7 @@ import { fDate } from '@utils/formatTime'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import { VehicleType } from '@models/vehicleType.model'
 import { HeaderComponent } from './components/header'
-import ReceiptFooterComponent from './components/footer'
+import { ReceiptFooterComponent } from './components/footer'
 import { COLORS, FONTS } from './components/constants'
 import { Billing } from '@models/finance/billing.model'
 import { Receipt } from '@models/finance/receipt.model'
@@ -27,7 +27,7 @@ interface GenerateReceiptResponse {
 
 export async function generateReceipt(
   billing: Billing,
-  filname?: string,
+  filename?: string,
   session?: ClientSession,
 ): Promise<GenerateReceiptResponse> {
   const isTaxIncluded = billing.amount.tax > 0
@@ -51,10 +51,9 @@ export async function generateReceipt(
         isAdditionalPaid = true
       }
     }
-    billing.quotation
   }
 
-  const fileName = filname ? filname : `receipt_${_receipt.receiptNumber}.pdf`
+  const fileName = filename ? filename : `receipt_${_receipt.receiptNumber}.pdf`
   const filePath = path.join(__dirname, '..', '..', 'generated/receipt', fileName)
 
   const doc = new PDFDocument({

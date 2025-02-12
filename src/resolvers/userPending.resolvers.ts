@@ -11,7 +11,9 @@ import { GraphQLError } from 'graphql'
 import { CutomerBusinessInput } from '@inputs/customer.input'
 import FileModel from '@models/file.model'
 import BusinessCustomerModel from '@models/customerBusiness.model'
-import BusinessCustomerCreditPaymentModel from '@models/customerBusinessCreditPayment.model'
+import BusinessCustomerCreditPaymentModel, {
+  BusinessCustomerCreditPayment,
+} from '@models/customerBusinessCreditPayment.model'
 import { BusinessCustomerSchema } from '@validations/customer.validations'
 import { ValidationError } from 'yup'
 import { yupValidationThrow } from '@utils/error.utils'
@@ -19,6 +21,7 @@ import { EPaymentMethod } from '@enums/payments'
 import { EUpdateUserStatus, EUserRole } from '@enums/users'
 import UserPendingModel, { UserPending } from '@models/userPending.model'
 import { GET_PENDING_USERS } from '@pipelines/userPending.pipeline'
+import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
 
 @Resolver(UserPending)
 export default class UserPendingResolver {
@@ -69,12 +72,13 @@ export default class UserPendingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]), RetryTransactionMiddleware)
   async updateCustomerRequest(
     @Arg('id') id: string,
     @Arg('data') data: CutomerBusinessInput,
     @Ctx() ctx: GraphQLContext,
   ): Promise<boolean> {
+    const session = ctx.session
     const { businessEmail, profileImage, creditPayment, cashPayment, ...formValue } = data
     try {
       // Check if the user already exists
@@ -83,14 +87,10 @@ export default class UserPendingResolver {
         throw new Error('Bad Request: Platform is require')
       }
 
-      /**
-       *
-       * TODO: -->
-       */
       if (id) {
         await BusinessCustomerSchema(id).validate(data, { abortEarly: false })
 
-        const userModel = await UserModel.findById(id)
+        const userModel = await UserModel.findById(id).session(session)
         if (!userModel) {
           const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
           throw new GraphQLError(message, {
@@ -101,7 +101,7 @@ export default class UserPendingResolver {
           })
         }
 
-        const customerBusinesslModel = await BusinessCustomerModel.findById(userModel.businessDetail)
+        const customerBusinesslModel = await BusinessCustomerModel.findById(userModel.businessDetail).session(session)
         if (!customerBusinesslModel) {
           const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
           throw new GraphQLError(message, {
@@ -115,11 +115,14 @@ export default class UserPendingResolver {
         // Profil Image
         const uploadedImage = profileImage ? new FileModel(profileImage) : null
         if (uploadedImage) {
-          await uploadedImage.save()
+          await uploadedImage.save({ session })
         }
 
+        let _creditInfo: BusinessCustomerCreditPayment | undefined = undefined
         if (formValue.paymentMethod === EPaymentMethod.CREDIT && creditPayment) {
-          const creditDetail = await BusinessCustomerCreditPaymentModel.findById(customerBusinesslModel.creditPayment)
+          const creditDetail = await BusinessCustomerCreditPaymentModel.findById(
+            customerBusinesslModel.creditPayment,
+          ).session(session)
           if (!creditDetail) {
             const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบข้อมูลการเงิน'
             throw new GraphQLError(message, {
@@ -143,21 +146,21 @@ export default class UserPendingResolver {
             ? new FileModel(businessRegistrationCertificateFile)
             : null
           if (businessRegistrationCertificate) {
-            await businessRegistrationCertificate.save()
+            await businessRegistrationCertificate.save({ session })
           }
           // Document Image 2
           const copyIDAuthorizedSignatory = copyIDAuthorizedSignatoryFile
             ? new FileModel(copyIDAuthorizedSignatoryFile)
             : null
           if (copyIDAuthorizedSignatory) {
-            await copyIDAuthorizedSignatory.save()
+            await copyIDAuthorizedSignatory.save({ session })
           }
           // Document Image 3
           const certificateValueAddedTaxRegistration = certificateValueAddedTaxRegistrationFile
             ? new FileModel(certificateValueAddedTaxRegistrationFile)
             : null
           if (certificateValueAddedTaxRegistration) {
-            await certificateValueAddedTaxRegistration.save()
+            await certificateValueAddedTaxRegistration.save({ session })
           }
 
           const _creditPayment = new BusinessCustomerCreditPaymentModel({
@@ -174,45 +177,27 @@ export default class UserPendingResolver {
               ? { certificateValueAddedTaxRegistrationFile: certificateValueAddedTaxRegistration }
               : {}),
           })
-          await _creditPayment.save()
-
-          /**
-           * TODO:---
-           */
-          // await customerBusinesslModel.updateOne({ ...formValue, businessEmail })
-          const _business = new BusinessCustomerModel({
-            ...formValue,
-            businessEmail,
-            creditPayment: _creditPayment,
-          })
-          await _business.save()
-
-          const _userPending = new UserPendingModel({
-            user: userModel._id,
-            userId: userModel._id,
-            userNumber: userModel.userNumber,
-            businessDetail: _business,
-            ...(uploadedImage ? { profileImage: uploadedImage } : {}),
-            status: EUpdateUserStatus.PENDING,
-          })
-          await _userPending.save()
-
-          await userModel.updateOne({
-            ...formValue,
-            ...(uploadedImage ? { profileImage: uploadedImage } : {}),
-          })
-        } else {
-          await customerBusinesslModel.updateOne({ ...formValue, businessEmail })
-          const business = new BusinessCustomerModel({
-            ...formValue,
-            businessEmail,
-          })
-
-          await userModel.updateOne({
-            ...formValue,
-            ...(uploadedImage ? { profileImage: uploadedImage } : {}),
-          })
+          await _creditPayment.save({ session })
+          _creditInfo = _creditPayment
         }
+
+        const _business = new BusinessCustomerModel({
+          ...formValue,
+          businessEmail,
+          creditPayment: _creditInfo,
+        })
+        await _business.save({ session })
+
+        const _userPending = new UserPendingModel({
+          user: userModel._id,
+          userId: userModel._id,
+          userNumber: userModel.userNumber,
+          businessDetail: _business,
+          profileImage: uploadedImage ? uploadedImage : userModel.profileImage,
+          status: EUpdateUserStatus.PENDING,
+        })
+
+        await _userPending.save({ session })
 
         return true
       }
