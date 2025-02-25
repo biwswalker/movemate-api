@@ -32,7 +32,7 @@ export async function requestOTP(phoneNumber: string, action: string) {
     if (otpRequestData) {
       const endTime = addMinutes(new Date(otpRequestData.sentDateTime), DEFUALT_OTP_DURATION)
       if (Date.now() < endTime.getTime()) {
-        const message = 'ไม่สามารถส่ง OTP ได้ในขนะนี้ กรุณาลองใหม่'
+        const message = 'ไม่สามารถส่ง OTP ได้ในขณะนี้ กรุณาลองใหม่ในอีก 1 นาที'
         throw new GraphQLError(message, {
           extensions: {
             code: 'UNABLE_SEND_OTP',
@@ -48,7 +48,7 @@ export async function requestOTP(phoneNumber: string, action: string) {
     const verifyLast = `${otp} คือ รหัสยืนยันเบอร์ติดต่อ Movemate Thailand ของคุณ (Ref:${ref})`
 
     // Request to thai bulk sms
-    console.log('OTP message: ', process.env.NODE_ENV, verifyLast)
+    console.log('[OTP] message: ', new Date().toISOString(), process.env.NODE_ENV, verifyLast)
     // if (process.env.NODE_ENV === 'production') {
     //   const smscredit = await credit().catch((error) => {
     //     console.log('credit error: ', error)

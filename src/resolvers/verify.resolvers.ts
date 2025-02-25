@@ -113,7 +113,7 @@ export default class VerifyAccountResolver {
 
       const endTime = new Date(user.lastestOTPTime).getTime()
       if (Date.now() < endTime) {
-        const message = 'ไม่สามารถส่ง OTP ได้ในขนะนี้ กรุณาลองใหม่'
+        const message = 'ไม่สามารถส่ง OTP ได้ในขณะนี้ กรุณาลองใหม่ในอีก 1 นาที'
         throw new GraphQLError(message, {
           extensions: {
             code: 'NOT_FOUND',
