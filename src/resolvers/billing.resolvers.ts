@@ -399,7 +399,7 @@ export default class BillingResolver {
         const _shipment = head(_billing.shipments) as Shipment
         if (_shipment) {
           shipmentNotify(_shipment._id, get(_shipment, 'requestedDriver._id', ''))
-          const newShipments = await getNewAllAvailableShipmentForDriver()
+          const newShipments = await getNewAllAvailableShipmentForDriver('', {}, session)
           await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
           const adminNotificationCount = await getAdminMenuNotificationCount()
           await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)

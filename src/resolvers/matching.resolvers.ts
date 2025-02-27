@@ -54,7 +54,7 @@ export default class MatchingResolver {
       console.log('ListenAvailableShipment Subscribe: ')
       const repeater = new Repeater(async (push, stop) => {
         try {
-          const shipments = await getNewAllAvailableShipmentForDriver(context.user_id)
+          const shipments = await getNewAllAvailableShipmentForDriver()
           push(shipments)
           await stop
         } catch (error) {
@@ -239,7 +239,7 @@ export default class MatchingResolver {
       const shipmentCount = await ShipmentModel.countDocuments(query)
       return shipmentCount
     }
-    const query = await getNewAllAvailableShipmentForDriverQuery(userId)
+    const query = await getNewAllAvailableShipmentForDriverQuery(undefined, userId)
     const shipmentCount = await ShipmentModel.countDocuments(query)
     return shipmentCount
   }

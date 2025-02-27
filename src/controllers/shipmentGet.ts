@@ -5,7 +5,7 @@ import ShipmentModel, { Shipment } from '@models/shipment.model'
 import UserModel from '@models/user.model'
 import { addSeconds } from 'date-fns'
 import { get, isEmpty, map, reduce, union, uniq } from 'lodash'
-import { FilterQuery, Types } from 'mongoose'
+import { ClientSession, FilterQuery, Types } from 'mongoose'
 
 export async function getAcceptedShipmentForDriverQuery(status: EShipmentMatchingCriteria, userId: string) {
   const user = await UserModel.findById(userId)
@@ -36,12 +36,12 @@ export async function getAcceptedShipmentForDriverQuery(status: EShipmentMatchin
   return statusQuery
 }
 
-export async function getNewAllAvailableShipmentForDriverQuery(driverId?: string) {
+export async function getNewAllAvailableShipmentForDriverQuery(session: ClientSession = undefined, driverId?: string) {
   let vehicleIds = null
   let employeeVehiclesIds = []
   let ignoreShipments = []
   if (driverId) {
-    const user = await UserModel.findById(driverId).lean()
+    const user = await UserModel.findById(driverId).lean().session(session)
     if (user) {
       const isBusinessDriver = user.userType === EUserType.BUSINESS
       if (isBusinessDriver) {
@@ -50,7 +50,7 @@ export async function getNewAllAvailableShipmentForDriverQuery(driverId?: string
           drivingStatus: { $in: [EDriverStatus.IDLE, EDriverStatus.WORKING] },
           status: EUserStatus.ACTIVE,
           validationStatus: EUserValidationStatus.APPROVE,
-        })
+        }).session(session)
         if (isEmpty(childrens)) {
           return []
         } else {
@@ -66,7 +66,7 @@ export async function getNewAllAvailableShipmentForDriverQuery(driverId?: string
         }
       }
       if (user?.drivingStatus === EDriverStatus.BUSY) return []
-      const driverDetail = await DriverDetailModel.findById(user.driverDetail).lean()
+      const driverDetail = await DriverDetailModel.findById(user.driverDetail).lean().session(session)
       if (driverDetail.serviceVehicleTypes) {
         vehicleIds = driverDetail.serviceVehicleTypes
         if (isBusinessDriver) {
@@ -77,7 +77,7 @@ export async function getNewAllAvailableShipmentForDriverQuery(driverId?: string
         ...(isBusinessDriver ? { agentDriver: user._id } : { driver: user._id }),
         status: EShipmentStatus.PROGRESSING,
         driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
-      }).lean()
+      }).lean().session(session)
       ignoreShipments = isBusinessDriver
         ? []
         : map(existingShipments, (shipment) => {
@@ -108,9 +108,9 @@ export async function getNewAllAvailableShipmentForDriverQuery(driverId?: string
   return query
 }
 
-export async function getNewAllAvailableShipmentForDriver(driverId?: string, options: any = {}) {
-  const generatedQuery = await getNewAllAvailableShipmentForDriverQuery(driverId)
-  const queryOptions = Object.assign(options, { sort: { bookingDateTime: 1 } })
+export async function getNewAllAvailableShipmentForDriver(driverId?: string, options: any = {}, session: ClientSession = undefined) {
+  const generatedQuery = await getNewAllAvailableShipmentForDriverQuery(session, driverId)
+  const queryOptions = Object.assign(options, { sort: { bookingDateTime: 1 }, session })
   const query = isEmpty(generatedQuery) ? {} : generatedQuery
   const shipments = await ShipmentModel.find(query, undefined, queryOptions).exec()
   if (!shipments) {
