@@ -1,6 +1,8 @@
 import { EUserCriterialType, EUserRole, EUserStatus, EUserValidationStatus } from '@enums/users'
 import { GetUserPendingArgs } from '@inputs/user.input'
 import { PipelineStage } from 'mongoose'
+import { userPipelineStage } from './user.pipeline'
+import { filePipelineStage } from './file.pipline'
 
 export const GET_PENDING_USERS = (
   {
@@ -72,106 +74,42 @@ export const GET_PENDING_USERS = (
   }
 
   const postmatch: PipelineStage[] = detailMatch ? [{ $match: detailMatch }] : []
+// "businessDetail.creditPayment.financialFirstname"
 
   return [
     ...(prematch.$match ? [prematch] : []),
     {
       $lookup: {
-        from: 'businesscustomers',
-        localField: 'businessDetail',
-        foreignField: '_id',
-        as: 'businessDetail',
+        from: "businesscustomercreditpayments",
+        localField: "businessDetail.creditPayment",
+        foreignField: "_id",
+        as: "businessDetail.creditPayment",
         pipeline: [
-          {
-            $lookup: {
-              from: 'businesscustomercreditpayments',
-              localField: 'creditPayment',
-              foreignField: '_id',
-              as: 'creditPayment',
-            },
-          },
-          {
-            $unwind: {
-              path: '$creditPayment',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $lookup: {
-              from: 'businesscustomercashpayments',
-              localField: 'cashPayment',
-              foreignField: '_id',
-              as: 'cashPayment',
-            },
-          },
-          {
-            $unwind: {
-              path: '$cashPayment',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-        ],
-      },
+          ...filePipelineStage('businessRegistrationCertificateFile'),
+          ...filePipelineStage('copyIDAuthorizedSignatoryFile'),
+          ...filePipelineStage('certificateValueAddedTaxRegistrationFile'),
+        ]
+      }
     },
     {
       $unwind: {
-        path: '$businessDetail',
-        preserveNullAndEmptyArrays: true,
-      },
+        path: "$businessDetail.creditPayment",
+        preserveNullAndEmptyArrays: true
+      }
     },
     {
       $lookup: {
-        from: 'individualcustomers',
-        localField: 'individualDetail',
-        foreignField: '_id',
-        as: 'individualDetail',
-      },
+        from: "businesscustomercashpayments",
+        localField: "businessDetail.cashPayment",
+        foreignField: "_id",
+        as: "businessDetail.cashPayment"
+      }
     },
     {
       $unwind: {
-        path: '$individualDetail',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: 'driverdetails',
-        localField: 'driverDetail',
-        foreignField: '_id',
-        as: 'driverDetail',
-        pipeline: [
-          {
-            $lookup: {
-              from: 'vehicletypes',
-              localField: 'serviceVehicleTypes',
-              foreignField: '_id',
-              as: 'serviceVehicleTypes',
-              pipeline: [
-                {
-                  $lookup: {
-                    from: 'files',
-                    localField: 'image',
-                    foreignField: '_id',
-                    as: 'image',
-                  },
-                },
-                {
-                  $unwind: {
-                    path: '$image',
-                    preserveNullAndEmptyArrays: true,
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      $unwind: {
-        path: '$driverDetail',
-        preserveNullAndEmptyArrays: true,
-      },
+        path: "$businessDetail.cashPayment",
+        preserveNullAndEmptyArrays: true
+      }
     },
     {
       $lookup: {
@@ -187,94 +125,8 @@ export const GET_PENDING_USERS = (
         preserveNullAndEmptyArrays: true,
       },
     },
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'user',
-        foreignField: '_id',
-        as: 'user',
-        pipeline: [
-          {
-            $lookup: {
-              from: 'driverdetails',
-              localField: 'driverDetail',
-              foreignField: '_id',
-              as: 'driverDetail',
-            },
-          },
-          {
-            $unwind: {
-              path: '$driverDetail',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $lookup: {
-              from: 'individualcustomers',
-              localField: 'individualDetail',
-              foreignField: '_id',
-              as: 'individualDetail',
-            },
-          },
-          {
-            $unwind: {
-              path: '$individualDetail',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-          {
-            $lookup: {
-              from: 'businesscustomers',
-              localField: 'businessDetail',
-              foreignField: '_id',
-              as: 'businessDetail',
-            },
-          },
-          {
-            $unwind: {
-              path: '$businessDetail',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-        ],
-      },
-    },
-    {
-      $unwind: {
-        path: '$user',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'approvalBy',
-        foreignField: '_id',
-        as: 'approvalBy',
-        pipeline: [
-          {
-            $lookup: {
-              from: 'admins',
-              localField: 'adminDetail',
-              foreignField: '_id',
-              as: 'adminDetail',
-            },
-          },
-          {
-            $unwind: {
-              path: '$adminDetail',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-        ],
-      },
-    },
-    {
-      $unwind: {
-        path: '$approvalBy',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
+    ...userPipelineStage('user'),
+    ...userPipelineStage('approvalBy'),
     {
       $addFields: {
         statusWeight: {

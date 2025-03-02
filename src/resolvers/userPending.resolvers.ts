@@ -10,9 +10,10 @@ import { PaginationArgs } from '@inputs/query.input'
 import { GraphQLError } from 'graphql'
 import { CutomerBusinessInput } from '@inputs/customer.input'
 import FileModel from '@models/file.model'
-import BusinessCustomerModel from '@models/customerBusiness.model'
+import BusinessCustomerModel, { BusinessCustomer } from '@models/customerBusiness.model'
 import BusinessCustomerCreditPaymentModel, {
   BusinessCustomerCreditPayment,
+  EDataStatus,
 } from '@models/customerBusinessCreditPayment.model'
 import { BusinessCustomerSchema } from '@validations/customer.validations'
 import { ValidationError } from 'yup'
@@ -164,29 +165,33 @@ export default class UserPendingResolver {
           }
 
           const _creditPayment = new BusinessCustomerCreditPaymentModel({
+            ...creditDetail,
             ...omit(creditPayment, [
               'businessRegistrationCertificateFile',
               'copyIDAuthorizedSignatoryFile',
               'certificateValueAddedTaxRegistrationFile',
             ]),
             ...(businessRegistrationCertificate
-              ? { businessRegistrationCertificateFile: businessRegistrationCertificate }
-              : {}),
-            ...(copyIDAuthorizedSignatory ? { copyIDAuthorizedSignatoryFile: copyIDAuthorizedSignatory } : {}),
+              ? { businessRegistrationCertificateFile: businessRegistrationCertificate._id }
+              : { businessRegistrationCertificateFile: creditDetail.businessRegistrationCertificateFile }),
+            ...(copyIDAuthorizedSignatory
+              ? { copyIDAuthorizedSignatoryFile: copyIDAuthorizedSignatory }
+              : { copyIDAuthorizedSignatoryFile: creditDetail.copyIDAuthorizedSignatoryFile }),
             ...(certificateValueAddedTaxRegistration
               ? { certificateValueAddedTaxRegistrationFile: certificateValueAddedTaxRegistration }
-              : {}),
+              : { certificateValueAddedTaxRegistrationFile: creditDetail.certificateValueAddedTaxRegistrationFile }),
+            dataStatus: EDataStatus.DRAFT,
           })
           await _creditPayment.save({ session })
           _creditInfo = _creditPayment
         }
 
-        const _business = new BusinessCustomerModel({
+        const _business: BusinessCustomer = {
+          ...customerBusinesslModel,
           ...formValue,
           businessEmail,
-          creditPayment: _creditInfo,
-        })
-        await _business.save({ session })
+          creditPayment: _creditInfo._id || '',
+        }
 
         const _userPending = new UserPendingModel({
           user: userModel._id,

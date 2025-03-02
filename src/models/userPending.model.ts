@@ -32,7 +32,7 @@ export class UserPending extends TimeStamps {
   @Field(() => ID)
   @Property({ required: true })
   userId: string
-
+  
   @Field()
   @Property({ required: true })
   userNumber: string

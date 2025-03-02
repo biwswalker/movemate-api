@@ -15,6 +15,11 @@ export enum EBilledType {
   DATES = 'dates'
 }
 
+export enum EDataStatus {
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE'
+}
+
 @ObjectType()
 export class BilledMonth {
   @Field(() => Int)
@@ -71,6 +76,11 @@ export class BilledMonth {
 export class BusinessCustomerCreditPayment {
   @Field(() => ID)
   readonly _id: string;
+  
+  @Field({ nullable: true })
+  @IsEnum(EDataStatus)
+  @Property({ enum: EDataStatus, default: EDataStatus.ACTIVE })
+  readonly dataStatus: EDataStatus;
 
   // Credit
   @Field({ nullable: true })
