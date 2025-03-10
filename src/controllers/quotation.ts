@@ -14,6 +14,7 @@ import { CalculationResultPayload } from '@payloads/pricing.payloads'
 import { getRoute } from '@services/maps/location'
 import { GraphQLError } from 'graphql'
 import { find, forEach, get, head, last, min, omit, random, reduce, sortBy, sum, tail } from 'lodash'
+import ceil from 'lodash/ceil'
 import { getAdditionalServicePrice } from './servicces'
 import Aigle from 'aigle'
 import { EPrivilegeDiscountUnit } from '@enums/privilege'
@@ -247,8 +248,8 @@ export async function calculateQuotation(
   }
 
   const vehicleName = get(vehicleCost, 'vehicleType.name', '')
-  const distanceKMText = fNumber(distanceKM, '0.0')
-  const distanceReturnKMText = fNumber(distanceReturnKM, '0.0')
+  const distanceKMText = fNumber(distanceKM, '0,0.0')
+  const distanceReturnKMText = fNumber(distanceReturnKM, '0,0.0')
 
   const totalCost = sum([subTotalCost, -whtCost])
   const totalPrice = sum([subTotalAfterDiscountPrice, -whtPrice])
@@ -288,7 +289,7 @@ export async function calculateQuotation(
   const _detail: QuotationDetail = {
     shippingPrices: [
       {
-        label: `${vehicleName} (${fNumber(distanceKMText)} กม.)`,
+        label: `${vehicleName} (${distanceKMText} กม.)`,
         price: distancePrice,
         cost: distanceCost,
       },
@@ -576,9 +577,13 @@ export function calculateStep(distance: number, formula: DistanceCostPricing[]) 
     }
   })
 
+  // Round UP for Decimal
+  const _cost = ceil(_subTotalCost)
+  const _price = ceil(_subTotalPrice)
+
   return {
     calculations: _calculations,
-    cost: _subTotalCost,
-    price: _subTotalPrice,
+    cost: _cost,
+    price: _price,
   }
 }
