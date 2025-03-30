@@ -184,4 +184,20 @@ export default class NotificationResolver {
   listenProgressingShipmentCount(@Root() payload: number): number {
     return payload
   }
+
+  @Subscription({
+    topics: NOTFICATIONS.MESSAGE,
+    topicId: ({ context }: SubscribeResolverData<number, any, AuthContext>) => context.user_id,
+  })
+  listenNotificationMessage(@Root() payload: Notification, @Ctx() _: AuthContext): Notification {
+    return payload
+  }
+
+  @Subscription({
+    topics: NOTFICATIONS.MESSAGE_GROUP,
+    topicId: ({ context }: SubscribeResolverData<number, any, AuthContext>) => context.user_role,
+  })
+  listenNotificationGroupMessage(@Root() payload: Notification, @Ctx() _: AuthContext): Notification {
+    return payload
+  }
 }
