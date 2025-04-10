@@ -279,20 +279,33 @@ export async function getGeocode(ctx: GraphQLContext, latitude: number, longitud
       key: process.env.GOOGLE_MAP_API_KEY,
       language: 'th',
       region: 'th',
-      extra_computations: 'ADDRESS_DESCRIPTORS',
+      // extra_computations: 'ADDRESS_DESCRIPTORS',
       ...(session ? { sessionToken: session } : {}),
     },
   })
 
   const result = get(response, 'data.results.0', undefined) as google.maps.GeocoderResult | undefined
-  const { place } = await getPlaceDetail(result?.place_id, session)
-  const { displayName, formattedAddress, location, id } = place
+  // const { place } = await getPlaceDetail(result?.place_id, session)
+  // const { displayName, formattedAddress, location, id } = place
+  // const marker = new MarkerModel({
+  //   placeId: place.id,
+  //   displayName: get(place, 'displayName.text', '') || displayName,
+  //   formattedAddress: get(place, 'shortFormattedAddress', '') || formattedAddress,
+  //   latitude: get(location, 'latitude', undefined) || location.lat(),
+  //   longitude: get(location, 'longitude', undefined) || location.lng(),
+  // })
+  
+  /**
+   * กรณีที่ Get geocode โดย latlng
+   * place_id จะเป็น null
+   * ดังนั้นจะต้องใช้ latitude, longitude แทน
+   */
   const marker = new MarkerModel({
-    placeId: place.id,
-    displayName: get(place, 'displayName.text', '') || displayName,
-    formattedAddress: get(place, 'shortFormattedAddress', '') || formattedAddress,
-    latitude: get(location, 'latitude', undefined) || location.lat(),
-    longitude: get(location, 'longitude', undefined) || location.lng(),
+    placeId: `${latitude},${longitude}`,
+    displayName: get(result, 'formatted_address', '') || '',
+    formattedAddress: get(result, 'formatted_address', '') || '',
+    latitude: latitude,
+    longitude: longitude,
   })
 
   await saveCache(cacheType, key, marker)
