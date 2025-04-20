@@ -9,6 +9,7 @@ export const FONTS = {
   SARABUN_SEMI_BOLD: path.join(__dirname, '..', '..', 'assets/fonts/Sarabun-SemiBold.ttf'),
   SARABUN_BOLD: path.join(__dirname, '..', '..', 'assets/fonts/Sarabun-Bold.ttf'),
   SARABUN_EXTRA_BOLD: path.join(__dirname, '..', '..', 'assets/fonts/Sarabun-ExtraBold.ttf'),
+  ANGSANA_NEW: path.join(__dirname, '..', '..', 'assets/fonts/AngsanaNewFont.ttf'),
 }
 
 export const ASSETS = {

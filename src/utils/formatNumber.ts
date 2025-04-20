@@ -32,8 +32,8 @@ export function result(format: string, key = '.00') {
   return isInteger ? format.replace(key, '') : format
 }
 
-export function fCurrency(number: string | number) {
-  return numeral(number).format(Number.isInteger(number) ? '0,0' : '0,0.00')
+export function fCurrency(number: string | number, isDecimal?: boolean) {
+  return numeral(number).format((Number.isInteger(number) && !isDecimal) ? '0,0' : '0,0.00')
 }
 
 export function fCurrencyBaht(number: string | number) {
