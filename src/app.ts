@@ -53,6 +53,7 @@ async function server() {
   app.use('/invoice', authenticateTokenAccessImage, express.static('generated/invoice'))
   app.use('/receipt', authenticateTokenAccessImage, express.static('generated/receipt'))
   app.use('/whtcert', authenticateTokenAccessImage, express.static('generated/whtcert'))
+  app.use('/report', authenticateTokenAccessImage, express.static('generated/report'))
 
   app.engine('hbs', engine({ extname: '.hbs', defaultLayout: false }))
   app.set('view engine', 'hbs')
