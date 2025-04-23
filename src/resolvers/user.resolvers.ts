@@ -65,6 +65,7 @@ import {
   EUserValidationStatus,
 } from '@enums/users'
 import { credit, sendSMS } from '@services/sms/thaibulk'
+import { getAgentParents } from '@controllers/driver'
 
 @Resolver(User)
 export default class UserResolver {
@@ -1238,9 +1239,7 @@ export default class UserResolver {
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getParents(@Arg('userId') userId: string): Promise<User[]> {
     try {
-      const driver = await UserModel.findById(userId).lean()
-      const parents = await UserModel.find({ _id: { $in: driver.parents }, userType: EUserType.BUSINESS })
-      console.log('parents: ', parents)
+      const parents = await getAgentParents(userId)
       return parents
     } catch (error) {
       console.log(error)

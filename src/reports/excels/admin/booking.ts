@@ -56,9 +56,9 @@ export interface BookingReport {
 export async function generateBookingReport(data: BookingReport[]): Promise<Workbook> {
   try {
     const workbook = new Workbook()
-    const worksheet = workbook.addWorksheet('Bookings', { pageSetup: { fitToWidth: 10 }})
+    const worksheet = workbook.addWorksheet('Bookings')
 
-    const maxDestination = max(data.map((dest) => dest.deliveries.length))
+    const maxDestination = max(data.map((dest) => (dest.deliveries || []).length))
 
     const _numberFormatStyle: Partial<Style> = { numFmt: '#,##0.00' }
     worksheet.columns = [

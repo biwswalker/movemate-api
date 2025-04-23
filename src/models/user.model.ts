@@ -27,6 +27,7 @@ import {
 } from '@enums/users'
 import { EPaymentMethod } from '@enums/payments'
 import { BusinessCustomerCreditPayment } from './customerBusinessCreditPayment.model'
+import { UserAddressPayload } from '@payloads/user.payloads'
 
 @plugin(autopopulate)
 @plugin(mongoosePagination)
@@ -270,6 +271,44 @@ export class User extends TimeStamps {
   }
 
   @Field({ nullable: true })
+  get taxId(): string {
+    const userRole = get(this, '_doc.userRole', '') || this.userRole || ''
+    const userType = get(this, '_doc.userType', '') || this.userType || ''
+
+    if (userRole === EUserRole.CUSTOMER) {
+      if (userType === EUserType.INDIVIDUAL) {
+        const individualDetail: IndividualCustomer | undefined =
+          get(this, '_doc.individualDetail', undefined) || this.individualDetail || undefined
+        if (individualDetail) {
+          const taxId = get(individualDetail, 'taxId', '')
+          return taxId
+        }
+        return ''
+      } else if (userType === EUserType.BUSINESS) {
+        const businessDetail: BusinessCustomer | undefined =
+          get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
+        if (businessDetail) {
+          const taxId = get(businessDetail, 'taxNumber', '')
+          return taxId
+        }
+        return ''
+      }
+    } else if (userRole === EUserRole.DRIVER) {
+      const driverDetail: DriverDetail | undefined =
+        get(this, '_doc.driverDetail', undefined) || this.driverDetail || undefined
+      if (driverDetail) {
+        return driverDetail.taxNumber ?? ''
+      }
+    } else if (userRole === EUserRole.ADMIN) {
+      const admin: Admin | undefined = get(this, '_doc.adminDetail', undefined) || this.adminDetail || undefined
+      if (admin) {
+        return admin.taxId ?? ''
+      }
+    }
+    return ''
+  }
+
+  @Field({ nullable: true })
   get email(): string {
     const userRole = get(this, '_doc.userRole', '') || this.userRole || ''
     const userType = get(this, '_doc.userType', '') || this.userType || ''
@@ -336,6 +375,59 @@ export class User extends TimeStamps {
       }
     }
     return ''
+  }
+
+  @Field({ nullable: true })
+  get addressData(): UserAddressPayload {
+    const userRole = get(this, '_doc.userRole', '') || this.userRole || ''
+    const userType = get(this, '_doc.userType', '') || this.userType || ''
+    if (userRole === EUserRole.CUSTOMER) {
+      if (userType === EUserType.INDIVIDUAL) {
+        const _individualDetail = (get(this, '_doc.individualDetail', '') || this.individualDetail) as
+          | IndividualCustomer
+          | undefined
+        if (_individualDetail) {
+          return {
+            address: _individualDetail.address,
+            subDistrict: _individualDetail.subDistrict,
+            district: _individualDetail.district,
+            province: _individualDetail.province,
+            postcode: _individualDetail.postcode,
+          }
+        }
+      } else if (userType === EUserType.BUSINESS) {
+        const _businessDetail = (get(this, '_doc.businessDetail', '') || this.businessDetail) as
+          | BusinessCustomer
+          | undefined
+        if (_businessDetail) {
+          if (_businessDetail.paymentMethod === EPaymentMethod.CREDIT) {
+            const creditPayment = _businessDetail.creditPayment as BusinessCustomerCreditPayment | undefined
+            return {
+              address: creditPayment.financialAddress,
+              subDistrict: creditPayment.financialSubDistrict,
+              district: creditPayment.financialDistrict,
+              province: creditPayment.financialProvince,
+              postcode: creditPayment.financialPostcode,
+            }
+          } else {
+            return {
+              address: _businessDetail.address,
+              subDistrict: _businessDetail.subDistrict,
+              district: _businessDetail.district,
+              province: _businessDetail.province,
+              postcode: _businessDetail.postcode,
+            }
+          }
+        }
+      }
+    }
+    return {
+      address: '',
+      subDistrict: '',
+      district: '',
+      province: '',
+      postcode: '',
+    }
   }
 
   static paginate: mongoose.PaginateModel<typeof User>['paginate']

@@ -29,6 +29,20 @@ export class RequireDataBeforePayload {
 }
 
 @ObjectType()
+export class UserAddressPayload {
+  @Field()
+  address: string
+  @Field()
+  subDistrict: string
+  @Field()
+  district: string
+  @Field()
+  province: string
+  @Field()
+  postcode: string
+}
+
+@ObjectType()
 export class UserPaginationPayload extends PaginationPayload implements PaginateResult<User> {
   @Field(() => [User])
   docs: User[]
