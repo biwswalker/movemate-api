@@ -47,11 +47,11 @@ export async function generateCustomerReport(data: CustomerReport[]): Promise<Wo
       { header: 'Registered Date', key: 'registeredDate', width: 20 },
       { header: 'Last Active Date', key: 'lastActiveDate', width: 20 },
       { header: 'Last Booked', key: 'lastBooked', width: 20 },
-      { header: 'Total Shipment', key: 'totalShipment', width: 18, ..._numberFormatStyle },
-      { header: 'Shipment Success', key: 'success', width: 18, ..._numberFormatStyle },
-      { header: 'Cancel By Customer', key: 'cancelledCustomer', width: 18, ..._numberFormatStyle },
-      { header: 'Cancel By Driver', key: 'cancelledDriver', width: 18, ..._numberFormatStyle },
-      { header: 'Cancel By Admin', key: 'cancelledAdmin', width: 18, ..._numberFormatStyle },
+      { header: 'Total Shipment', key: 'totalShipment', width: 18, style: _numberFormatStyle },
+      { header: 'Shipment Success', key: 'success', width: 18, style: _numberFormatStyle },
+      { header: 'Cancel By Customer', key: 'cancelledCustomer', width: 18, style: _numberFormatStyle },
+      { header: 'Cancel By Driver', key: 'cancelledDriver', width: 18, style: _numberFormatStyle },
+      { header: 'Cancel By Admin', key: 'cancelledAdmin', width: 18, style: _numberFormatStyle },
     ]
     worksheet.getRow(1).height = 20
     worksheet.getRow(1).font = { bold: true, size: 12 }

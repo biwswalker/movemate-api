@@ -127,7 +127,7 @@ export async function generateBookingReport(data: BookingReport[]): Promise<Work
 
     worksheet.eachRow((row, rowNumber) => {
       if(rowNumber > 1) {
-        row.height = 15
+        row.height = 16
         row.font = { size: 12 }
       }
     })

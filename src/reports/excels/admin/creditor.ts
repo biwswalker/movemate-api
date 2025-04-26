@@ -1,6 +1,12 @@
 import { Style, Workbook } from 'exceljs'
+import { head, tail } from 'lodash'
 
-interface CreditorReport {
+interface ShipmentCreditorReport {
+  shipmentNo?: string
+  finishedDate?: string
+  value?: number
+}
+export interface CreditorReport {
   userId?: string
   userType?: string
   fullname?: string
@@ -12,12 +18,10 @@ interface CreditorReport {
   workingPeriod?: string
   duedate?: string
   overdueCount?: string
-  shipmentNo?: string
-  completeDate?: string
-  value?: string
-  subtotal?: string
-  whtValue?: string
-  total?: string
+  shipments?: ShipmentCreditorReport[]
+  subtotal?: number
+  whtValue?: number
+  total?: number
   paymentDate?: string
   receiptNo?: string
   whtNo?: string
@@ -28,7 +32,7 @@ export async function generateCreditorReport(data: CreditorReport[]): Promise<Wo
     const workbook = new Workbook()
     const worksheet = workbook.addWorksheet('Creditors')
 
-    const _numberFormatStyle: Partial<Style> = { numFmt: '#,##0' }
+    const _numberFormatStyle: Partial<Style> = { numFmt: '#,##0.00' }
     worksheet.columns = [
       { header: 'User ID', key: 'userId', width: 25 },
       { header: 'User Type', key: 'userType', width: 12 },
@@ -42,27 +46,32 @@ export async function generateCreditorReport(data: CreditorReport[]): Promise<Wo
       { header: 'วันครบกำหนดชำระ', key: 'duedate', width: 28 },
       { header: 'วันค้างชำระ', key: 'overdueCount', width: 16 },
       { header: 'Shipment No.', key: 'shipmentNo', width: 16 },
-      { header: 'วันที่งานเสร็จสิ้น', key: 'completeDate', width: 15 },
-      { header: 'มูลค่า', key: 'value', width: 20 },
-      { header: 'มูลค่าที่ต้องชำระ', key: 'subtotal', width: 20 },
-      { header: 'ภาษีหัก ณ ที่จ่าย 1%', key: 'whtValue', width: 20 },
-      { header: 'มูลค่าที่ต้องชำระสุทธิ', key: 'total', width: 18, ..._numberFormatStyle },
-      { header: 'Payment Date', key: 'paymentDate', width: 18, ..._numberFormatStyle },
-      { header: 'Receipt/Payment Voucher No.', key: 'receiptNo', width: 18, ..._numberFormatStyle },
-      { header: 'WHT No.', key: 'whtNo', width: 18, ..._numberFormatStyle },
+      { header: 'วันที่งานเสร็จสิ้น', key: 'finishedDate', width: 15 },
+      { header: 'มูลค่า', key: 'value', width: 20, style: _numberFormatStyle },
+      { header: 'มูลค่าที่ต้องชำระ', key: 'subtotal', width: 20, style: _numberFormatStyle },
+      { header: 'ภาษีหัก ณ ที่จ่าย 1%', key: 'whtValue', width: 20, style: _numberFormatStyle },
+      { header: 'มูลค่าที่ต้องชำระสุทธิ', key: 'total', width: 18, style: _numberFormatStyle },
+      { header: 'Payment Date', key: 'paymentDate', width: 18 },
+      { header: 'Receipt/Payment Voucher No.', key: 'receiptNo', width: 18 },
+      { header: 'WHT No.', key: 'whtNo', width: 18 },
     ]
     worksheet.getRow(1).height = 20
     worksheet.getRow(1).font = { bold: true, size: 12 }
     worksheet.getRow(1).alignment = { vertical: 'bottom', horizontal: 'center' }
 
-    // TODO:
     data.forEach((item) => {
-      worksheet.addRow(item)
+      item.shipments
+      const { shipmentNo, finishedDate, value } = head(item.shipments) || {}
+      const _shipments = tail(item.shipments) || []
+      worksheet.addRow({ ...item, shipmentNo, finishedDate, value })
+      _shipments.forEach(({ shipmentNo: _shipmentNo, finishedDate: _finishedDate, value: _value }) => {
+        worksheet.addRow({ shipmentNo: _shipmentNo, finishedDate: _finishedDate, value: _value })
+      })
     })
 
     worksheet.eachRow((row, rowNumber) => {
       if (rowNumber > 1) {
-        row.height = 15
+        row.height = 16
         row.font = { size: 12 }
       }
     })

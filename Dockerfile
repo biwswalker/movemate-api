@@ -24,6 +24,8 @@ RUN mkdir generated/report/customer
 RUN mkdir generated/report/admin/booking
 RUN mkdir generated/report/admin/customer
 RUN mkdir generated/report/admin/driver
+RUN mkdir generated/report/admin/debtor
+RUN mkdir generated/report/admin/creditor
 
 COPY package.json package-lock.json firebase-services.json ./
 COPY --from=builder /usr/src/movemate-api/node_modules /usr/src/movemate-api/node_modules

@@ -1,7 +1,7 @@
 import { BookingReport, generateBookingReport } from 'reports/excels/admin/booking'
 import { fDate, fDateTime } from '@utils/formatTime'
 import path from 'path'
-import ShipmentModel from '@models/shipment.model'
+import ShipmentModel, { Shipment } from '@models/shipment.model'
 import Aigle from 'aigle'
 import lodash, { find, head, includes, last, reduce, sum, tail } from 'lodash'
 import UserModel, { User } from '@models/user.model'
@@ -18,6 +18,18 @@ import { BusinessCustomer } from '@models/customerBusiness.model'
 import { DriverReport, generateDriverReport } from 'reports/excels/admin/driver'
 import { DriverDetail } from '@models/driverDetail.model'
 import { getAgentParents } from './driver'
+import BillingModel, { Billing } from '@models/finance/billing.model'
+import { DebtorReport, generateDebtorReport } from 'reports/excels/admin/debtor'
+import { Payment } from '@models/finance/payment.model'
+import { Receipt } from '@models/finance/receipt.model'
+import { Invoice } from '@models/finance/invoice.model'
+import { EBillingState, EBillingStatus } from '@enums/billing'
+import { BillingDocument } from '@models/finance/documents.model'
+import { differenceInDays } from 'date-fns'
+import DriverPaymentModel from '@models/driverPayment.model'
+import { CreditorReport, generateCreditorReport } from 'reports/excels/admin/creditor'
+import { Transaction } from '@models/transaction.model'
+import { EStepDefinition, EStepStatus, StepDefinition } from '@models/shipmentStepDefinition.model'
 
 Aigle.mixin(lodash, {})
 
@@ -38,8 +50,8 @@ function getShipmentStatus(status: EShipmentStatus) {
   }
 }
 
-function getPaymentType(status: EPaymentMethod) {
-  switch (status) {
+function getPaymentType(type: EPaymentMethod) {
+  switch (type) {
     case EPaymentMethod.CASH:
       return 'เงินสด'
     case EPaymentMethod.CREDIT:
@@ -104,6 +116,83 @@ function getUserStatus(status: EUserStatus) {
     default:
       return ''
   }
+}
+
+function getBillingStatus(billing: Billing) {
+  const _isTaxIncluded = (billing.amount?.tax || 0) > 0
+  const _receipt = last(billing.receipts) as Receipt | undefined
+  const _receiptDocument = _receipt?.document as BillingDocument
+  const _receiptFilename = _receiptDocument?.filename || ''
+  const _receiptEmailTime = _receiptDocument?.emailTime || ''
+  const _receiptTrackingNumber = _receiptDocument?.trackingNumber || ''
+
+  const _state = billing.state
+  switch (billing.status) {
+    case EBillingStatus.PENDING:
+      if (_state === EBillingState.CURRENT) {
+        return 'รอการชำระ'
+      } else if (_state === EBillingState.OVERDUE) {
+        return 'ผิดนัดชำระ'
+      } else if (_state === EBillingState.REFUND) {
+        return 'รอคืนเงิน'
+      }
+      return ''
+    case EBillingStatus.VERIFY:
+      if (_state === EBillingState.CURRENT) {
+        return 'รอยืนยันการชำระ'
+      } else if (_state === EBillingState.OVERDUE) {
+        return 'ผิดนัดชำระ'
+      } else if (_state === EBillingState.REFUND) {
+        return 'รอยืนยันคืนเงิน'
+      }
+      return ''
+    case EBillingStatus.CANCELLED:
+      if (_state === EBillingState.CURRENT) {
+        return 'ยกเลิกการชำระ'
+      } else if (_state === EBillingState.OVERDUE) {
+        return 'ยกเลิกการชำระ'
+      } else if (_state === EBillingState.REFUND) {
+        return 'ยกเลิกคืนเงิน'
+      }
+      return '-'
+    case EBillingStatus.COMPLETE:
+      if (_state === EBillingState.CURRENT || _state === EBillingState.OVERDUE) {
+        if (_isTaxIncluded) {
+          if (_receiptFilename && _receiptEmailTime) {
+            if (_receiptTrackingNumber) {
+              return 'ส่งใบเสร็จรับเงินแล้ว'
+            } else {
+              return 'ออกใบเสร็จรับเงินแล้ว'
+            }
+          } else {
+            return 'ชำระแล้ว รอออกใบเสร็จ'
+          }
+        } else {
+          if (_receiptFilename && _receiptEmailTime) {
+            return 'ออกใบเสร็จรับเงินแล้ว'
+          } else {
+            return 'ชำระแล้ว รอออกใบเสร็จ'
+          }
+        }
+      } else if (_state === EBillingState.REFUND) {
+        return 'คืนเงินแล้ว'
+      }
+      return ''
+    default:
+      return ''
+  }
+}
+
+function getOverdueDate(billing: Billing) {
+  const _payment = last(billing.payments) as Payment | undefined
+  if (_payment) {
+    const _differenceDays = differenceInDays(new Date(billing.paymentDueDate), new Date(_payment.createdAt))
+    if (_differenceDays > 0) return _differenceDays
+    return 0
+  }
+  const _differenceDays = differenceInDays(new Date(billing.paymentDueDate), new Date())
+  if (_differenceDays > 0) return _differenceDays
+  return 0
 }
 
 const BANKPROVIDER = [
@@ -278,7 +367,8 @@ export async function getAdminDriverReport(query: any) {
       driverId: driver.userNumber,
       fullname: driver.fullname,
       userType: getDriverType(driver.userType),
-      haveAgent: (driver.parents || []).length > 0 ? `Yes (${_parents.map((parent) => parent.fullname).join(', ')})` : 'No',
+      haveAgent:
+        (driver.parents || []).length > 0 ? `Yes (${_parents.map((parent) => parent.fullname).join(', ')})` : 'No',
       contactNumber: driver.contactNumber,
       lineId: _driverDetail?.lineId,
       email: driver.email,
@@ -310,4 +400,120 @@ export async function getAdminDriverReport(query: any) {
   await workbook.xlsx.writeFile(filePath)
 
   return filePath
+}
+
+export async function getDebtorReport() {
+  const billingIds = await BillingModel.find().sort({ issueDate: 1 }).distinct('_id')
+  const billings = await BillingModel.find({ _id: { $in: billingIds } })
+
+  const workbookData: DebtorReport[] = await Aigle.map(billings, async (billing) => {
+    const _user = billing.user as User | undefined
+    const _businessDetail = _user.businessDetail as BusinessCustomer | undefined
+    const _invoice = billing.invoice as Invoice | undefined
+    const _receipts = billing.receipts as Receipt[]
+    const _payment = billing.payments as Payment[]
+
+    const _workingPeriod = `${fDate(billing.billingStartDate, 'dd/MM/yyyy')} - ${fDate(
+      billing.billingEndDate,
+      'dd/MM/yyyy',
+    )}`
+    return {
+      customerId: _user.userNumber,
+      name: _user.fullname,
+      branch: _businessDetail?.businessBranch ?? '-',
+      customerType: getUserType(_user.userType),
+      taxId: _user.taxId,
+      address: _user.address ?? '-',
+      email: _user.email ?? '-',
+      contactNumber: _user.contactNumber ?? '-',
+      workingPeriod: _workingPeriod,
+      duedate: fDate(billing.paymentDueDate, 'dd/MM/yyyy'),
+      paymentStatus: getBillingStatus(billing),
+      overdueCount: getOverdueDate(billing),
+      paymentType: getPaymentType(billing.paymentMethod),
+      invoiceNo: _invoice?.invoiceNumber ?? '-',
+      invoiceTotal: _invoice?.total || null,
+      invoiceDate: fDate(_invoice?.invoiceDate, 'dd/MM/yyyy'),
+      ajustmentDecreaseNo: null,
+      ajustmentDecreaseTotal: null,
+      ajustmentDecreaseDate: null,
+      ajustmentIncreaseNo: null,
+      ajustmentIncreaseTotal: null,
+      ajustmentIncreaseDate: null,
+      receiptNo: _receipts.map((receipt) => receipt.receiptNumber).join(', '),
+      paymentDate: _payment.map((payment) => fDate(payment.createdAt, 'dd/MM/yyyy')).join(', '),
+      receiptDate: _receipts.map((receipt) => fDate(receipt.receiptDate, 'dd/MM/yyyy')).join(', '),
+    }
+  })
+
+  const workbook = await generateDebtorReport(workbookData)
+  const generatedDate = fDateTime(Date.now(), 'yyyyMMddHHmm')
+  const filePath = path.join(
+    __dirname,
+    '..',
+    '..',
+    'generated/report/admin/debtor',
+    `debtor-report-${generatedDate}.xlsx`,
+  )
+  await workbook.xlsx.writeFile(filePath)
+}
+
+export async function getCreditorReport() {
+  const paymentIds = await DriverPaymentModel.find().sort({ issueDate: 1 }).distinct('_id')
+  const payments = await DriverPaymentModel.find({ _id: { $in: paymentIds } })
+
+  const workbookData: CreditorReport[] = await Aigle.map(payments, async (creditor) => {
+    const _driver = creditor.driver as User | undefined
+    const _driverDetail = _driver?.driverDetail as DriverDetail | undefined
+    const _shipments = creditor.shipments as Shipment[]
+
+    const _creditorShipments = _shipments.map((shipment) => {
+      const _step = find(shipment.steps, ['step', EStepDefinition.FINISH]) as StepDefinition | undefined
+      const _qoutation = last(shipment.quotations) as Quotation | undefined
+      if (_step && _step.stepStatus === EStepStatus.DONE) {
+        return {
+          shipmentNo: shipment.trackingNumber,
+          finishedDate: fDate(_step.updatedAt, 'dd/MM/yyyy'),
+          value: _qoutation?.cost?.total || null,
+        }
+      }
+      return {
+        shipmentNo: shipment.trackingNumber,
+        finishedDate: '-',
+        value: _qoutation?.cost?.total || null,
+      }
+    })
+
+    return {
+      userId: _driver?.userNumber,
+      userType: getDriverType(_driver?.userType),
+      fullname: _driver?.fullname,
+      branch: _driverDetail.businessBranch ?? '',
+      taxId: _driver?.taxId,
+      address: _driver?.address,
+      email: _driver?.email,
+      contactNumber: _driver?.contactNumber,
+      workingPeriod: '',
+      duedate: '',
+      overdueCount: '',
+      shipments: _creditorShipments,
+      subtotal: creditor.subtotal,
+      whtValue: creditor.tax,
+      total: creditor.total,
+      paymentDate: fDate(creditor.paymentDate, 'dd/MM/yyyy'),
+      receiptNo: '',
+      whtNo: '',
+    }
+  })
+
+  const workbook = await generateCreditorReport(workbookData)
+  const generatedDate = fDateTime(Date.now(), 'yyyyMMddHHmm')
+  const filePath = path.join(
+    __dirname,
+    '..',
+    '..',
+    'generated/report/admin/creditor',
+    `creditor-report-${generatedDate}.xlsx`,
+  )
+  await workbook.xlsx.writeFile(filePath)
 }
