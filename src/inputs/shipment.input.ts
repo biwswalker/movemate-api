@@ -1,8 +1,8 @@
-import { ArgsType, Field, Float, InputType } from 'type-graphql'
+import { Field, Float, InputType } from 'type-graphql'
 import { FileInput } from './file.input'
 import { LocationInput } from './location.input'
 import { PODAddressInput } from './booking.input'
-import { EPaymentMethod, EPaymentStatus } from '@enums/payments'
+import { EPaymentMethod } from '@enums/payments'
 import { EShipmentStatusCriteria } from '@enums/shipments'
 
 @InputType()
