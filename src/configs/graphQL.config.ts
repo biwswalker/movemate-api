@@ -40,6 +40,7 @@ import { ClientSession } from 'mongoose'
 import BillingResolver from '@resolvers/billing.resolvers'
 import PaymentResolver from '@resolvers/payment.resolvers'
 import ContactResolver from '@resolvers/contact.resolvers'
+import DashboardResolver from '@resolvers/dashboard.resolvers'
 
 export interface GraphQLContext {
   req: Request
@@ -88,6 +89,7 @@ export async function createGraphQLServer(httpServer: http.Server) {
       BillingResolver,
       PaymentResolver,
       ContactResolver,
+      DashboardResolver,
     ],
     pubSub: pubSub,
     authChecker: ({ context }: { context: GraphQLContext }) => {
