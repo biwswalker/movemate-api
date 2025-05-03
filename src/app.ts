@@ -44,6 +44,7 @@ async function server() {
       ...(process.env.NODE_ENV === 'development' ? ['http://localhost:3000', 'http://localhost:3001'] : []),
     ],
   })
+  
   app.use(alllowedCors)
   app.use(express.json({ limit: '10mb' }))
   app.use(morgan(':method :url :graphql-query'))
@@ -65,14 +66,6 @@ async function server() {
 
   await connectToMongoDB()
   await server.start()
-
-  app.use((req, res, next) => {
-    if (req.secure) {
-      next()
-    } else {
-      res.redirect('https://' + req.headers.host + req.url)
-    }
-  })
 
   app.use(
     '/graphql',
