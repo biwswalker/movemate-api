@@ -2,7 +2,8 @@ import { GraphQLContext } from "@configs/graphQL.config";
 import CouterModel from "@models/counter.model";
 // import { format } from "date-fns";
 // import { toZonedTime } from "date-fns-tz";
-import { padStart } from "lodash";
+import padStart from "lodash/padStart";
+import get from "lodash/get";
 
 export function generateRandomNumberPattern(pattern = 'MM##########'): string {
     let trackingNumber: string = '';
@@ -53,8 +54,7 @@ export async function generateTrackingNumber(prefix: string, type: TGenerateIDTy
 }
 
 export function getCurrentHost(ctx: GraphQLContext) {
-    // const protocol = get(ctx, 'req.protocol', '')
-    const protocol = 'https'
+    const protocol = get(ctx, 'req.protocol', 'https')
     const host = ctx.req.get('host')
     const activate_link = `${protocol}://${host}`
     return activate_link

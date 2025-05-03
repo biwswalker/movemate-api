@@ -219,9 +219,8 @@ function getBankProviderName(bank: string) {
   return ''
 }
 
-export async function getAdminBookingReport(query: any) {
-  const bookingIds = await ShipmentModel.find().distinct('_id')
-  const bookings = await ShipmentModel.find({ _id: { $in: bookingIds } })
+export async function getAdminBookingReport(ids: string[]) {
+  const bookings = await ShipmentModel.find({ _id: { $in: ids } })
 
   const workbookData: BookingReport[] = await Aigle.map(bookings, async (booking) => {
     const customer = booking.customer as User | undefined
@@ -295,7 +294,7 @@ export async function getAdminBookingReport(query: any) {
   })
 
   const workbook = await generateBookingReport(workbookData)
-  const generatedDate = fDateTime(Date.now(), 'yyyyMMddHHmm')
+  const generatedDate = fDateTime(Date.now(), 'yyyyMMddHHmmss')
   const filePath = path.join(
     __dirname,
     '..',
@@ -308,9 +307,8 @@ export async function getAdminBookingReport(query: any) {
   return filePath
 }
 
-export async function getAdminCutomerReport(query: any) {
-  const customerIds = await UserModel.find({ userRole: EUserRole.CUSTOMER }).sort({ userNumber: 1 }).distinct('_id')
-  const customers = await UserModel.find({ _id: { $in: customerIds } })
+export async function getAdminCutomerReport(ids: string[]) {
+  const customers = await UserModel.find({ _id: { $in: ids } })
 
   const workbookData: CustomerReport[] = await Aigle.map(customers, async (customer) => {
     const _address = customer.addressData
@@ -341,7 +339,7 @@ export async function getAdminCutomerReport(query: any) {
   })
 
   const workbook = await generateCustomerReport(workbookData)
-  const generatedDate = fDateTime(Date.now(), 'yyyyMMddHHmm')
+  const generatedDate = fDateTime(Date.now(), 'yyyyMMddHHmmss')
   const filePath = path.join(
     __dirname,
     '..',
@@ -354,9 +352,8 @@ export async function getAdminCutomerReport(query: any) {
   return filePath
 }
 
-export async function getAdminDriverReport(query: any) {
-  const driverIds = await UserModel.find({ userRole: EUserRole.DRIVER }).sort({ userNumber: 1 }).distinct('_id')
-  const drivers = await UserModel.find({ _id: { $in: driverIds } })
+export async function getAdminDriverReport(ids: string[]) {
+  const drivers = await UserModel.find({ _id: { $in: ids } })
 
   const workbookData: DriverReport[] = await Aigle.map(drivers, async (driver) => {
     const _driverDetail = driver.driverDetail as DriverDetail | undefined
@@ -389,7 +386,7 @@ export async function getAdminDriverReport(query: any) {
   })
 
   const workbook = await generateDriverReport(workbookData)
-  const generatedDate = fDateTime(Date.now(), 'yyyyMMddHHmm')
+  const generatedDate = fDateTime(Date.now(), 'yyyyMMddHHmmss')
   const filePath = path.join(
     __dirname,
     '..',
@@ -402,9 +399,8 @@ export async function getAdminDriverReport(query: any) {
   return filePath
 }
 
-export async function getDebtorReport() {
-  const billingIds = await BillingModel.find().sort({ issueDate: 1 }).distinct('_id')
-  const billings = await BillingModel.find({ _id: { $in: billingIds } })
+export async function getDebtorReport(ids: string[]) {
+  const billings = await BillingModel.find({ _id: { $in: ids } })
 
   const workbookData: DebtorReport[] = await Aigle.map(billings, async (billing) => {
     const _user = billing.user as User | undefined
@@ -447,7 +443,7 @@ export async function getDebtorReport() {
   })
 
   const workbook = await generateDebtorReport(workbookData)
-  const generatedDate = fDateTime(Date.now(), 'yyyyMMddHHmm')
+  const generatedDate = fDateTime(Date.now(), 'yyyyMMddHHmmss')
   const filePath = path.join(
     __dirname,
     '..',
@@ -456,11 +452,12 @@ export async function getDebtorReport() {
     `debtor-report-${generatedDate}.xlsx`,
   )
   await workbook.xlsx.writeFile(filePath)
+  
+  return filePath
 }
 
-export async function getCreditorReport() {
-  const paymentIds = await DriverPaymentModel.find().sort({ issueDate: 1 }).distinct('_id')
-  const payments = await DriverPaymentModel.find({ _id: { $in: paymentIds } })
+export async function getCreditorReport(ids: string[]) {
+  const payments = await DriverPaymentModel.find({ _id: { $in: ids } })
 
   const workbookData: CreditorReport[] = await Aigle.map(payments, async (creditor) => {
     const _driver = creditor.driver as User | undefined
@@ -507,7 +504,7 @@ export async function getCreditorReport() {
   })
 
   const workbook = await generateCreditorReport(workbookData)
-  const generatedDate = fDateTime(Date.now(), 'yyyyMMddHHmm')
+  const generatedDate = fDateTime(Date.now(), 'yyyyMMddHHmmss')
   const filePath = path.join(
     __dirname,
     '..',
@@ -516,4 +513,6 @@ export async function getCreditorReport() {
     `creditor-report-${generatedDate}.xlsx`,
   )
   await workbook.xlsx.writeFile(filePath)
+  
+  return filePath
 }

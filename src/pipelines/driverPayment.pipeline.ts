@@ -1,6 +1,7 @@
 import { GetDriverPaymentArgs } from '@inputs/driver-payment.input'
 import { PipelineStage, Types } from 'mongoose'
 import { isEmpty } from 'lodash'
+import { userPipelineStage } from './user.pipeline'
 
 export const DRIVER_PAYMENTS = (queries: GetDriverPaymentArgs, sort = {}) => {
   const { endDate, startDate, shipmentTracking, driverId, driverName, driverNumber } = queries
@@ -23,36 +24,7 @@ export const DRIVER_PAYMENTS = (queries: GetDriverPaymentArgs, sort = {}) => {
   }
 
   const lookupRefTypes: PipelineStage[] = [
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'driver',
-        foreignField: '_id',
-        as: 'driver',
-        pipeline: [
-          {
-            $lookup: {
-              from: 'driverdetails',
-              localField: 'driverDetail',
-              foreignField: '_id',
-              as: 'driverDetail',
-            },
-          },
-          {
-            $unwind: {
-              path: '$driverDetail',
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-        ],
-      },
-    },
-    {
-      $unwind: {
-        path: '$driver',
-        preserveNullAndEmptyArrays: true,
-      },
-    },
+    ...userPipelineStage('driver'),
     {
       $lookup: {
         from: 'shipments',

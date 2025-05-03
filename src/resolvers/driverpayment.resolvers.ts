@@ -120,7 +120,7 @@ export default class DriverPaymentResolver {
   @Query(() => [String])
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getDriverPaymentIds(@Args() queries: GetDriverPaymentArgs): Promise<string[]> {
-    const driverPayments = await TransactionModel.aggregate(DRIVER_PAYMENTS(queries, {}))
+    const driverPayments = await DriverPaymentModel.aggregate(DRIVER_PAYMENTS(queries, {}))
     const ids = map(driverPayments, ({ _id }) => _id)
     return ids
   }

@@ -41,6 +41,7 @@ import BillingResolver from '@resolvers/billing.resolvers'
 import PaymentResolver from '@resolvers/payment.resolvers'
 import ContactResolver from '@resolvers/contact.resolvers'
 import DashboardResolver from '@resolvers/dashboard.resolvers'
+import ReportResolver from '@resolvers/report.resolvers'
 
 export interface GraphQLContext {
   req: Request
@@ -90,6 +91,7 @@ export async function createGraphQLServer(httpServer: http.Server) {
       PaymentResolver,
       ContactResolver,
       DashboardResolver,
+      ReportResolver,
     ],
     pubSub: pubSub,
     authChecker: ({ context }: { context: GraphQLContext }) => {
