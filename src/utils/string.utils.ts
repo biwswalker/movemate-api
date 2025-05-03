@@ -54,7 +54,7 @@ export async function generateTrackingNumber(prefix: string, type: TGenerateIDTy
 }
 
 export function getCurrentHost(ctx: GraphQLContext) {
-    const protocol = get(ctx, 'req.protocol', 'https')
+    const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https'
     const host = ctx.req.get('host')
     const activate_link = `${protocol}://${host}`
     return activate_link

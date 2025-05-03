@@ -50,7 +50,6 @@ async function server() {
   app.use(morgan(':method :url :graphql-query'))
   app.use(bodyParser.urlencoded({ extended: false }))
   // app.use(graphqlUploadExpress({ maxFiles: 4, maxFileSize: MaxUploadFileSize }))
-  app.enable('trust proxy')
   app.use('/source', authenticateTokenAccessImage, express.static('uploads'))
   app.use('/invoice', authenticateTokenAccessImage, express.static('generated/invoice'))
   app.use('/receipt', authenticateTokenAccessImage, express.static('generated/receipt'))
