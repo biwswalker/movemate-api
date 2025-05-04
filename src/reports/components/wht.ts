@@ -22,8 +22,8 @@ function headerText(doc: PDFDocument) {
 }
 
 interface HeaderData {
-  bookNumber?: string
-  docNumber?: string
+  whtNumber?: string
+  whtBookNo?: string
 }
 
 function header(doc: PDFDocument, data: HeaderData) {
@@ -41,7 +41,7 @@ function header(doc: PDFDocument, data: HeaderData) {
     .fontSize(12)
     .text('ตามมาตรา 50 ทวิ แห่งประมวลรัษฎากร', _marginLeft, doc.y - 8, { width: _headerWidth, align: 'center' })
   doc.text('เล่มที่', _headerWidth, doc.y - 28, { width: 28, align: 'right' })
-  doc.fontSize(14).text(data.bookNumber ?? '-', _headerWidth + 30, doc.y - 16, { width: 84, align: 'left' })
+  doc.fontSize(14).text(data.whtBookNo ?? '-', _headerWidth + 30, doc.y - 16, { width: 84, align: 'left' })
   doc
     .lineCap('butt')
     .lineWidth(0.5)
@@ -50,7 +50,7 @@ function header(doc: PDFDocument, data: HeaderData) {
     .stroke()
   doc.moveDown(0.1)
   doc.fontSize(12).text('เลขที่', _headerWidth, doc.y, { width: 28, align: 'right' })
-  doc.fontSize(14).text(data.docNumber ?? '-', _headerWidth + 30, doc.y - 18, { width: 84, align: 'left' })
+  doc.fontSize(14).text(data.whtNumber ?? '-', _headerWidth + 30, doc.y - 18, { width: 84, align: 'left' })
   doc
     .lineCap('butt')
     .lineWidth(0.5)
@@ -401,6 +401,12 @@ const getColumnPercent = (percent: number, contentWidth: number) => {
 
 interface WHTData {
   totalBaht: number
+  whtBookNo: string
+  whtNumber: string
+  fullname: string
+  isBusinessCustomer: boolean
+  taxId: string
+  fullAddress: string
 }
 
 /**
@@ -413,33 +419,43 @@ export async function renderWHTContent(doc: PDFDocument, whtInfo: WHTData, table
   const _marginRight = doc.page.margins.right
   const _maxWidth = doc.page.width - (_marginLeft + _marginRight)
 
+  
+  const _signer = {
+    fullname: 'นาย สรณัฐ อินทร์ตลาดชุม',
+    signDate: fDate(new Date(), 'dd/MM/yyyy'),
+    // WHT Info
+    whtName: 'บริษัท เทพพรชัน เอ็นเทอร์ไพรส์ จำกัด',
+    whtAddress: 'เลขที่ 156 ซอยลาดพร้าว 96 ถนนลาดพร้าว แขวงพลับพลา เขตวังทองหลาง กรุงเทพมหานคร 10310',
+    whtTaxId: '0-1055-64086-72-3',
+  }
+
   doc.font(FONTS.ANGSANA_NEW).fontSize(11)
 
   headerText(doc)
 
   // Declare frame
   const _originFrameY = doc.y
-
-  header(doc, { bookNumber: 'WHT-TE202306007', docNumber: 'WHT-TE202306007' })
+  whtInfo
+  header(doc, { whtNumber: whtInfo.whtNumber, whtBookNo: whtInfo.whtBookNo })
 
   /**
    * ผู้มีหน้าที่หักภาษี ณ ที่จ่าย:
    */
   generateCustomerInfo(doc, {
     title: 'ผู้มีหน้าที่หักภาษี ณ ที่จ่าย:',
-    name: 'บริษัท เทพพรชัน เอ็นเทอร์ไพรส์ จำกัด',
-    address: 'เลขที่ 156 ซอยลาดพร้าว 96 ถนนลาดพร้าว แขวงพลับพลา เขตวังทองหลาง กรุงเทพมหานคร 10310',
-    taxid: '0-1055-64086-72-3',
+    name: _signer.whtName,
+    address: _signer.whtAddress,
+    taxid: _signer.whtTaxId,
   })
   /**
    * ผู้ถูกหักภาษี ณ ที่จ่าย:
    */
   generateCustomerInfo(doc, {
     title: 'ผู้ถูกหักภาษี ณ ที่จ่าย:',
-    name: 'นายปิยสนธิ์ ค่ายสงคราม (บุคคล)',
-    address: '55/1 หมู่ที่ 2 ต.โพรงอากาศ อ.บางน้ำเปรี้ยว จ.ฉะเชิงเทรา',
+    name: `${whtInfo.fullname} (${whtInfo.isBusinessCustomer ? 'นิติบุคคล' : 'บุคคล'})`,
+    address: whtInfo.fullAddress,
     idnumber: undefined,
-    taxid: '1-5799-00542-88-0',
+    taxid: whtInfo.taxId,
     taxType: '5',
   })
 
@@ -502,8 +518,8 @@ export async function renderWHTContent(doc: PDFDocument, whtInfo: WHTData, table
    * Remark
    */
   Remark(doc, {
-    signerName: 'นาย สรณัฐ อินทร์ตลาดชุม',
-    signDate: fDate(new Date(), 'dd/MM/yyyy'),
+    signerName: _signer.fullname,
+    signDate: _signer.signDate,
   })
 
   doc.save()

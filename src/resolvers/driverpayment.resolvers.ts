@@ -1,4 +1,5 @@
 import { GraphQLContext } from '@configs/graphQL.config'
+import { generateDriverWHTCert } from '@controllers/driverPayment'
 import { EUserRole } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
 import { CreateDriverPaymentInput, GetDriverPaymentArgs } from '@inputs/driver-payment.input'
@@ -16,7 +17,9 @@ import TransactionModel, {
 import UserModel from '@models/user.model'
 import { DriverPaymentAggregatePayload } from '@payloads/driverPayment.payloads'
 import { DRIVER_PAYMENTS } from '@pipelines/driverPayment.pipeline'
+import { generateTrackingNumber } from '@utils/string.utils'
 import { REPONSE_NAME } from 'constants/status'
+import { format } from 'date-fns'
 import { GraphQLError } from 'graphql'
 import { map } from 'lodash'
 import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
@@ -56,9 +59,18 @@ export default class DriverPaymentResolver {
     const imageEvidence = new FileModel(data.imageEvidence)
     await imageEvidence.save({ session })
 
+    const today = new Date()
+    const generateMonth = format(today, 'yyMM')
+    const generateFullYearMonth = format(today, 'yyyyMM')
+    const _paymentNumber = await generateTrackingNumber(`PDRIV${generateMonth}`, 'payment', 3)
+    const _whtNumber = await generateTrackingNumber(`WHT-TE${generateFullYearMonth}`, 'wht', 3)
+    
     // Create driver payment detail
     const driverPayment = new DriverPaymentModel({
       driver: driverId,
+      paymentNumber: _paymentNumber,
+      whtNumber: _whtNumber,
+      // whtBookNo: data.whtBookNo,
       imageEvidence,
       transactions,
       shipments,
@@ -103,6 +115,10 @@ export default class DriverPaymentResolver {
       status: ETransactionStatus.COMPLETE,
     })
     await movemateTransaction.save({ session })
+
+    // ออกเอกสาร
+    const documentId = await generateDriverWHTCert(driverPayment._id, session)
+    await DriverPaymentModel.findByIdAndUpdate(driverPayment._id, { document: documentId }, { session })
 
     return true
   }

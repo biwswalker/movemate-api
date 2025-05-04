@@ -12,6 +12,7 @@ import { PaginationArgs } from '@inputs/query.input'
 import { DriverPaymentAggregatePayload } from '@payloads/driverPayment.payloads'
 import { reformPaginate } from '@utils/pagination.utils'
 import { DRIVER_PAYMENTS } from '@pipelines/driverPayment.pipeline'
+import { BillingDocument } from './finance/documents.model'
 
 @plugin(mongooseAggregatePaginate)
 @plugin(mongooseAutoPopulate)
@@ -19,6 +20,18 @@ import { DRIVER_PAYMENTS } from '@pipelines/driverPayment.pipeline'
 export class DriverPayment {
   @Field(() => ID)
   readonly _id: string
+
+  @Field()
+  @Property()
+  paymentNumber: string
+
+  @Field()
+  @Property()
+  whtNumber: string
+
+  @Field({ nullable: true })
+  @Property({ required: false })
+  whtBookNo: string
 
   @Field(() => User)
   @Property({ ref: () => User, autopopulate: true })
@@ -67,6 +80,10 @@ export class DriverPayment {
   @Field(() => User)
   @Property({ ref: () => User })
   createdBy: Ref<User>
+
+  @Field(() => BillingDocument, { nullable: true })
+  @Property({ ref: () => BillingDocument, autopopulate: true })
+  document: Ref<BillingDocument>
 
   static aggregatePaginate: mongoose.AggregatePaginateModel<typeof DriverPayment>['aggregatePaginate']
 

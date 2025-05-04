@@ -34,6 +34,9 @@ export class Couter {
     @Property({ required: true, default: 0 })
     quotation: number
 
+    @Property({ required: true, default: 0 })
+    wht: number
+
     static async getNextCouter(type: TGenerateIDType): Promise<number> {
         const query_option = { upsert: true, new: true }
         if (type === 'individual') {
@@ -69,6 +72,9 @@ export class Couter {
         } else if (type === 'quotation') {
             const counter = await CouterModel.findOneAndUpdate({}, { $inc: { quotation: 1 } }, query_option)
             return counter.quotation
+        } else if (type === 'wht') {
+            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { wht: 1 } }, query_option)
+            return counter.wht
         }
         return 0
     }

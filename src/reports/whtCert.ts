@@ -6,24 +6,44 @@ import { FONTS } from './components/constants'
 import { renderWHTContent } from './components/wht'
 import { fDate } from '@utils/formatTime'
 import { fCurrency } from '@utils/formatNumber'
+import { DriverPayment } from '@models/driverPayment.model'
+import BillingDocumentModel, { BillingDocument } from '@models/finance/documents.model'
+import { User } from '@models/user.model'
+import { EUserType } from '@enums/users'
 
 interface GenerateWHTCertResponse {
   fileName: string
   filePath: string
+  document: BillingDocument
 }
 
-export async function generateWHTCert(filename?: string, session?: ClientSession): Promise<GenerateWHTCertResponse> {
-  const fileName = filename ? filename : 'sample.pdf' //`wht_${_receipt.receiptNumber}.pdf`
+export async function generateWHTCert(
+  driverPayment: DriverPayment,
+  filename?: string,
+  session?: ClientSession,
+): Promise<GenerateWHTCertResponse> {
+  const fileName = filename ? filename : `wht_${driverPayment.paymentNumber}.pdf`
   const filePath = path.join(__dirname, '..', '..', 'generated/whtcert', fileName)
+
+  const driverInfo = driverPayment.driver as User | undefined
+  // TODO: Add info
 
   /**
    * Input data
    */
-  const _paidDate = fDate(new Date(), 'dd/MM/yyyy')
-  const _subTotalBaht = 36853
-  const _subTotalWHT = 368.53
-  const _totalBaht = 36853
-  const _totalWHT = 368.53
+  const _whtBookNo = driverPayment.whtBookNo || '-'
+  const _whtNumber = driverPayment.whtNumber || '-'
+  const _fullname = driverInfo.fullname || '-'
+  const _isBusinessCustomer = driverInfo.userType === EUserType.BUSINESS
+  const _taxId = driverInfo.taxId || '-'
+  const _fullAddress = driverInfo.address || '-'
+
+  // Table
+  const _paidDate = fDate(new Date(driverPayment.paymentDate), 'dd/MM/yyyy')
+  const _subTotalBaht = driverPayment.subtotal
+  const _subTotalWHT = driverPayment.tax
+  const _totalBaht = driverPayment.subtotal
+  const _totalWHT = driverPayment.tax
 
   const _doc = new PDFDocument({
     size: 'A4',
@@ -257,17 +277,36 @@ export async function generateWHTCert(filename?: string, session?: ClientSession
     },
   ]
 
-  await renderWHTContent(_doc, { totalBaht: _totalBaht }, _datas)
+  const _whtInfo = {
+    totalBaht: _totalBaht,
+    whtBookNo: _whtBookNo,
+    whtNumber: _whtNumber,
+    fullname: _fullname,
+    isBusinessCustomer: _isBusinessCustomer,
+    taxId: _taxId,
+    fullAddress: _fullAddress,
+  }
+
+  await renderWHTContent(_doc, _whtInfo, _datas)
 
   _doc.addPage()
 
-  await renderWHTContent(_doc, { totalBaht: _totalBaht }, _datas)
+  await renderWHTContent(_doc, _whtInfo, _datas)
 
   _doc.end()
   await new Promise((resolve) => _writeStream.on('finish', resolve))
 
-  return {
-    fileName: '',
-    filePath: '',
+  const _document = driverPayment.document as BillingDocument | undefined
+  if (_document) {
+    const _updatedDocument = await BillingDocumentModel.findByIdAndUpdate(
+      _document._id,
+      { filename: fileName },
+      { session, new: true },
+    )
+    return { fileName, filePath, document: _updatedDocument }
+  } else {
+    const _document = new BillingDocumentModel({ filename: fileName })
+    await _document.save({ session })
+    return { fileName, filePath, document: _document }
   }
 }
