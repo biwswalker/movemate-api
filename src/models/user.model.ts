@@ -322,6 +322,10 @@ export class User extends TimeStamps {
           get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
         return businessDetail ? businessDetail.businessEmail : ''
       }
+    } else if (userRole === EUserRole.ADMIN) {
+      const adminDetail: Admin | undefined =
+        get(this, '_doc.adminDetail', undefined) || this.adminDetail || undefined
+      return adminDetail ? adminDetail.email : ''
     }
     return ''
   }

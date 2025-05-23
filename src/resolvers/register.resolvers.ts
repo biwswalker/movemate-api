@@ -20,12 +20,14 @@ import { ValidationError } from 'yup'
 import { yupValidationThrow } from '@utils/error.utils'
 import { EPaymentMethod } from '@enums/payments'
 import { EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
+import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
+import { ClientSession } from 'mongoose'
 
 @Resolver(User)
 export default class RegisterResolver {
-  async isExistingEmail(email: string, fieldName = 'email'): Promise<boolean> {
+  async isExistingEmail(email: string, fieldName = 'email', session: ClientSession): Promise<boolean> {
     if (email) {
-      const isExistingEmailWithIndividual = await CustomerIndividualModel.findOne({ email })
+      const isExistingEmailWithIndividual = await CustomerIndividualModel.findOne({ email }).session(session)
       if (isExistingEmailWithIndividual) {
         throw new GraphQLError('ไม่สามารถใช้อีเมลร่วมกับสมาชิกประเภทบุคคลได้ กรุณาติดต่อผู้ดูแลระบบ', {
           extensions: {
@@ -42,7 +44,7 @@ export default class RegisterResolver {
 
       const isExistingEmailWithBusiness = await BusinessCustomerModel.findOne({
         businessEmail: email,
-      })
+      }).session(session)
       if (isExistingEmailWithBusiness) {
         throw new GraphQLError('อีเมลถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ', {
           extensions: {
@@ -69,6 +71,7 @@ export default class RegisterResolver {
 
   @Mutation(() => Boolean)
   async preregister(@Arg('data') data: RegisterInput, @Ctx() ctx: GraphQLContext): Promise<boolean> {
+    const session = ctx.session
     const { userType, individualDetail, businessDetail } = data
     try {
       // Check if the user already exists
@@ -83,7 +86,7 @@ export default class RegisterResolver {
         ? get(businessDetail, 'businessEmail', '')
         : ''
       const emailFieldName = userType === EUserType.INDIVIDUAL ? 'email' : 'businessEmail'
-      await this.isExistingEmail(email, emailFieldName)
+      await this.isExistingEmail(email, emailFieldName, session)
 
       return true
     } catch (error) {
@@ -93,7 +96,9 @@ export default class RegisterResolver {
   }
 
   @Mutation(() => Boolean)
+  @UseMiddleware(RetryTransactionMiddleware)
   async register(@Arg('data') data: RegisterInput, @Ctx() ctx: GraphQLContext): Promise<boolean> {
+    const session = ctx.session
     const { userType, password, remark, acceptPolicyTime, acceptPolicyVersion, individualDetail, businessDetail } = data
 
     try {
@@ -111,7 +116,7 @@ export default class RegisterResolver {
         ? get(businessDetail, 'businessEmail', '')
         : ''
       const emailFieldName = userType === EUserType.INDIVIDUAL ? 'email' : 'businessEmail'
-      await this.isExistingEmail(email, emailFieldName)
+      await this.isExistingEmail(email, emailFieldName, session)
 
       /**
        * Individual Customer Register
@@ -126,7 +131,7 @@ export default class RegisterResolver {
           ...individualDetail,
         })
 
-        await individualCustomer.save()
+        await individualCustomer.save({ session })
 
         const user = new UserModel({
           userRole: EUserRole.CUSTOMER,
@@ -146,7 +151,7 @@ export default class RegisterResolver {
           isChangePasswordRequire: false,
         })
 
-        await user.save()
+        await user.save({ session })
 
         const host = getCurrentHost(ctx)
         // http://api.movematethailand.com/api/v1/activate/customer/MMIN0003
@@ -188,7 +193,7 @@ export default class RegisterResolver {
             acceptedEReceiptDate: cashDetail.acceptedEReceiptDate,
           })
 
-          await cashPayment.save()
+          await cashPayment.save({ session })
 
           const business = new BusinessCustomerModel({
             ...businessDetail,
@@ -196,7 +201,7 @@ export default class RegisterResolver {
             cashPayment,
           })
 
-          await business.save()
+          await business.save({ session })
 
           const user = new UserModel({
             userNumber,
@@ -214,7 +219,7 @@ export default class RegisterResolver {
             businessDetail: business,
           })
 
-          await user.save()
+          await user.save({ session })
 
           // Email sender
           await addEmailQueue({
@@ -271,10 +276,10 @@ export default class RegisterResolver {
             ? new FileModel(certificateValueAddedTaxRegistrationFile)
             : null
 
-          await businessRegisCertFileModel.save()
-          await copyIDAuthSignatoryFileModel.save()
+          await businessRegisCertFileModel.save({ session })
+          await copyIDAuthSignatoryFileModel.save({ session })
           if (certValueAddedTaxRegisFileModel) {
-            await certValueAddedTaxRegisFileModel.save()
+            await certValueAddedTaxRegisFileModel.save({ session })
           }
 
           const creditPayment = new BusinessCustomerCreditPaymentModel({
@@ -320,7 +325,7 @@ export default class RegisterResolver {
                 }
               : {}),
           })
-          await creditPayment.save()
+          await creditPayment.save({ session })
 
           const business = new BusinessCustomerModel({
             ...businessDetail,
@@ -328,7 +333,7 @@ export default class RegisterResolver {
             creditPayment,
           })
 
-          await business.save()
+          await business.save({ session })
 
           const user = new UserModel({
             userNumber,
@@ -346,7 +351,7 @@ export default class RegisterResolver {
             businessDetail: business,
           })
 
-          await user.save()
+          await user.save({ session })
 
           // Email sender
           await addEmailQueue({
@@ -370,8 +375,9 @@ export default class RegisterResolver {
   }
 
   @Mutation(() => User)
-  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
   async addIndividualCustomer(@Arg('data') data: CutomerIndividualInput, @Ctx() ctx: GraphQLContext): Promise<User> {
+    const session = ctx.session
     const { email, profileImage, status, ...formValue } = data
     try {
       await IndividualCustomerSchema().validate(data, { abortEarly: false })
@@ -391,11 +397,11 @@ export default class RegisterResolver {
         ...formValue,
       })
 
-      await customer.save()
+      await customer.save({ session })
 
       const image = profileImage ? new FileModel(profileImage) : null
       if (image) {
-        await image.save()
+        await image.save({ session })
       }
 
       const user = new UserModel({
@@ -412,7 +418,7 @@ export default class RegisterResolver {
         individualDetail: customer,
       })
 
-      await user.save()
+      await user.save({ session })
 
       const host = getCurrentHost(ctx)
       const userNumberToken = generateExpToken({ userNumber: user.userNumber })
@@ -444,8 +450,9 @@ export default class RegisterResolver {
   }
 
   @Mutation(() => User)
-  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
   async addBusinessCustomer(@Arg('data') data: CutomerBusinessInput, @Ctx() ctx: GraphQLContext): Promise<User> {
+    const session = ctx.session
     const { businessEmail, profileImage, creditPayment, cashPayment, ...formValue } = data
     try {
       await BusinessCustomerSchema().validate(data, { abortEarly: false })
@@ -472,21 +479,21 @@ export default class RegisterResolver {
         ? new FileModel(businessRegistrationCertificateFile)
         : null
       if (businessRegistrationCertificate) {
-        await businessRegistrationCertificate.save()
+        await businessRegistrationCertificate.save({ session })
       }
       // Document Image 2
       const copyIDAuthorizedSignatory = copyIDAuthorizedSignatoryFile
         ? new FileModel(copyIDAuthorizedSignatoryFile)
         : null
       if (copyIDAuthorizedSignatory) {
-        await copyIDAuthorizedSignatory.save()
+        await copyIDAuthorizedSignatory.save({ session })
       }
       // Document Image 3
       const certificateValueAddedTaxRegistration = certificateValueAddedTaxRegistrationFile
         ? new FileModel(certificateValueAddedTaxRegistrationFile)
         : null
       if (certificateValueAddedTaxRegistration) {
-        await certificateValueAddedTaxRegistration.save()
+        await certificateValueAddedTaxRegistration.save({ session })
       }
 
       const creditPaymentDetail =
@@ -507,7 +514,7 @@ export default class RegisterResolver {
             })
           : null
       if (creditPaymentDetail) {
-        await creditPaymentDetail.save()
+        await creditPaymentDetail.save({ session })
       }
 
       const customer = new BusinessCustomerModel({
@@ -517,11 +524,11 @@ export default class RegisterResolver {
         ...(creditPaymentDetail ? { creditPayment: creditPaymentDetail } : {}),
       })
 
-      await customer.save()
+      await customer.save({ session })
 
       const image = profileImage ? new FileModel(profileImage) : null
       if (image) {
-        await image.save()
+        await image.save({ session })
       }
 
       const user = new UserModel({
@@ -539,7 +546,7 @@ export default class RegisterResolver {
         ...(image ? { profileImage: image } : {}),
       })
 
-      await user.save()
+      await user.save({ session })
 
       const host = getCurrentHost(ctx)
       const userNumberToken = generateExpToken({ userNumber: user.userNumber })

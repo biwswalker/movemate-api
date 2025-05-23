@@ -29,6 +29,7 @@ import { DocumentType } from '@typegoose/typegoose'
 import { PricingCalculationMethodPayload, VehicleCostCalculationPayload } from '@payloads/pricing.payloads'
 import { EUserRole } from '@enums/users'
 import { VALUES } from 'constants/values'
+import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
 
 Aigle.mixin(lodash, {})
 
@@ -38,51 +39,7 @@ export default class PricingResolver {
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getVehicleCost(@Arg('vehicleTypeId') vehicleTypeId: string): Promise<VehicleCost> {
     try {
-      const vehicleCost = await VehicleCostModel.findOne({
-        vehicleType: vehicleTypeId,
-      })
-        .populate({
-          path: 'additionalServices',
-          match: { available: true },
-          populate: {
-            path: 'additionalService',
-            model: 'AdditionalService',
-            populate: {
-              path: 'descriptions',
-              model: 'AdditionalServiceDescription',
-              populate: {
-                path: 'vehicleTypes',
-                model: 'VehicleType',
-                populate: {
-                  path: 'image',
-                  model: 'File',
-                },
-              },
-            },
-          },
-        })
-        .populate({
-          path: 'vehicleType',
-          model: 'VehicleType',
-          populate: {
-            path: 'image',
-            model: 'File',
-          },
-        })
-        .populate({
-          path: 'distance',
-          model: 'DistanceCostPricing',
-          options: { sort: { from: 1 } },
-          populate: {
-            path: 'history',
-            model: 'UpdateHistory',
-            populate: {
-              path: 'who',
-              model: 'User',
-            },
-          },
-        })
-        .lean()
+      const vehicleCost = await VehicleCostModel.findOne({ vehicleType: vehicleTypeId })
 
       if (!vehicleCost) {
         const vehicleType = await VehicleTypeModel.findById(vehicleTypeId)
@@ -100,6 +57,7 @@ export default class PricingResolver {
 
         return vehicleCostTemporary
       }
+
       return vehicleCost
     } catch (error) {
       console.log('error: ', error)
@@ -257,17 +215,19 @@ export default class PricingResolver {
   }
 
   @Mutation(() => String)
-  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
   async initialVehicleCost(
+    @Ctx() ctx: GraphQLContext,
     @Arg('vehicleTypeId') vehicleTypeId: string,
     @Arg('withAdditionalService', { nullable: true })
     withAdditionalService: boolean = false,
   ): Promise<string> {
+    const session = ctx.session
     try {
       let additionalServicesIds = []
       if (withAdditionalService) {
-        const vehicleType = await VehicleTypeModel.findById(vehicleTypeId)
-        const additionalServices = await AdditionalServiceModel.findByVehicleTypeID(vehicleTypeId)
+        const vehicleType = await VehicleTypeModel.findById(vehicleTypeId).session(session)
+        const additionalServices = await AdditionalServiceModel.findByVehicleTypeID(vehicleTypeId, session)
 
         if (isEmpty(additionalServices)) {
           const message = `ไม่พบข้อมูลบริการเสริม กรุณาตรวจสอบหน้าบริการเสริมว่าสามารถเพิ่มรายละเอียดสำหรับรถประเภทนี้ได้`
@@ -314,7 +274,7 @@ export default class PricingResolver {
         additionalServices: additionalServicesIds,
         distance: [],
       })
-      await newVehicleCost.save()
+      await newVehicleCost.save({ session })
 
       return newVehicleCost._id
     } catch (error) {
@@ -325,15 +285,16 @@ export default class PricingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
-  async initialAdditionalService(@Arg('vehicleCostId') vehicleCostId: string): Promise<boolean> {
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
+  async initialAdditionalService(@Ctx() ctx: GraphQLContext, @Arg('vehicleCostId') vehicleCostId: string): Promise<boolean> {
+    const session = ctx.session
     try {
-      const vehicleCost = await VehicleCostModel.findById(vehicleCostId)
+      const vehicleCost = await VehicleCostModel.findById(vehicleCostId).session(session)
       const vehicleType = get(vehicleCost, 'vehicleType', undefined) as VehicleType | undefined
 
       let additionalServicesIds = []
       if (vehicleType) {
-        const additionalServices = await AdditionalServiceModel.findByVehicleTypeID(vehicleType._id)
+        const additionalServices = await AdditionalServiceModel.findByVehicleTypeID(vehicleType._id, session)
 
         if (isEmpty(additionalServices)) {
           const message = `ไม่พบข้อมูลบริการเสริม กรุณาตรวจสอบหน้าบริการเสริมว่าสามารถเพิ่มรายละเอียดสำหรับรถประเภทนี้ได้`
@@ -379,9 +340,7 @@ export default class PricingResolver {
         additionalServicesIds = map(bulkOps, (opt) => get(opt, 'updateOne.filter._id', ''))
       }
 
-      await vehicleCost.updateOne({
-        additionalServices: additionalServicesIds,
-      })
+      await vehicleCost.updateOne({ additionalServices: additionalServicesIds }, { session })
 
       return true
     } catch (error) {

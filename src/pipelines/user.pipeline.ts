@@ -345,6 +345,20 @@ export const GET_USERS = (
               }
             : {}),
         }
+      : query.userRole === EUserRole.ADMIN
+      ? {
+          ...(email ? { 'adminDetail.email': { $regex: email, $options: 'i' } } : {}),
+          ...(name
+            ? {
+                $or: [
+                  { 'adminDetail.firstname': { $regex: name, $options: 'i' } },
+                  { 'adminDetail.lastname': { $regex: name, $options: 'i' } },
+                ],
+              }
+            : {}),
+          ...(phoneNumber ? { 'adminDetail.phoneNumber': { $regex: phoneNumber, $options: 'i' } } : {}),
+          ...(taxId ? { 'adminDetail.taxId': { $regex: taxId, $options: 'i' } } : {}),
+        }
       : {}
 
   const statusFilter =

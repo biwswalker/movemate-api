@@ -1,4 +1,4 @@
-import { Arg, Resolver, Mutation, UseMiddleware, Query, Args } from "type-graphql";
+import { Arg, Resolver, Mutation, UseMiddleware, Query, Args, Ctx } from "type-graphql";
 import { AuthGuard } from "@guards/auth.guards";
 import { ValidationError } from "yup";
 import { yupValidationThrow } from "@utils/error.utils";
@@ -16,6 +16,8 @@ import { get, isArray, map, reduce } from "lodash";
 import { PaginationArgs } from "@inputs/query.input";
 import { AdditionalServicePaginationPayload } from "@payloads/additionalService.payloads";
 import { EUserRole } from "@enums/users";
+import RetryTransactionMiddleware from "@middlewares/RetryTransaction";
+import { GraphQLContext } from "@configs/graphQL.config";
 
 @Resolver(AdditionalService)
 export default class AdditionalServiceResolver {
@@ -170,13 +172,15 @@ export default class AdditionalServiceResolver {
     }
   }
   @Query(() => [AdditionalService])
-  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
   async getAdditionalServicesByVehicleType(
+    @Ctx() ctx: GraphQLContext,
     @Arg("id") id: string
   ): Promise<AdditionalService[]> {
+    const session = ctx.session;
     try {
       const additionalServices =
-        await AdditionalServiceModel.findByVehicleTypeID(id);
+        await AdditionalServiceModel.findByVehicleTypeID(id, session);
       if (!additionalServices) {
         const message = `ไม่สามารถเรียกข้อมูลบริการเสริมได้`;
         throw new GraphQLError(message, {

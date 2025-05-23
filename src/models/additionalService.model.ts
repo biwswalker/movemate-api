@@ -11,7 +11,7 @@ import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { AdditionalServiceDescription } from "./additionalServiceDescription.model";
 import { filter, isEqual, reduce } from "lodash";
 import { VehicleType } from "./vehicleType.model";
-import mongoose, { Types } from "mongoose";
+import mongoose, { ClientSession, Types } from "mongoose";
 import mongoosePagination from 'mongoose-paginate-v2'
 import aggregatePaginate from 'mongoose-aggregate-paginate-v2'
 import { EServiceStatus, EServiceType } from "@enums/additionalService";
@@ -63,10 +63,8 @@ export class AdditionalService extends TimeStamps {
   @Property({ default: Date.now })
   updatedAt: Date;
 
-  static async findByVehicleTypeID(id: string): Promise<AdditionalService[]> {
-    const additionalServices = await AdditionalServiceModel.find().sort({
-      permanent: -1,
-    });
+  static async findByVehicleTypeID(id: string, session?: ClientSession): Promise<AdditionalService[]> {
+    const additionalServices = await AdditionalServiceModel.find().sort({ permanent: -1 }).session(session)
     const additionalServicesFilter = filter(additionalServices, (service) => {
       // Change this additional service included VehicleType descriptions
       const isIncludedVehicleType = reduce(
