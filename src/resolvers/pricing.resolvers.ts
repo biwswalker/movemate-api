@@ -109,29 +109,17 @@ export default class PricingResolver {
     }
   }
 
-  async isReplicaSet(): Promise<boolean> {
-    const admin = connection.db.admin()
-    const result = await admin.command({ replSetGetStatus: 1 }).catch(() => null)
-    return result && result.ok === 1
-  }
-
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
   async updateDistanceCost(
     @Arg('id') id: string,
     @Arg('data', () => [DistanceCostPricingInput])
     data: DistanceCostPricingInput[],
     @Ctx() ctx: GraphQLContext,
   ): Promise<boolean> {
-    const replicaSet = await this.isReplicaSet()
-    let session: ClientSession | null = null
+    const session = ctx.session
 
     try {
-      if (replicaSet) {
-        session = await startSession()
-        session.startTransaction()
-      }
-
       await DistanceCostPricingSchema.validate({ distanceCostPricings: data })
 
       const bulkOperations = []
@@ -195,17 +183,8 @@ export default class PricingResolver {
         // });
       }
 
-      if (session) {
-        await session.commitTransaction()
-        session.endSession()
-      }
-
       return true
     } catch (errors) {
-      if (session) {
-        await session.abortTransaction()
-        session.endSession()
-      }
       console.log('error: ', errors)
       if (errors instanceof ValidationError) {
         throw yupValidationThrow(errors)
@@ -265,7 +244,7 @@ export default class PricingResolver {
             }
           },
         )
-        await AdditionalServiceCostPricingModel.bulkWrite(bulkOps)
+        await AdditionalServiceCostPricingModel.bulkWrite(bulkOps, { session})
         additionalServicesIds = map(bulkOps, (opt) => get(opt, 'updateOne.filter._id', ''))
       }
 
@@ -336,7 +315,7 @@ export default class PricingResolver {
           },
         )
 
-        await AdditionalServiceCostPricingModel.bulkWrite(bulkOps)
+        await AdditionalServiceCostPricingModel.bulkWrite(bulkOps, { session})
         additionalServicesIds = map(bulkOps, (opt) => get(opt, 'updateOne.filter._id', ''))
       }
 
