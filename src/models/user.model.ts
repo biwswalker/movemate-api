@@ -13,7 +13,7 @@ import { File } from './file.model'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import { decryption } from '@utils/encryption'
 import { find, get, includes, isEmpty } from 'lodash'
-import { EXISTING_USERS, GET_CUSTOMER_BY_EMAIL } from '@pipelines/user.pipeline'
+import { EXISTING_BUSINESS_NAME, EXISTING_PHONENUMBER, EXISTING_TAXID, EXISTING_USERS, GET_CUSTOMER_BY_EMAIL } from '@pipelines/user.pipeline'
 import { Notification } from './notification.model'
 import { DriverDetail } from './driverDetail.model'
 import {
@@ -457,6 +457,21 @@ export class User extends TimeStamps {
 
   static async existingEmail(_id: string, email: string, userType: EUserType, userRole: EUserRole): Promise<boolean> {
     const exiting = await UserModel.aggregate(EXISTING_USERS(_id, email, userType, userRole))
+    return !isEmpty(exiting)
+  }
+
+  static async existingPhonenumber(phoneNumber: string, id?: string): Promise<boolean> {
+    const exiting = await UserModel.aggregate(EXISTING_PHONENUMBER(phoneNumber, id))
+    return !isEmpty(exiting)
+  }
+
+  static async existingTaxId(taxId: string, id?: string): Promise<boolean> {
+    const exiting = await UserModel.aggregate(EXISTING_TAXID(taxId, id))
+    return !isEmpty(exiting)
+  }
+
+  static async existingBusinessName(businessName: string, id?: string): Promise<boolean> {
+    const exiting = await UserModel.aggregate(EXISTING_BUSINESS_NAME(businessName, id))
     return !isEmpty(exiting)
   }
 

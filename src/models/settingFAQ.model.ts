@@ -9,99 +9,100 @@ import { SettingFAQInput } from '@inputs/settings.input'
 import lodash, { filter, get, isEmpty, map, pick, uniq } from 'lodash'
 import Aigle from 'aigle'
 
-Aigle.mixin(lodash, {});
+Aigle.mixin(lodash, {})
 
 @ObjectType()
 @plugin(mongooseAutoPopulate)
 export class SettingFAQ extends TimeStamps {
-    @Field(() => ID)
-    readonly _id: string
+  @Field(() => ID)
+  readonly _id: string
 
-    @Field()
-    @Property({ unique: true })
-    question: string
+  @Field()
+  @Property({ unique: true })
+  question: string
 
-    @Field()
-    @Property()
-    answer: string
+  @Field()
+  @Property()
+  answer: string
 
-    @Field(() => [UpdateHistory], { nullable: true })
-    @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
-    history: Ref<UpdateHistory>[];
+  @Field(() => [UpdateHistory], { nullable: true })
+  @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
+  history: Ref<UpdateHistory>[]
 
-    @Field()
-    @Property({ default: Date.now })
-    createdAt: Date;
+  @Field()
+  @Property({ default: Date.now })
+  createdAt: Date
 
-    @Field()
-    @Property({ default: Date.now })
-    updatedAt: Date;
+  @Field()
+  @Property({ default: Date.now })
+  updatedAt: Date
 
-    @Property({ ref: () => User, type: Schema.Types.ObjectId, required: false })
-    modifiedBy?: Ref<User>;
+  @Property({ ref: () => User, type: Schema.Types.ObjectId, required: false })
+  modifiedBy?: Ref<User>
 
-    static async bulkUpsertAndMarkUnused(this: ReturnModelType<typeof SettingFAQ>, data: SettingFAQInput[], userId: string): Promise<DocumentType<SettingFAQ>[]> {
+  static async bulkUpsertAndMarkUnused(
+    this: ReturnModelType<typeof SettingFAQ>,
+    data: SettingFAQInput[],
+    userId: string,
+  ): Promise<DocumentType<SettingFAQ>[]> {
+    const bulkOperations = []
+    const updateHistories: DocumentType<UpdateHistory>[] = []
+    const providedIds: string[] = []
 
-        const bulkOperations = [];
-        const updateHistories: DocumentType<UpdateHistory>[] = [];
+    await Aigle.forEach(data, async ({ _id, question, answer }) => {
+      let faq = _id ? await this.findById(_id) : null
+      const beforeUpdate = faq ? faq.toObject() : {}
+      const beforeUpdatePick = pick(beforeUpdate, ['question', 'answer'])
 
-        await Aigle.forEach(data, async ({ _id, question, answer }) => {
-            let faq = _id ? await this.findById(_id) : null
+      if (!faq) {
+        faq = new SettingFAQModel()
+      }
 
-            const beforeUpdate = faq
-                ? faq.toObject()
-                : {};
-            const beforeUpdatePick = pick(beforeUpdate, ["question", "answer"]);
+      Object.assign(faq, { question, answer })
 
-            if (!faq) {
-                faq = new SettingFAQModel();
-            }
+      const afterUpdatePick = pick(faq, ['question', 'answer'])
 
-            Object.assign(faq, { question, answer });
+      const hasChanged = JSON.stringify(beforeUpdatePick) !== JSON.stringify(afterUpdatePick)
 
-            const afterUpdatePick = pick(faq, ["question", "answer"]);
+      const newId = new Types.ObjectId(_id)
 
-            const hasChanged =
-                JSON.stringify(beforeUpdatePick) !== JSON.stringify(afterUpdatePick);
+      providedIds.push(newId.toString())
 
-            const newId = new Types.ObjectId(_id)
+      if (hasChanged) {
+        const updateHistory = new UpdateHistoryModel({
+          referenceId: newId.toString(),
+          referenceType: 'SettingFAQ',
+          who: userId,
+          beforeUpdate: beforeUpdatePick,
+          afterUpdate: afterUpdatePick,
+        })
 
-            if (hasChanged) {
-                const updateHistory = new UpdateHistoryModel({
-                    referenceId: newId.toString(),
-                    referenceType: "SettingFAQ",
-                    who: userId,
-                    beforeUpdate: beforeUpdatePick,
-                    afterUpdate: afterUpdatePick,
-                });
+        updateHistories.push(updateHistory)
+        bulkOperations.push({
+          updateOne: {
+            filter: { _id: newId },
+            update: {
+              $set: { question, answer, modifiedBy: new Types.ObjectId(userId) },
+              $push: { history: updateHistory },
+            },
+            upsert: true,
+          },
+        })
+      }
+    })
 
-                updateHistories.push(updateHistory);
-                bulkOperations.push({
-                    updateOne: {
-                        filter: { _id: newId },
-                        update: {
-                            $set: { question, answer, modifiedBy: new Types.ObjectId(userId) },
-                            $push: { history: updateHistory },
-                        },
-                        upsert: true,
-                    },
-                });
-            }
-        });
-
-        if (bulkOperations.length > 0) {
-            const originalIds = map(filter(data, item => !isEmpty(item._id)), item => item._id)
-            const businessTypeIds = map(bulkOperations, (opt) =>
-                get(opt, "updateOne.filter._id", "")
-            );
-            const protectedIds = uniq([...originalIds, ...businessTypeIds])
-            await SettingFAQModel.bulkWrite(bulkOperations);
-            await UpdateHistoryModel.insertMany(updateHistories);
-            await SettingFAQModel.deleteMany({ _id: { $nin: protectedIds } })
-        }
-
-        return this.find()
+    if (bulkOperations.length > 0) {
+      await SettingFAQModel.bulkWrite(bulkOperations)
+      await UpdateHistoryModel.insertMany(updateHistories)
     }
+
+    if (providedIds.length > 0) {
+      await SettingFAQModel.deleteMany({
+        _id: { $nin: providedIds.map((id) => new Types.ObjectId(id)) },
+      })
+    }
+    return this.find()
+  }
 }
 
 const SettingFAQModel = getModelForClass(SettingFAQ)

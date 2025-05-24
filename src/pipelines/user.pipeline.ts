@@ -190,7 +190,7 @@ export function GET_USER_LOOKUPS() {
       let: {
         parentIds: {
           $map: {
-            input: { $ifNull: ['$parents', []] }, 
+            input: { $ifNull: ['$parents', []] },
             as: 'p',
             in: { $toObjectId: '$$p' },
           },
@@ -200,10 +200,7 @@ export function GET_USER_LOOKUPS() {
         {
           $match: {
             $expr: {
-              $in: [
-                '$_id',
-                { $ifNull: ['$$parentIds', []] },
-              ],
+              $in: ['$_id', { $ifNull: ['$$parentIds', []] }],
             },
           },
         },
@@ -481,6 +478,24 @@ export const EXISTING_USERS = (_id: string, email: string, userType: EUserType, 
           { $match: { 'businessDetail.businessEmail': email } },
         ]
     : []),
+]
+
+export const EXISTING_PHONENUMBER = (phonenumber: string, id: string) => [
+  ...(id ? [{ $match: { _id: { $ne: new Types.ObjectId(id) } } }] : []),
+  ...GET_USER_LOOKUPS(),
+  { $match: { $or: [{ 'individualDetail.phoneNumber': phonenumber }, { 'businessDetail.contactNumber': phonenumber }] } },
+]
+
+export const EXISTING_TAXID = (taxId: string, id: string) => [
+  ...(id ? [{ $match: { _id: { $ne: new Types.ObjectId(id) } } }] : []),
+  ...GET_USER_LOOKUPS(),
+  { $match: { $or: [{ 'individualDetail.taxId': taxId }, { 'businessDetail.taxNumber': taxId }] } },
+]
+
+export const EXISTING_BUSINESS_NAME = (businessName: string, id: string) => [
+  ...(id ? [{ $match: { _id: { $ne: new Types.ObjectId(id) } } }] : []),
+  ...GET_USER_LOOKUPS(),
+  { $match: { 'businessDetail.businessName': businessName } },
 ]
 
 export const GET_CUSTOMER_BY_EMAIL = (email: string) => [

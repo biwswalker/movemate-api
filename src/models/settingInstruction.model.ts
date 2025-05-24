@@ -9,103 +9,106 @@ import { SettingInstructionInput } from '@inputs/settings.input'
 import lodash, { filter, get, isEmpty, map, pick, uniq } from 'lodash'
 import Aigle from 'aigle'
 
-Aigle.mixin(lodash, {});
+Aigle.mixin(lodash, {})
 
 @ObjectType()
 @plugin(mongooseAutoPopulate)
 export class SettingInstruction extends TimeStamps {
-    @Field(() => ID)
-    readonly _id: string
+  @Field(() => ID)
+  readonly _id: string
 
-    @Field()
-    @Property()
-    page: string
+  @Field()
+  @Property()
+  page: string
 
-    @Field({ nullable: true })
-    @Property()
-    instruction: string
+  @Field({ nullable: true })
+  @Property()
+  instruction: string
 
-    @Field()
-    @Property()
-    instructionTitle: string
+  @Field()
+  @Property()
+  instructionTitle: string
 
-    @Field(() => [UpdateHistory], { nullable: true })
-    @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
-    history: Ref<UpdateHistory>[];
+  @Field(() => [UpdateHistory], { nullable: true })
+  @Property({ ref: () => UpdateHistory, default: [], autopopulate: true })
+  history: Ref<UpdateHistory>[]
 
-    @Field()
-    @Property({ default: Date.now })
-    createdAt: Date;
+  @Field()
+  @Property({ default: Date.now })
+  createdAt: Date
 
-    @Field()
-    @Property({ default: Date.now })
-    updatedAt: Date;
+  @Field()
+  @Property({ default: Date.now })
+  updatedAt: Date
 
-    @Property({ ref: () => User, type: Schema.Types.ObjectId, required: false })
-    modifiedBy?: Ref<User>;
+  @Property({ ref: () => User, type: Schema.Types.ObjectId, required: false })
+  modifiedBy?: Ref<User>
 
-    static async bulkUpsertAndMarkUnused(this: ReturnModelType<typeof SettingInstruction>, data: SettingInstructionInput[], userId: string): Promise<DocumentType<SettingInstruction>[]> {
+  static async bulkUpsertAndMarkUnused(
+    this: ReturnModelType<typeof SettingInstruction>,
+    data: SettingInstructionInput[],
+    userId: string,
+  ): Promise<DocumentType<SettingInstruction>[]> {
+    const bulkOperations = []
+    const updateHistories: DocumentType<UpdateHistory>[] = []
+    const providedIds: string[] = []
 
-        const bulkOperations = [];
-        const updateHistories: DocumentType<UpdateHistory>[] = [];
+    await Aigle.forEach(data, async ({ _id, instruction, instructionTitle, page }) => {
+      let instructionData = _id ? await this.findById(_id) : null
 
-        await Aigle.forEach(data, async ({ _id, instruction, instructionTitle, page }) => {
-            let instructionData = _id ? await this.findById(_id) : null
+      const beforeUpdate = instructionData ? instructionData.toObject() : {}
+      const beforeUpdatePick = pick(beforeUpdate, ['instruction', 'instructionTitle', 'page'])
 
-            const beforeUpdate = instructionData
-                ? instructionData.toObject()
-                : {};
-            const beforeUpdatePick = pick(beforeUpdate, ["instruction", "instructionTitle", "page"]);
+      if (!instructionData) {
+        instructionData = new SettingInstructionModel()
+      }
 
-            if (!instructionData) {
-                instructionData = new SettingInstructionModel();
-            }
+      Object.assign(instructionData, { instruction, instructionTitle, page })
 
-            Object.assign(instructionData, { instruction, instructionTitle, page });
+      const afterUpdatePick = pick(instructionData, ['instruction', 'instructionTitle', 'page'])
 
-            const afterUpdatePick = pick(instructionData, ["instruction", "instructionTitle", "page"]);
+      const hasChanged = JSON.stringify(beforeUpdatePick) !== JSON.stringify(afterUpdatePick)
 
-            const hasChanged =
-                JSON.stringify(beforeUpdatePick) !== JSON.stringify(afterUpdatePick);
+      const newId = new Types.ObjectId(_id)
 
-            const newId = new Types.ObjectId(_id)
+      providedIds.push(newId.toString())
 
-            if (hasChanged) {
-                const updateHistory = new UpdateHistoryModel({
-                    referenceId: newId.toString(),
-                    referenceType: "SettingInstruction",
-                    who: userId,
-                    beforeUpdate: beforeUpdatePick,
-                    afterUpdate: afterUpdatePick,
-                });
+      if (hasChanged) {
+        const updateHistory = new UpdateHistoryModel({
+          referenceId: newId.toString(),
+          referenceType: 'SettingInstruction',
+          who: userId,
+          beforeUpdate: beforeUpdatePick,
+          afterUpdate: afterUpdatePick,
+        })
 
-                updateHistories.push(updateHistory);
-                bulkOperations.push({
-                    updateOne: {
-                        filter: { _id: newId },
-                        update: {
-                            $set: { instruction, instructionTitle, page, modifiedBy: new Types.ObjectId(userId) },
-                            $push: { history: updateHistory },
-                        },
-                        upsert: true,
-                    },
-                });
-            }
-        });
+        updateHistories.push(updateHistory)
+        bulkOperations.push({
+          updateOne: {
+            filter: { _id: newId },
+            update: {
+              $set: { instruction, instructionTitle, page, modifiedBy: new Types.ObjectId(userId) },
+              $push: { history: updateHistory },
+            },
+            upsert: true,
+          },
+        })
+      }
+    })
 
-        if (bulkOperations.length > 0) {
-            const originalIds = map(filter(data, item => !isEmpty(item._id)), item => item._id)
-            const instructionIds = map(bulkOperations, (opt) =>
-                get(opt, "updateOne.filter._id", "")
-            );
-            const protectedIds = uniq([...originalIds, ...instructionIds])
-            await SettingInstructionModel.bulkWrite(bulkOperations);
-            await UpdateHistoryModel.insertMany(updateHistories);
-            await SettingInstructionModel.deleteMany({ _id: { $nin: protectedIds } })
-        }
-
-        return this.find()
+    if (bulkOperations.length > 0) {
+      await SettingInstructionModel.bulkWrite(bulkOperations)
+      await UpdateHistoryModel.insertMany(updateHistories)
     }
+
+    if (providedIds.length > 0) {
+      await SettingInstructionModel.deleteMany({
+        _id: { $nin: providedIds.map((id) => new Types.ObjectId(id)) },
+      })
+    }
+
+    return this.find()
+  }
 }
 
 const SettingInstructionModel = getModelForClass(SettingInstruction)

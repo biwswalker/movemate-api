@@ -16,7 +16,12 @@ export const IndividualCustomerSchema = (userId?: string) =>
       .required('ระบุอีเมล')
       .test('exiting-email', 'อีเมลถูกใช้งานแล้ว', async (value) => {
         if (userId) {
-          const individualResult = await UserModel.existingEmail(userId, value, EUserType.INDIVIDUAL, EUserRole.CUSTOMER)
+          const individualResult = await UserModel.existingEmail(
+            userId,
+            value,
+            EUserType.INDIVIDUAL,
+            EUserRole.CUSTOMER,
+          )
           const businessResult = await UserModel.existingEmail(userId, value, EUserType.BUSINESS, EUserRole.CUSTOMER)
           return !individualResult && !businessResult
         }
@@ -34,12 +39,27 @@ export const IndividualCustomerSchema = (userId?: string) =>
       .matches(/^(0[689]{1})+([0-9]{8})+$/, 'เบอร์ติดต่อไม่ถูกต้อง')
       .min(10, 'ระบุหมายเลขโทรศัพท์ไม่เกิน 10 หลัก')
       .max(10, 'ระบุหมายเลขโทรศัพท์ไม่เกิน 10 หลัก')
-      .required('ระบุหมายเลขโทรศัพท์'),
+      .required('ระบุหมายเลขโทรศัพท์')
+      .test('exiting-phonnumber', 'หมายเลขติดต่อถูกใช้งานแล้ว', async (value) => {
+        const result = await UserModel.existingPhonenumber(value, userId)
+        return !result
+      }),
     isVerifiedEmail: Yup.boolean(),
     isVerifiedPhoneNumber: Yup.boolean(),
     taxId: Yup.string()
-      .minmaxNoRequire(13, 13, 'เลขประจำตัวผู้เสียภาษี 13 หลัก')
-      .matchNoRequire(/^[0-9]+$/, 'เลขประจำตัวผู้เสียภาษีเป็นตัวเลขเท่านั้น'),
+      .nullable()
+      .transform((value) => (value === '' ? null : value))
+      .when('$self', {
+        is: (value: any) => value !== null,
+        then: (schema) =>
+          schema
+            .matches(/^[0-9]+$/, 'เลขประจำตัวผู้เสียภาษีเป็นตัวเลขเท่านั้น')
+            .length(13, 'เลขประจำตัวผู้เสียภาษี 13 หลัก')
+            .test('exiting-taxId', 'เลขประจำตัวผู้เสียภาษีถูกใช้งานแล้ว', async (value) => {
+              const result = await UserModel.existingTaxId(value, userId)
+              return !result
+            }),
+      }),
     address: Yup.string(),
     province: Yup.string(),
     district: Yup.string(),
@@ -133,7 +153,12 @@ export const BusinessCustomerSchema = (userId?: string) =>
       .required('ระบุอีเมล')
       .test('exiting-email', 'อีเมลถูกใช้งานแล้ว', async (value) => {
         if (userId) {
-          const individualResult = await UserModel.existingEmail(userId, value, EUserType.INDIVIDUAL, EUserRole.CUSTOMER)
+          const individualResult = await UserModel.existingEmail(
+            userId,
+            value,
+            EUserType.INDIVIDUAL,
+            EUserRole.CUSTOMER,
+          )
           const businessResult = await UserModel.existingEmail(userId, value, EUserType.BUSINESS, EUserRole.CUSTOMER)
           return !individualResult && !businessResult
         }
@@ -142,7 +167,13 @@ export const BusinessCustomerSchema = (userId?: string) =>
         return !individualResult && !businessResult
       }),
     businessTitle: Yup.string().required('กรุณาเลือกคำนำหน้าบริษัท/องค์กร'),
-    businessName: Yup.string().required('ระบุชื่อบริษัท/องค์กร'),
+    businessName: Yup.string()
+      .required('ระบุชื่อบริษัท/องค์กร'),
+      // Cancel this because we allow same business name for different users and different branches
+      // .test('exiting-business-name', 'ชื่อบริษัท/องค์กรถูกใช้งานแล้ว', async (value) => {
+      //   const result = await UserModel.existingBusinessName(value, userId)
+      //   return !result
+      // }),
     businessBranch: Yup.string(),
     businessType: Yup.string().required('กรุณาเลือกประเภทธุรกิจ'),
     businessTypeOther: Yup.string().when('businessType', ([businessType], schema) => {
@@ -152,13 +183,21 @@ export const BusinessCustomerSchema = (userId?: string) =>
       .matches(/^(0[689]{1})+([0-9]{8})+$/, 'เบอร์ติดต่อไม่ถูกต้อง')
       .min(10, 'ระบุหมายเลขโทรศัพท์ไม่เกิน 10 หลัก')
       .max(10, 'ระบุหมายเลขโทรศัพท์ไม่เกิน 10 หลัก')
-      .required('ระบุเบอร์ผู้ติดต่อผู้สมัคร/ผู้ดูแล'),
+      .required('ระบุเบอร์ผู้ติดต่อผู้สมัคร/ผู้ดูแล')
+      .test('exiting-phonnumber', 'หมายเลขติดต่อถูกใช้งานแล้ว', async (value) => {
+        const result = await UserModel.existingPhonenumber(value, userId)
+        return !result
+      }),
     paymentMethod: Yup.string().required('กรุณาเลือกวิธีการชำระเงิน'),
     taxNumber: Yup.string()
       .matches(/^[0-9]+$/, 'เลขประจำตัวผู้เสียภาษีเป็นตัวเลขเท่านั้น')
       .required('เลขประจำตัวผู้เสียภาษี')
       .min(13, 'เลขประจำตัวผู้เสียภาษี 13 หลัก')
-      .max(13, 'เลขประจำตัวผู้เสียภาษี 13 หลัก'),
+      .max(13, 'เลขประจำตัวผู้เสียภาษี 13 หลัก')
+      .test('exiting-taxId', 'เลขประจำตัวผู้เสียภาษีถูกใช้งานแล้ว', async (value) => {
+        const result = await UserModel.existingTaxId(value, userId)
+        return !result
+      }),
     address: Yup.string().required('ระบุที่อยู่'),
     province: Yup.string().required('ระบุจังหวัด'),
     district: Yup.string().required('ระบุอำเภอ/แขวง'),

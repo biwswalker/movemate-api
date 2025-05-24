@@ -66,6 +66,7 @@ import {
 } from '@enums/users'
 import { credit, sendSMS } from '@services/sms/thaibulk'
 import { getAgentParents } from '@controllers/driver'
+import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
 
 @Resolver(User)
 export default class UserResolver {
@@ -375,12 +376,13 @@ export default class UserResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.CUSTOMER]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.CUSTOMER]), RetryTransactionMiddleware)
   async updateBusinessCustomer(
     @Arg('id') id: string,
     @Arg('data') data: CutomerBusinessInput,
     @Ctx() ctx: GraphQLContext,
   ): Promise<boolean> {
+    const session = ctx.session
     const { businessEmail, profileImage, creditPayment, cashPayment, ...formValue } = data
     try {
       // Check if the user already exists
@@ -392,7 +394,7 @@ export default class UserResolver {
       if (id) {
         await BusinessCustomerSchema(id).validate(data, { abortEarly: false })
 
-        const userModel = await UserModel.findById(id)
+        const userModel = await UserModel.findById(id).session(session)
         if (!userModel) {
           const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
           throw new GraphQLError(message, {
@@ -403,7 +405,7 @@ export default class UserResolver {
           })
         }
 
-        const customerBusinesslModel = await BusinessCustomerModel.findById(userModel.businessDetail)
+        const customerBusinesslModel = await BusinessCustomerModel.findById(userModel.businessDetail).session(session)
         if (!customerBusinesslModel) {
           const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
           throw new GraphQLError(message, {
@@ -417,21 +419,11 @@ export default class UserResolver {
         // Profil Image
         const uploadedImage = profileImage ? new FileModel(profileImage) : null
         if (uploadedImage) {
-          await uploadedImage.save()
+          await uploadedImage.save({ session })
         }
 
+        let _creditPaymentId = undefined
         if (formValue.paymentMethod === EPaymentMethod.CREDIT && creditPayment) {
-          const creditDetail = await BusinessCustomerCreditPaymentModel.findById(customerBusinesslModel.creditPayment)
-          if (!creditDetail) {
-            const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบข้อมูลการเงิน'
-            throw new GraphQLError(message, {
-              extensions: {
-                code: 'NOT_FOUND',
-                errors: [{ message }],
-              },
-            })
-          }
-
           const businessRegistrationCertificateFile = get(creditPayment, 'businessRegistrationCertificateFile', null)
           const copyIDAuthorizedSignatoryFile = get(creditPayment, 'copyIDAuthorizedSignatoryFile', null)
           const certificateValueAddedTaxRegistrationFile = get(
@@ -445,24 +437,27 @@ export default class UserResolver {
             ? new FileModel(businessRegistrationCertificateFile)
             : null
           if (businessRegistrationCertificate) {
-            await businessRegistrationCertificate.save()
+            await businessRegistrationCertificate.save({ session })
           }
           // Document Image 2
           const copyIDAuthorizedSignatory = copyIDAuthorizedSignatoryFile
             ? new FileModel(copyIDAuthorizedSignatoryFile)
             : null
           if (copyIDAuthorizedSignatory) {
-            await copyIDAuthorizedSignatory.save()
+            await copyIDAuthorizedSignatory.save({ session })
           }
           // Document Image 3
           const certificateValueAddedTaxRegistration = certificateValueAddedTaxRegistrationFile
             ? new FileModel(certificateValueAddedTaxRegistrationFile)
             : null
           if (certificateValueAddedTaxRegistration) {
-            await certificateValueAddedTaxRegistration.save()
+            await certificateValueAddedTaxRegistration.save({ session })
           }
 
-          await creditDetail.updateOne({
+          const creditDetail = await BusinessCustomerCreditPaymentModel.findById(
+            customerBusinesslModel.creditPayment,
+          ).session(session)
+          const _creditData = {
             ...omit(creditPayment, [
               'businessRegistrationCertificateFile',
               'copyIDAuthorizedSignatoryFile',
@@ -475,15 +470,29 @@ export default class UserResolver {
             ...(certificateValueAddedTaxRegistration
               ? { certificateValueAddedTaxRegistrationFile: certificateValueAddedTaxRegistration }
               : {}),
-          })
+          }
+          if (creditDetail) {
+            await creditDetail.updateOne(_creditData, { session })
+            _creditPaymentId = creditDetail._id
+          } else {
+            const newCreditPayment = new BusinessCustomerCreditPaymentModel(_creditData)
+            await newCreditPayment.save({ session })
+            _creditPaymentId = newCreditPayment._id
+          }
         }
 
-        await userModel.updateOne({
-          ...formValue,
-          ...(uploadedImage ? { profileImage: uploadedImage } : {}),
-        })
+        await userModel.updateOne(
+          {
+            ...formValue,
+            ...(uploadedImage ? { profileImage: uploadedImage } : {}),
+          },
+          { session },
+        )
 
-        await customerBusinesslModel.updateOne({ ...formValue, businessEmail })
+        await customerBusinesslModel.updateOne(
+          { ...formValue, businessEmail, ...(_creditPaymentId ? { creditPayment: _creditPaymentId } : {}) },
+          { session },
+        )
 
         return true
       }
