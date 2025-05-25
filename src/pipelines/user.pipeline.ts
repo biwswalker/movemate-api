@@ -374,15 +374,18 @@ export const GET_USERS = (
         ]
       : []
 
+  const _prematchData = {
+    ...query,
+    ...(userType && userType !== EUserCriterialType.ALL ? { userType: userType } : {}),
+    ...(status && status !== EUserCriterialStatus.ALL ? { status: status } : {}),
+    ...(userNumber ? { userNumber: { $regex: userNumber, $options: 'i' } } : {}),
+    ...(username ? { username: { $regex: username, $options: 'i' } } : {}),
+    ...(parentId ? { $or: [{ parents: { $in: [parentId] } }, { requestedParents: { $in: [parentId] } }] } : {}),
+  }
+
   const prematch: PipelineStage = {
-    $match: {
-      ...query,
-      ...(userType && userType !== EUserCriterialType.ALL ? { userType: userType } : {}),
-      ...(status && status !== EUserCriterialStatus.ALL ? { status: status } : {}),
-      ...(userNumber ? { userNumber: { $regex: userNumber, $options: 'i' } } : {}),
-      ...(username ? { username: { $regex: username, $options: 'i' } } : {}),
-      ...(parentId ? { $or: [{ parents: { $in: [parentId] } }, { requestedParents: { $in: [parentId] } }] } : {}),
-      ...(isEmpty(statusFilter) ? {} : { $or: statusFilter }),
+    $match: isEmpty(statusFilter) ? _prematchData : { $or: [...statusFilter, _prematchData] }
+    // {
       // $or: [
       //   {
       //   },
@@ -390,7 +393,7 @@ export const GET_USERS = (
       //   // ...(parentId ? [{ parents: { $in: [parentId] } }] : []),
       //   // ...(parentId ? [{ requestedParents: { $in: [parentId] } }] : []),
       // ],
-    },
+    // }
   }
 
   const postmatch: PipelineStage[] = detailMatch ? [{ $match: detailMatch }] : []
@@ -483,7 +486,9 @@ export const EXISTING_USERS = (_id: string, email: string, userType: EUserType, 
 export const EXISTING_PHONENUMBER = (phonenumber: string, id: string) => [
   ...(id ? [{ $match: { _id: { $ne: new Types.ObjectId(id) } } }] : []),
   ...GET_USER_LOOKUPS(),
-  { $match: { $or: [{ 'individualDetail.phoneNumber': phonenumber }, { 'businessDetail.contactNumber': phonenumber }] } },
+  {
+    $match: { $or: [{ 'individualDetail.phoneNumber': phonenumber }, { 'businessDetail.contactNumber': phonenumber }] },
+  },
 ]
 
 export const EXISTING_TAXID = (taxId: string, id: string) => [
