@@ -6,6 +6,11 @@ export const connectToMongoDB = async () => {
 
   const options: ConnectOptions = {
     dbName,
+    readPreference: 'primary',
+    retryWrites: true,
+    writeConcern: {
+      w: 'majority',
+    },
   };
 
   try {

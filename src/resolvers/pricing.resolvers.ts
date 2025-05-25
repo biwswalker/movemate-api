@@ -16,7 +16,7 @@ import {
 import AdditionalServiceCostPricingModel, {
   AdditionalServiceCostPricing,
 } from '@models/additionalServiceCostPricing.model'
-import lodash, { filter, forEach, get, isEmpty, isEqual, map, omit, some } from 'lodash'
+import lodash, { filter, forEach, get, isEmpty, isEqual, map, omit, some, sortBy } from 'lodash'
 import Aigle from 'aigle'
 import { AnyBulkWriteOperation, ClientSession, Types, startSession, connection } from 'mongoose'
 import AdditionalServiceModel from '@models/additionalService.model'
@@ -29,7 +29,7 @@ import { DocumentType } from '@typegoose/typegoose'
 import { PricingCalculationMethodPayload, VehicleCostCalculationPayload } from '@payloads/pricing.payloads'
 import { EUserRole } from '@enums/users'
 import { VALUES } from 'constants/values'
-import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
+import RetryTransactionMiddleware, { WithTransaction } from '@middlewares/RetryTransaction'
 
 Aigle.mixin(lodash, {})
 
@@ -110,7 +110,8 @@ export default class PricingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async updateDistanceCost(
     @Arg('id') id: string,
     @Arg('data', () => [DistanceCostPricingInput])
@@ -118,14 +119,14 @@ export default class PricingResolver {
     @Ctx() ctx: GraphQLContext,
   ): Promise<boolean> {
     const session = ctx.session
-
     try {
       await DistanceCostPricingSchema.validate({ distanceCostPricings: data })
 
       const bulkOperations = []
       const updateHistories: DocumentType<UpdateHistory>[] = []
 
-      await Aigle.forEach(data, async ({ _id, ...distanceConfig }) => {
+      const _sortedData = sortBy(data, ['from'])
+      await Aigle.forEach(_sortedData, async ({ _id, ...distanceConfig }) => {
         let distanceCostPricing = _id
           ? _id !== '-'
             ? await DistanceCostPricingModel.findById(_id).session(session)
@@ -147,8 +148,9 @@ export default class PricingResolver {
 
         const userId = ctx.req.user_id
         // const user = await UserModel.findById(userId).session(session);
+        let updateHistory = undefined
         if (hasChanged) {
-          const updateHistory = new UpdateHistoryModel({
+          updateHistory = new UpdateHistoryModel({
             referenceId: distanceCostPricing._id.toString(),
             referenceType: 'DistanceCostPricing',
             who: userId,
@@ -157,19 +159,19 @@ export default class PricingResolver {
           })
 
           updateHistories.push(updateHistory)
-          bulkOperations.push({
-            updateOne: {
-              filter: {
-                _id: distanceCostPricing._id ? distanceCostPricing._id : new Types.ObjectId(),
-              },
-              update: {
-                $set: distanceConfig,
-                $push: { history: updateHistory },
-              },
-              upsert: true,
-            },
-          })
         }
+        bulkOperations.push({
+          updateOne: {
+            filter: {
+              _id: distanceCostPricing._id ? distanceCostPricing._id : new Types.ObjectId(),
+            },
+            update: {
+              $set: distanceConfig,
+              ...(updateHistory ? { $push: { history: updateHistory } } : {}),
+            },
+            upsert: true,
+          },
+        })
       })
 
       if (bulkOperations.length > 0) {
@@ -177,10 +179,7 @@ export default class PricingResolver {
         await DistanceCostPricingModel.bulkWrite(bulkOperations, { session })
         await UpdateHistoryModel.insertMany(updateHistories, { session })
         await VehicleCostModel.findByIdAndUpdate(id, { distance: distanceIds }, { session })
-        // await DistanceCostPricingModel.deleteMany({
-        //   _id: { $nin: distanceIds },
-        //   vehicleCost: id, // TODO: Recheck again
-        // });
+        // await DistanceCostPricingModel.deleteMany({ _id: { $nin: distanceIds } });
       }
 
       return true
@@ -244,7 +243,7 @@ export default class PricingResolver {
             }
           },
         )
-        await AdditionalServiceCostPricingModel.bulkWrite(bulkOps, { session})
+        await AdditionalServiceCostPricingModel.bulkWrite(bulkOps, { session })
         additionalServicesIds = map(bulkOps, (opt) => get(opt, 'updateOne.filter._id', ''))
       }
 
@@ -265,7 +264,10 @@ export default class PricingResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
-  async initialAdditionalService(@Ctx() ctx: GraphQLContext, @Arg('vehicleCostId') vehicleCostId: string): Promise<boolean> {
+  async initialAdditionalService(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('vehicleCostId') vehicleCostId: string,
+  ): Promise<boolean> {
     const session = ctx.session
     try {
       const vehicleCost = await VehicleCostModel.findById(vehicleCostId).session(session)
@@ -315,7 +317,7 @@ export default class PricingResolver {
           },
         )
 
-        await AdditionalServiceCostPricingModel.bulkWrite(bulkOps, { session})
+        await AdditionalServiceCostPricingModel.bulkWrite(bulkOps, { session })
         additionalServicesIds = map(bulkOps, (opt) => get(opt, 'updateOne.filter._id', ''))
       }
 
