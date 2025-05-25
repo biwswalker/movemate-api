@@ -17,3 +17,13 @@ registerEnumType(EPrivilegeStatus, {
   name: 'EPrivilegeStatus',
   description: 'Privilege status',
 })
+
+export enum EPrivilegeStatusCriteria {
+  ALL = 'ALL',
+  INACTIVE = 'INACTIVE',
+  ACTIVE = 'ACTIVE',
+}
+registerEnumType(EPrivilegeStatusCriteria, {
+  name: 'EPrivilegeStatusCriteria',
+  description: 'Privilege status criteria',
+})

@@ -1,4 +1,4 @@
-import { EPrivilegeDiscountUnit, EPrivilegeStatus } from '@enums/privilege'
+import { EPrivilegeDiscountUnit, EPrivilegeStatus, EPrivilegeStatusCriteria } from '@enums/privilege'
 import { ArgsType, Field, Float, InputType } from 'type-graphql'
 
 @InputType()
@@ -48,8 +48,8 @@ export class GetPrivilegesArgs {
   @Field({ nullable: true })
   _id?: string
 
-  @Field(() => EPrivilegeStatus, { nullable: true })
-  status?: EPrivilegeStatus
+  @Field(() => EPrivilegeStatusCriteria, { nullable: true })
+  status?: EPrivilegeStatusCriteria
 
   @Field({ nullable: true })
   name?: string

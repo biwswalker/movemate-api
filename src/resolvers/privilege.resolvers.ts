@@ -1,5 +1,5 @@
 import { GraphQLContext } from '@configs/graphQL.config'
-import { EPrivilegeStatus } from '@enums/privilege'
+import { EPrivilegeStatus, EPrivilegeStatusCriteria } from '@enums/privilege'
 import { EUserRole } from '@enums/users'
 import { AllowGuard, AuthGuard } from '@guards/auth.guards'
 import { GetPrivilegesArgs, PrivilegeInput } from '@inputs/privilege.input'
@@ -61,6 +61,7 @@ export default class PrivilegeResolver {
       const filterEmptyQuery = omitBy(query, isEmpty)
       const filterQuery: FilterQuery<typeof Privilege> = {
         ...filterEmptyQuery,
+        // ...(query.status === EPrivilegeStatusCriteria.ALL ? {} : { status: query.status }),
         ...(query.name ? { name: { $regex: query.name, $options: 'i' } } : {}),
         ...(query.code ? { code: query.code } : { defaultShow: true }),
       }
@@ -75,7 +76,7 @@ export default class PrivilegeResolver {
   @Query(() => PrivilegePaginationPayload)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getPrivileges(
-    @Args() query: GetPrivilegesArgs,
+    @Args() { status, ...query }: GetPrivilegesArgs,
     @Args() paginate: PaginationArgs,
   ): Promise<PrivilegePaginationPayload> {
     try {
@@ -85,6 +86,7 @@ export default class PrivilegeResolver {
       const filterEmptyQuery = omitBy(query, isEmpty)
       const filterQuery: FilterQuery<typeof Privilege> = {
         ...filterEmptyQuery,
+        ...(status ? status === EPrivilegeStatusCriteria.ALL ? {} : { status: status } : {}),
         ...(query.name ? { name: { $regex: query.name, $options: 'i' } } : {}),
         ...(query.code ? { code: { $regex: query.code, $options: 'i' } } : {}),
       }
@@ -166,7 +168,7 @@ export default class PrivilegeResolver {
         })
       }
       const privilegePayload = map<Privilege, PrivilegeUsedPayload>(privileges, (privilege) => {
-        const usedUser = map(privilege.usedUser, user => user.toString())
+        const usedUser = map(privilege.usedUser, (user) => user.toString())
         const isUsed = includes(usedUser, user_id)
         return { ...privilege, used: isUsed }
       })
