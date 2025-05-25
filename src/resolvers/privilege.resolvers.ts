@@ -51,7 +51,7 @@ export default class PrivilegeResolver {
   @Query(() => [Privilege])
   @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   async privileges(
-    @Args() query: GetPrivilegesArgs,
+    @Args() { status, ...query }: GetPrivilegesArgs,
     @Args() { skip, limit, ...paginate }: LoadmoreArgs,
   ): Promise<Privilege[]> {
     try {
@@ -61,7 +61,7 @@ export default class PrivilegeResolver {
       const filterEmptyQuery = omitBy(query, isEmpty)
       const filterQuery: FilterQuery<typeof Privilege> = {
         ...filterEmptyQuery,
-        // ...(query.status === EPrivilegeStatusCriteria.ALL ? {} : { status: query.status }),
+        ...(status ? status === EPrivilegeStatusCriteria.ALL ? {} : { status: status } : {}),
         ...(query.name ? { name: { $regex: query.name, $options: 'i' } } : {}),
         ...(query.code ? { code: query.code } : { defaultShow: true }),
       }
