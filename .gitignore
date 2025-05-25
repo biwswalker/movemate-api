@@ -9,3 +9,4 @@ generated/whtcert/*.pdf
 generated/report/*
 dist
 firebase-services.json
+dump.rdb
