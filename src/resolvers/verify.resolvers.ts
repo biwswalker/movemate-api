@@ -14,6 +14,7 @@ import { get, isEqual } from 'lodash'
 import { requestOTP } from './otp.resolvers'
 import { generateExpToken } from '@utils/encryption'
 import { EUserRole, EUserType } from '@enums/users'
+import { verifyOTP as verifyPhoneOTP } from './otp.resolvers'
 
 @Resolver()
 export default class VerifyAccountResolver {
@@ -161,14 +162,13 @@ export default class VerifyAccountResolver {
         })
       }
 
-      // TODO: Handle time range
-
       if (user.isVerifiedPhoneNumber) {
         const message = 'ผู้ใช้ถูกยืนยันหมายเลขโทรศัพท์แล้ว'
         throw new GraphQLError(message)
       }
 
-      if (isEqual(user.lastestOTPRef, data.ref) && isEqual(user.lastestOTP, data.otp)) {
+      const _result = await verifyPhoneOTP(user.contactNumber, data.otp, data.ref)
+      if (_result) {
         await user.updateOne({ isVerifiedPhoneNumber: true })
         return true
       }

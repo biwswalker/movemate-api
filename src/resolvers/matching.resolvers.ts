@@ -45,6 +45,8 @@ import BillingModel from '@models/finance/billing.model'
 import ReceiptModel from '@models/finance/receipt.model'
 import _ from 'mongoose-paginate-v2'
 import { generateBillingReceipt } from '@controllers/billingReceipt'
+import { AuditLogDecorator } from 'decorators/AuditLog.decorator'
+import { EAuditActions } from '@enums/audit'
 
 @Resolver()
 export default class MatchingResolver {
@@ -246,6 +248,14 @@ export default class MatchingResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
+  @UseMiddleware(
+    AuditLogDecorator({
+      action: EAuditActions.ACCEPT_SHIPMENT,
+      entityType: 'Shipment',
+      entityId: (root, args) => args.shipmentId,
+      details: (root, args, context) => ({ driverId: context.req.user_id }),
+    }),
+  )
   async acceptShipment(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
     const session = ctx.session
     const userId = ctx.req.user_id

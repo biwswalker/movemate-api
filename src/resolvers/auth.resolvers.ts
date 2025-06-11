@@ -16,6 +16,9 @@ import { yupValidationThrow } from '@utils/error.utils'
 import bcrypt from 'bcrypt'
 import addEmailQueue from '@utils/email.utils'
 import { EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
+import { AuditLogDecorator } from 'decorators/AuditLog.decorator'
+import { EAuditActions } from '@enums/audit'
+import { AuditLog } from '@models/auditLog.model'
 
 @Resolver()
 export default class AuthResolver {
@@ -28,6 +31,7 @@ export default class AuthResolver {
       if (!user) {
         throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
       }
+
       if ((user.status === EUserStatus.PENDING || !user.isVerifiedEmail) && user.userRole === EUserRole.CUSTOMER) {
         const email =
           user.userType === EUserType.INDIVIDUAL
@@ -35,32 +39,46 @@ export default class AuthResolver {
             : user.userType === EUserType.BUSINESS
             ? get(user, 'businessDetail.businessEmail', '')
             : ''
+        await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
         const message = `บัญชี ${email} ยังไม่ได้ยืนยันอีเมล โปรดยืนยันอีเมลก่อน หากไม่ได้รับอีเมลโปรดติดต่อเจ้าหน้าที่`
         throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })
       } else if (user.status === EUserStatus.INACTIVE) {
         // TODO: ยังสามารถใช้งานได้ปกติ
       } else if (user.status === EUserStatus.BANNED && user.userRole === EUserRole.CUSTOMER) {
         // TODO: สามารถ login ได้ แต่ แจ้งชำระ และ ดูประวัติงานเก่าได้
+        await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
         const message = `บัญชีของท่านโดนระงับการใช้งานจากผู้ดูแลระบบ โปรดติดต่อเจ้าหน้าที่หากมีข้อสงสัย`
         throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })
       } else if (user.status === EUserStatus.DENIED && includes([EUserRole.ADMIN, EUserRole.CUSTOMER], user.userRole)) {
+        await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
         const message = `บัญชีของท่านไม่ถูกอนุมัติ โปรดติดต่อเจ้าหน้าที่หากมีข้อสงสัย`
         throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })
       }
 
       if (user.userRole === EUserRole.CUSTOMER && user.userType === EUserType.BUSINESS) {
         if (user.validationStatus === EUserValidationStatus.PENDING) {
+          await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
           const message = `บัญชีของท่านยังไม่ได้การตอบรับจากผู้ดูแลระบบ โปรดติดต่อเจ้าหน้าที่หากมีข้อสงสัย`
           throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })
         } else if (user.validationStatus === EUserValidationStatus.DENIED) {
+          await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
           const message = `บัญชีของท่านไม่ถูกอนุมัติ โปรดติดต่อเจ้าหน้าที่หากมีข้อสงสัย`
           throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })
+        }
+      }
+
+      if (user.userRole === EUserRole.ADMIN) {
+        if (user.status !== EUserStatus.ACTIVE) {
+          await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
+          const message = `บัญชีของท่านถูกระงับการใช้งานจากผู้ดูแลระบบ โปรดติดต่อเจ้าหน้าที่หากมีข้อสงสัย`
+          throw new GraphQLError(message, { extensions: { code: 'BANNED_USER', message } })
         }
       }
 
       const validateResult = await user.validatePassword(hashedPassword)
 
       if (!validateResult) {
+        await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
         throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
       }
 
@@ -86,6 +104,10 @@ export default class AuthResolver {
           requireAcceptedPolicy = true
         }
       }
+
+      // Add audit Log
+      await AuditLog.createLog(user._id, EAuditActions.LOGIN, 'User', user._id, ctx.ip)
+
       return {
         token,
         user,
@@ -99,6 +121,14 @@ export default class AuthResolver {
   }
 
   @Mutation(() => Boolean)
+  @UseMiddleware(
+    AuditLogDecorator({
+      action: EAuditActions.LOGOUT,
+      entityType: 'User',
+      entityId: (root, args, context) => context.req.user_id,
+      details: (root, args) => ({}), // No specific details needed for logout
+    }),
+  )
   async logout(@Ctx() ctx: GraphQLContext): Promise<boolean> {
     // Clear access token by removing the cookie
     ctx.res.clearCookie('access_token')
@@ -107,6 +137,14 @@ export default class AuthResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.CUSTOMER, EUserRole.DRIVER]))
+  @UseMiddleware(
+    AuditLogDecorator({
+      action: EAuditActions.CHANGE_PASSWORD,
+      entityType: 'User',
+      entityId: (root, args, context) => context.req.user_id,
+      details: (root, args) => ({}), // Don't log the password itself
+    }),
+  )
   async changePassword(@Arg('data') data: PasswordChangeInput, @Ctx() ctx: GraphQLContext): Promise<boolean> {
     try {
       const userId = ctx.req.user_id

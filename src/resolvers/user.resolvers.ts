@@ -17,7 +17,7 @@ import { GetUserArgs } from '@inputs/user.input'
 import { AuthGuard } from '@guards/auth.guards'
 import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { find, get, includes, isArray, isEmpty, isEqual, map, omit, omitBy, pick, reduce } from 'lodash'
-import { RequireDataBeforePayload, UserPaginationAggregatePayload } from '@payloads/user.payloads'
+import { RequireDataBeforePayload, UpdateAdminInput, UserPaginationAggregatePayload } from '@payloads/user.payloads'
 import { PaginateOptions } from 'mongoose'
 import { PaginationArgs } from '@inputs/query.input'
 import { GraphQLError } from 'graphql'
@@ -66,7 +66,10 @@ import {
 } from '@enums/users'
 import { credit, sendSMS } from '@services/sms/thaibulk'
 import { getAgentParents } from '@controllers/driver'
-import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
+import RetryTransactionMiddleware, { WithTransaction } from '@middlewares/RetryTransaction'
+import AdminModel from '@models/admin.model'
+import { AuditLogDecorator } from 'decorators/AuditLog.decorator'
+import { EAuditActions } from '@enums/audit'
 
 @Resolver(User)
 export default class UserResolver {
@@ -308,6 +311,15 @@ export default class UserResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.CUSTOMER]))
+  @UseMiddleware(
+    AuditLogDecorator({
+      action: EAuditActions.UPDATE_USER_PROFILE,
+      entityType: 'User',
+      entityId: (root, args) => args.id,
+      details: (root, args) => ({ updatedFields: args.data }),
+      trackChanges: true, // Requires fetching before state
+    }),
+  )
   async updateIndividualCustomer(
     @Arg('id') id: string,
     @Arg('data') data: CutomerIndividualInput,
@@ -377,6 +389,15 @@ export default class UserResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.CUSTOMER]), RetryTransactionMiddleware)
+  @UseMiddleware(
+    AuditLogDecorator({
+      action: EAuditActions.UPDATE_USER_PROFILE,
+      entityType: 'User',
+      entityId: (root, args) => args.id,
+      details: (root, args) => ({ updatedFields: args.data }),
+      trackChanges: true, // Requires fetching before state
+    }),
+  )
   async updateBusinessCustomer(
     @Arg('id') id: string,
     @Arg('data') data: CutomerBusinessInput,
@@ -966,7 +987,7 @@ export default class UserResolver {
           const otp = generateOTP()
           const currentDate = new Date()
           const resend_countdown = addSeconds(currentDate, 90)
-          const reset_time = addMinutes(currentDate, 30)
+          const reset_time = addMinutes(currentDate, 15)
           const verifyLast = `${otp} คือ รหัสเพื่อเปลี่ยนรหัสผ่าน Movemate Thailand ของคุณ (Ref:${ref})`
           await UserModel.findByIdAndUpdate(user._id, { resetPasswordCode: otp, lastestResetPassword: reset_time })
           const phoneNumber = username
@@ -1010,7 +1031,7 @@ export default class UserResolver {
           const code = generateOTP()
           const currentDate = new Date()
           const resend_countdown = addSeconds(currentDate, 45)
-          const reset_time = addMinutes(currentDate, 30)
+          const reset_time = addMinutes(currentDate, 15)
 
           await UserModel.findByIdAndUpdate(user._id, { resetPasswordCode: code, lastestResetPassword: reset_time })
           const movemate_link = `https://www.movematethailand.com`
@@ -1074,7 +1095,7 @@ export default class UserResolver {
         const expireTime = addHours(user.lastestResetPassword, 24)
         const currentDate = new Date()
         if (currentDate.getTime() > expireTime.getTime()) {
-          const message = 'หมดเวลา กรุณาดำเนินการอีกครั้ง'
+          const message = 'OTP หมดอายุ กรุณาขอรหัสใหม่'
           throw new GraphQLError(message, {
             extensions: {
               code: 'FAILED_VERIFY_OTP',
@@ -1262,5 +1283,62 @@ export default class UserResolver {
   })
   listenUserStatus(@Root() payload: EUserStatus): EUserStatus {
     return payload
+  }
+
+  @Mutation(() => Boolean)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
+  async updateAdmin(
+    @Arg('id') id: string,
+    @Arg('data') data: UpdateAdminInput,
+    @Ctx() ctx: GraphQLContext,
+  ): Promise<boolean> {
+    const session = ctx.session
+    const { username, status, adminDetail, profileImage } = data
+
+    try {
+      const userToUpdate = await UserModel.findById(id).session(session)
+      if (!userToUpdate) {
+        throw new GraphQLError('ไม่พบผู้ใช้งาน', { extensions: { code: 'NOT_FOUND' } })
+      }
+
+      if (userToUpdate.userRole !== EUserRole.ADMIN) {
+        throw new GraphQLError('ผู้ใช้งานนี้ไม่ใช่ Admin', { extensions: { code: 'INVALID_ROLE' } })
+      }
+
+      // Update Admin specific details
+      if (adminDetail && userToUpdate.adminDetail) {
+        const adminDoc = await AdminModel.findById(userToUpdate.adminDetail).session(session)
+        if (adminDoc) {
+          if (adminDetail.firstname) adminDoc.firstname = adminDetail.firstname
+          if (adminDetail.lastname) adminDoc.lastname = adminDetail.lastname
+          if (adminDetail.email) adminDoc.email = adminDetail.email
+          if (adminDetail.permission) adminDoc.permission = adminDetail.permission
+          if (adminDetail.address) adminDoc.address = adminDetail.address
+          if (adminDetail.phoneNumber) adminDoc.phoneNumber = adminDetail.phoneNumber
+          await adminDoc.save({ session })
+        }
+      }
+
+      // Update User common details
+      if (username) userToUpdate.username = username
+      if (status) userToUpdate.status = status
+
+      if (profileImage) {
+        const image = new FileModel(profileImage)
+        await image.save({ session })
+        userToUpdate.profileImage = image
+      }
+
+      await userToUpdate.save({ session })
+
+      return true
+    } catch (error) {
+      console.log('error: ', error)
+      if (error instanceof ValidationError) {
+        throw yupValidationThrow(error)
+      }
+      throw error
+    }
   }
 }

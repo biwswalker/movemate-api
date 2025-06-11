@@ -13,7 +13,7 @@ import { credit, sendSMS } from '@services/sms/thaibulk'
 import { EUserRole } from '@enums/users'
 
 const DEFUALT_OTP_DURATION = 2
-const DEFUALT_OTP_EXPIRE = 20
+const DEFUALT_OTP_EXPIRE = 15
 
 export async function requestOTP(phoneNumber: string, action: string) {
   try {
@@ -114,10 +114,9 @@ export async function verifyOTP(phoneNumber: string, otp: string, ref: string) {
       })
     }
 
-    // TODO: Change this time incorrect handle
     const currentDate = new Date()
-    if (currentDate.getTime() > new Date().getTime()) {
-      const message = 'หมดเวลา กรุณาดำเนินการอีกครั้ง'
+    if (currentDate.getTime() > new Date(phoneNumberData.expireDateTime).getTime()) {
+      const message = 'OTP หมดอายุ กรุณาขอรหัสใหม่'
       throw new GraphQLError(message, {
         extensions: {
           code: 'FAILED_VERIFY_OTP',

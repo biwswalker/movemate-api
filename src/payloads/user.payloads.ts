@@ -1,8 +1,10 @@
-import { ObjectType, Field, Int } from 'type-graphql'
+import { ObjectType, Field, Int, InputType } from 'type-graphql'
 import { User } from '@models/user.model'
 import { AggregatePaginateResult, PaginateResult } from 'mongoose'
 import { PaginationPayload } from './pagination.payloads'
 import { UserPending } from '@models/userPending.model'
+import { EAdminPermission, EUserStatus } from '@enums/users'
+import { FileInput } from '@inputs/file.input'
 
 @ObjectType()
 export class AuthPayload {
@@ -58,4 +60,41 @@ export class UserPaginationAggregatePayload extends PaginationPayload implements
 export class UserPendingAggregatePayload extends PaginationPayload implements AggregatePaginateResult<UserPending> {
   @Field(() => [UserPending])
   docs: UserPending[]
+}
+
+
+@InputType()
+export class AdminDetailInput {
+  @Field({ nullable: true })
+  firstname?: string;
+
+  @Field({ nullable: true })
+  lastname?: string;
+
+  @Field({ nullable: true })
+  email?: string;
+  
+  @Field({ nullable: true })
+  address?: string;
+  
+  @Field({ nullable: true })
+  phoneNumber?: string;
+
+  @Field(() => EAdminPermission, { nullable: true })
+  permission?: EAdminPermission;
+}
+
+@InputType()
+export class UpdateAdminInput {
+  @Field({ nullable: true })
+  username?: string;
+
+  @Field(() => EUserStatus, { nullable: true })
+  status?: EUserStatus;
+
+  @Field(() => AdminDetailInput, { nullable: true })
+  adminDetail?: AdminDetailInput;
+
+  @Field(() => FileInput, { nullable: true })
+  profileImage?: FileInput;
 }

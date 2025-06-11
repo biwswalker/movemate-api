@@ -6,7 +6,7 @@ import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
 import { FilterQuery, PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
-import lodash, { find, isEmpty, map, omitBy, sum } from 'lodash'
+import lodash, { find, get, isEmpty, map, omitBy, sum } from 'lodash'
 import {
   ShipmentPaginationAggregatePayload,
   ShipmentPaginationPayload,
@@ -40,6 +40,8 @@ import AdditionalServiceCostPricingModel from '@models/additionalServiceCostPric
 import AdditionalServiceModel from '@models/additionalService.model'
 import { EServiceStatus } from '@enums/additionalService'
 import { PricingCalculationMethodPayload } from '@payloads/pricing.payloads'
+import { AuditLogDecorator } from 'decorators/AuditLog.decorator'
+import { EAuditActions } from '@enums/audit'
 
 Aigle.mixin(lodash, {})
 
@@ -413,6 +415,27 @@ export default class ShipmentResolver {
 
   @Mutation(() => Shipment)
   @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]), RetryTransactionMiddleware)
+  @UseMiddleware(
+    AuditLogDecorator({
+      action: EAuditActions.CREATE_SHIPMENT,
+      entityType: 'Shipment',
+      entityId: (root, args, context, info) => {
+        // You'll need to capture the trackingNumber AFTER createShipment
+        // For now, if createShipment returns the entity, you can access it here.
+        // Or, if the entityId is generated in the controller, it might be part of the result.
+        // A common pattern is to return the created entity directly from the resolver.
+        // If the resolver returns `Shipment`, then `result` in decorator will be the Shipment object.
+        return info.returnType.name === 'Shipment' && info.result ? info.result.trackingNumber : undefined
+      },
+      details: (root, args) => ({
+        pickupLocation: get(args.data.locations, '0.name'),
+        deliveryLocationsCount: args.data.locations.length - 1,
+        vehicleType: args.data.vehicleId,
+        paymentMethod: args.data.paymentMethod,
+        isRoundedReturn: args.data.isRoundedReturn,
+      }),
+    }),
+  )
   async createShipment(@Arg('data') data: ShipmentInput, @Ctx() ctx: GraphQLContext): Promise<Shipment> {
     const session = ctx.session
     const customerId = ctx.req.user_id
@@ -443,6 +466,14 @@ export default class ShipmentResolver {
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
+  @UseMiddleware(
+    AuditLogDecorator({
+      action: EAuditActions.UPDATE_SHIPMENT,
+      entityType: 'Shipment',
+      entityId: (root, args) => args.data.shipmentId,
+      details: (root, args) => ({ updatedFields: args.data }),
+    }),
+  )
   async updateShipment(@Arg('data') data: UpdateShipmentInput, @Ctx() ctx: GraphQLContext): Promise<boolean> {
     try {
       const user_id = ctx.req.user_id

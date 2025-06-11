@@ -80,6 +80,7 @@ export default class RegisterResolver {
         throw new Error('Bad Request: Platform is require')
       }
 
+      // Exist email
       const email = isEqual(userType, EUserType.INDIVIDUAL)
         ? get(individualDetail, 'email', '')
         : isEqual(userType, EUserType.BUSINESS)
@@ -87,6 +88,66 @@ export default class RegisterResolver {
         : ''
       const emailFieldName = userType === EUserType.INDIVIDUAL ? 'email' : 'businessEmail'
       await this.isExistingEmail(email, emailFieldName, session)
+
+      // Exist phone number
+      const phoneNumber = isEqual(userType, EUserType.INDIVIDUAL)
+        ? get(individualDetail, 'phoneNumber', '')
+        : isEqual(userType, EUserType.BUSINESS)
+        ? get(businessDetail, 'contactNumber', '')
+        : ''
+      const phoneNumberFieldName = userType === EUserType.INDIVIDUAL ? 'phoneNumber' : 'contactNumber'
+      const exitingPhonenumber = await UserModel.existingPhonenumber(phoneNumber)
+      if (exitingPhonenumber) {
+        throw new GraphQLError('หมายเลขโทรศัพท์ถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ', {
+          extensions: {
+            code: 'ERROR_VALIDATION',
+            errors: [
+              {
+                field: phoneNumberFieldName,
+                message: 'หมายเลขโทรศัพท์ถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ',
+              },
+            ],
+          },
+        })
+      }
+
+      if (isEqual(userType, EUserType.BUSINESS) && businessDetail) {
+        // taxId
+        const taxId = get(businessDetail, 'taxNumber', '')
+        const taxIdField = 'taxNumber'
+        const exitingTaxId = await UserModel.existingTaxId(taxId)
+        if (exitingTaxId) {
+          throw new GraphQLError('เลขประจำตัวผู้เสียภาษีถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ', {
+            extensions: {
+              code: 'ERROR_VALIDATION',
+              errors: [
+                {
+                  field: taxIdField,
+                  message: 'เลขประจำตัวผู้เสียภาษีถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ',
+                },
+              ],
+            },
+          })
+        }
+        
+        // business
+        // const businessName = get(businessDetail, 'businessName', '')
+        // const businessNameField = 'businessName'
+        // const exitingBusinessName = await UserModel.existingBusinessName(businessName)
+        // if (exitingBusinessName) {
+        //   throw new GraphQLError('ชื่อบริษัท/องค์กรถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ', {
+        //     extensions: {
+        //       code: 'ERROR_VALIDATION',
+        //       errors: [
+        //         {
+        //           field: businessNameField,
+        //           message: 'ชื่อบริษัท/องค์กรถูกใช้งานในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ',
+        //         },
+        //       ],
+        //     },
+        //   })
+        // }
+      }
 
       return true
     } catch (error) {
