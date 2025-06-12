@@ -24,6 +24,10 @@ export class Contact extends TimeStamps {
   @Field()
   @Property()
   detail: string
+  
+  @Field()
+  @Property()
+  contactNumber: string
 
   @Field()
   @Property({ default: false })

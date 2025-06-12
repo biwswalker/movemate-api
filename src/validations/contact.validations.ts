@@ -7,4 +7,5 @@ export const ContactSchema = Yup.object().shape({
   email: Yup.string().email('กรุณาระบุอีเมล').required('กรุณาระบุอีเมล'),
   title: Yup.string().required('กรุณาระบุชื่อเรื่องที่ต้องการติดต่อ'),
   detail: Yup.string().required('กรุณาระบุข้อความเนื้อหาที่ต้องการติดต่อ'),
+  contactNumber: Yup.string().required('กรุณาระบุดเบอร์ติดต่อ'),
 })

@@ -13,4 +13,7 @@ export class ContactInput {
 
   @Field()
   detail: string
+
+  @Field()
+  contactNumber: string
 }
