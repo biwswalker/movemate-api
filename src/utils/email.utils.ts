@@ -9,12 +9,14 @@ import { join } from 'path'
 function email_sender() {
   const transporter = createTransport<HbsTransporter>({
     host: 'smtpout.secureserver.net',
-    port: 587,
+    port: process.env.NOREPLY_PORT ? parseInt(process.env.NOREPLY_PORT) : 587,
     auth: {
       user: process.env.NOREPLY_EMAIL,
       pass: process.env.NOREPLY_SECRET,
     },
-    // secure: true,
+    secure: process.env.NOREPLY_SECURE === 'true' ? true : false,
+    debug: true,
+    logger: true,
     // secureConnection: false,
     // tls: {
     //     ciphers: 'SSLv3'

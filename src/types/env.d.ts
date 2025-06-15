@@ -6,6 +6,8 @@ declare namespace NodeJS {
     MOVEMATE_SHARED_KEY: string
     DATABASE_URL: string
     DATABASE_NAME: string
+    NOREPLY_SECURE: 'true' | 'false'
+    NOREPLY_PORT: string
     NOREPLY_EMAIL: string
     NOREPLY_SECRET: string
     GOOGLE_MAP_API_KEY: string

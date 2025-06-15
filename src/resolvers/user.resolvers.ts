@@ -1092,7 +1092,7 @@ export default class UserResolver {
 
       // Verify expiry time
       if (user.lastestResetPassword) {
-        const expireTime = addHours(user.lastestResetPassword, 24)
+        const expireTime = addMinutes(user.lastestResetPassword, 20)
         const currentDate = new Date()
         if (currentDate.getTime() > expireTime.getTime()) {
           const message = 'OTP หมดอายุ กรุณาขอรหัสใหม่'
