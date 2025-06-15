@@ -206,20 +206,23 @@ export async function calculateQuotation(
   let totalDiscount = 0
   if (discountId) {
     const privilege = await PrivilegeModel.findById(discountId)
-    const { name, unit, discount, minPrice, maxDiscountPrice } = privilege
+    const { name, unit } = privilege
+    const _discount = (privilege.discount || 0) as number
+    const _minPrice = (privilege.minPrice || 0) as number
+    const _maxDiscountPrice = (privilege.maxDiscountPrice || 0) as number
     const isPercent = unit === EPrivilegeDiscountUnit.PERCENTAGE
-    if (subTotalPrice >= minPrice) {
+    if (subTotalPrice >= _minPrice) {
       if (isPercent) {
-        const discountAsBath = (discount / 100) * subTotalPrice
-        const maxDiscountAsBath = maxDiscountPrice ? min([maxDiscountPrice, discountAsBath]) : discountAsBath
+        const discountAsBath = (_discount / 100) * subTotalPrice
+        const maxDiscountAsBath = _maxDiscountPrice ? min([_maxDiscountPrice, discountAsBath]) : discountAsBath
         totalDiscount = maxDiscountAsBath
       } else {
-        totalDiscount = discount
+        totalDiscount = _discount
       }
     } else {
       totalDiscount = 0
     }
-    discountName = `${name} (${discount}${
+    discountName = `${name} (${_discount}${
       unit === EPrivilegeDiscountUnit.CURRENCY ? ' บาท' : unit === EPrivilegeDiscountUnit.PERCENTAGE ? '%' : ''
     })`
   }
