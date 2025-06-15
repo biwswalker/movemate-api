@@ -14,15 +14,12 @@ function email_sender() {
       user: process.env.NOREPLY_EMAIL,
       pass: process.env.NOREPLY_SECRET,
     },
-    secure: process.env.NOREPLY_SECURE === 'true' ? true : false,
+    secure: process.env.NOREPLY_SECURE === 'true',
     debug: true,
     logger: true,
-    // secureConnection: false,
-    // tls: {
-    //     ciphers: 'SSLv3'
-    // },
-    // requireTLS: true,
-    // debug: true,
+    // Set requireTLS to true if 'secure' is false (e.g., for port 587 STARTTLS).
+    // If 'secure' is true (e.g., for port 465 SSL/TLS), requireTLS is not needed.
+    requireTLS: !(process.env.NOREPLY_SECURE === 'true'),
   } as TransportOptions) as HbsTransporter
 
   transporter.use(
