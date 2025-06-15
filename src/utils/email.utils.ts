@@ -22,6 +22,8 @@ function email_sender() {
     requireTLS: !(process.env.NOREPLY_SECURE === 'true'),
   } as TransportOptions) as HbsTransporter
 
+  console.log('Mailer config: ', transporter)
+
   transporter.use(
     'compile',
     nodemailerExpressHandlebars({
