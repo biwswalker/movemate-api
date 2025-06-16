@@ -212,7 +212,7 @@ export default class BillingResolver {
           const filePath = path.join(__dirname, '..', '..', 'generated/invoice', _document.filename)
 
           await addEmailQueue({
-            from: process.env.NOREPLY_EMAIL,
+            from: process.env.MAILGUN_SMTP_EMAIL,
             to: emails,
             subject: `[Auto Email] Movemate Thailand ใบแจ้งหนี้ค่าบริการ ${_billing.billingNumber}`,
             template: 'notify_invoice',
@@ -232,7 +232,7 @@ export default class BillingResolver {
           const businessContactNumber = get(_customer, 'businessDetail.contactNumber', '')
 
           await addEmailQueue({
-            from: process.env.NOREPLY_EMAIL,
+            from: process.env.MAILGUN_SMTP_EMAIL,
             to: emails,
             subject: `ใบเสร็จรับเงิน Movemate Thailand`,
             template: 'notify_receipt',

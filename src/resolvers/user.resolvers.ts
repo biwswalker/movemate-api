@@ -608,7 +608,7 @@ export default class UserResolver {
             })
             const movemate_link = `https://www.movematethailand.com`
             await addEmailQueue({
-              from: process.env.NOREPLY_EMAIL,
+              from: process.env.MAILGUN_SMTP_EMAIL,
               to: businesData.businessEmail,
               subject: 'บัญชี Movemate ของท่านได้รับการอนุมัติ',
               template: 'register_business_upgrade',
@@ -635,7 +635,7 @@ export default class UserResolver {
             const activate_link = `${host}/api/v1/activate/customer/${userNumberToken}`
             const movemate_link = `https://www.movematethailand.com`
             await addEmailQueue({
-              from: process.env.NOREPLY_EMAIL,
+              from: process.env.MAILGUN_SMTP_EMAIL,
               to: businesData.businessEmail,
               subject: 'บัญชี Movemate ของท่านได้รับการอนุมัติ',
               template: 'register_business',
@@ -670,7 +670,7 @@ export default class UserResolver {
             ...newBusinessDetail,
           })
           await addEmailQueue({
-            from: process.env.NOREPLY_EMAIL,
+            from: process.env.MAILGUN_SMTP_EMAIL,
             to: sentemail,
             subject: 'บัญชี Movemate ของท่านไม่ได้รับการอนุมัติ',
             template: 'register_rejected_account',
@@ -1036,7 +1036,7 @@ export default class UserResolver {
           await UserModel.findByIdAndUpdate(user._id, { resetPasswordCode: code, lastestResetPassword: reset_time })
           const movemate_link = `https://www.movematethailand.com`
           await addEmailQueue({
-            from: process.env.NOREPLY_EMAIL,
+            from: process.env.MAILGUN_SMTP_EMAIL,
             to: email,
             subject: 'ยืนยันตัวตนคุณ',
             template: 'forgot_password',
@@ -1129,7 +1129,7 @@ export default class UserResolver {
           // Email sender
           const movemate_link = `https://www.movematethailand.com`
           await addEmailQueue({
-            from: process.env.NOREPLY_EMAIL,
+            from: process.env.MAILGUN_SMTP_EMAIL,
             to: email,
             subject: 'เปลี่ยนรหัสผ่านบัญชีสำเร็จ',
             template: 'passwordchanged',

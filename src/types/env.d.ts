@@ -6,10 +6,11 @@ declare namespace NodeJS {
     MOVEMATE_SHARED_KEY: string
     DATABASE_URL: string
     DATABASE_NAME: string
-    NOREPLY_SECURE: 'true' | 'false'
-    NOREPLY_PORT: string
-    NOREPLY_EMAIL: string
-    NOREPLY_SECRET: string
+    MAILGUN_SMTP_HOST: string
+    MAILGUN_SMTP_EMAIL: string
+    MAILGUN_SMTP_PASSWORD: string
+    MAILGUN_APIKEY: string
+    MAILGUN_DOMAIN: string
     GOOGLE_MAP_API_KEY: string
     GOOGLE_SERVICE_ID: string
     GOOGLE_CLIENT_ID: string

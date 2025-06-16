@@ -66,7 +66,7 @@ export default class VerifyAccountResolver {
       }
 
       await addEmailQueue({
-        from: process.env.NOREPLY_EMAIL,
+        from: process.env.MAILGUN_SMTP_EMAIL,
         to: email,
         subject: 'ยืนยันอีเมล Movemate!',
         template: 'confirm_email',

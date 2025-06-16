@@ -45,7 +45,7 @@ export async function generateBillingReceipt(billingId: string, sentEmail?: bool
       const _customerTypeText = _customer.userType === EUserType.INDIVIDUAL ? 'ส่วนบุคคล' : 'บริษัท/องค์กร'
       if (isTaxIncluded) {
         await addEmailQueue({
-          from: process.env.NOREPLY_EMAIL,
+          from: process.env.MAILGUN_SMTP_EMAIL,
           to: emails,
           subject: `ขอบคุณที่ใช้บริการ Movemate Thailand | Shipment No. ${shipment.trackingNumber}`,
           template: 'cash_wht_receipt',
@@ -65,7 +65,7 @@ export async function generateBillingReceipt(billingId: string, sentEmail?: bool
         })
       } else {
         await addEmailQueue({
-          from: process.env.NOREPLY_EMAIL,
+          from: process.env.MAILGUN_SMTP_EMAIL,
           to: emails,
           subject: `ใบเสร็จรับเงิน Movemate Thailand | Shipment No. ${shipment.trackingNumber}`,
           template: 'cash_receipt',

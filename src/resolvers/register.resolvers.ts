@@ -221,7 +221,7 @@ export default class RegisterResolver {
         const movemate_link = `https://www.movematethailand.com`
         // Email sender
         await addEmailQueue({
-          from: process.env.NOREPLY_EMAIL,
+          from: process.env.MAILGUN_SMTP_EMAIL,
           to: individualDetail.email,
           subject: 'ยืนยันการสมัครสมาชิก Movemate!',
           template: 'register_individual',
@@ -284,7 +284,7 @@ export default class RegisterResolver {
 
           // Email sender
           await addEmailQueue({
-            from: process.env.NOREPLY_EMAIL,
+            from: process.env.MAILGUN_SMTP_EMAIL,
             to: businessDetail.businessEmail,
             subject: 'การลงทะเบียนรอการอนุมัติ',
             template: 'register_business_waiting_approve',
@@ -416,7 +416,7 @@ export default class RegisterResolver {
 
           // Email sender
           await addEmailQueue({
-            from: process.env.NOREPLY_EMAIL,
+            from: process.env.MAILGUN_SMTP_EMAIL,
             to: businessDetail.businessEmail,
             subject: 'การลงทะเบียนรอการอนุมัติ',
             template: 'register_business_waiting_approve',
@@ -487,7 +487,7 @@ export default class RegisterResolver {
       const movemate_link = `https://www.movematethailand.com`
       // Email sender
       await addEmailQueue({
-        from: process.env.NOREPLY_EMAIL,
+        from: process.env.MAILGUN_SMTP_EMAIL,
         to: email,
         subject: 'ยืนยันการสมัครสมาชิก Movemate!',
         template: 'register_individual_withpassword',
@@ -615,7 +615,7 @@ export default class RegisterResolver {
       const movemate_link = `https://www.movematethailand.com`
       // Email sender
       await addEmailQueue({
-        from: process.env.NOREPLY_EMAIL,
+        from: process.env.MAILGUN_SMTP_EMAIL,
         to: customer.businessEmail,
         subject: 'ยืนยันการสมัครสมาชิก Movemate!',
         template: 'register_business',

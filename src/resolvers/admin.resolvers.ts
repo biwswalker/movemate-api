@@ -73,7 +73,7 @@ export default class AdminResolver {
       const movemate_link = `https://www.movematethailand.com`
       // Email sender
       await addEmailQueue({
-        from: process.env.NOREPLY_EMAIL,
+        from: process.env.MAILGUN_SMTP_EMAIL,
         to: email,
         subject: 'ยืนยันการเข้าร่วม Movemate!',
         template: 'register_admin',

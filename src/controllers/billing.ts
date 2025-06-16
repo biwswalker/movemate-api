@@ -284,7 +284,7 @@ export async function emailIssueBillingToCustomer(session?: ClientSession) {
       const year_text = toString(year_number + 543)
       const invoice = await generateInvoice(billing, undefined, session)
       await addEmailQueue({
-        from: process.env.NOREPLY_EMAIL,
+        from: process.env.MAILGUN_SMTP_EMAIL,
         to: emails,
         subject: `[Auto Email] Movemate Thailand ใบแจ้งหนี้ค่าบริการ ${billing.billingNumber}`,
         template: 'notify_invoice',

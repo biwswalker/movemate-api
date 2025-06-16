@@ -176,7 +176,7 @@ export default class AuthResolver {
         const movemate_link = `https://www.movematethailand.com`
 
         await addEmailQueue({
-          from: process.env.NOREPLY_EMAIL,
+          from: process.env.MAILGUN_SMTP_EMAIL,
           to: email,
           subject: 'เปลี่ยนรหัสผ่านบัญชีสำเร็จ',
           template: 'passwordchanged',

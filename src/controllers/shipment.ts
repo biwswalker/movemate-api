@@ -356,7 +356,7 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
   )
 
   await addEmailQueue({
-    from: process.env.NOREPLY_EMAIL,
+    from: process.env.MAILGUN_SMTP_EMAIL,
     to: email,
     subject: 'Movemate Thailand ได้รับการจองรถของคุณแล้ว',
     template: isCreditPaymentMethod ? 'booking_credit_success' : 'booking_cash_success',

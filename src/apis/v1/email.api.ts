@@ -6,7 +6,7 @@ const email_api = Router()
 email_api.get('/sample', async (req, res) => {
   const email_to = (req.query.to as string) || 'jennarong.sae@gmail.com'
   await addEmailQueue({
-    from: process.env.NOREPLY_EMAIL,
+    from: process.env.MAILGUN_SMTP_EMAIL,
     to: email_to,
     subject: 'Testiing email',
     template: 'simple',

@@ -4,23 +4,19 @@ import { format } from 'date-fns'
 import { TransportOptions, createTransport } from 'nodemailer'
 import nodemailerExpressHandlebars, { HbsTransporter, TemplateOptions } from 'nodemailer-express-handlebars'
 import Mail from 'nodemailer/lib/mailer'
+import mgTransporter from 'nodemailer-mailgun-transport'
 import { join } from 'path'
 
 function email_sender() {
-  const transporter = createTransport<HbsTransporter>({
-    host: 'smtpout.secureserver.net',
-    port: process.env.NOREPLY_PORT ? parseInt(process.env.NOREPLY_PORT) : 587,
+
+  const mailOptions = {
     auth: {
-      user: process.env.NOREPLY_EMAIL,
-      pass: process.env.NOREPLY_SECRET,
+      api_key: process.env.MAILGUN_APIKEY,
+      domain: process.env.MAILGUN_DOMAIN,
     },
-    secure: true,
-    debug: true,
-    logger: true,
-    requireTLS: true,
-    secureConnection: false,
-    tls: { ciphers: 'SSLv3' },
-  } as TransportOptions) as HbsTransporter
+  }
+
+  const transporter = createTransport(mgTransporter(mailOptions) as TransportOptions) as HbsTransporter
 
   transporter.use(
     'compile',
