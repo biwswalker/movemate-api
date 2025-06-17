@@ -426,12 +426,7 @@ export default class MatchingResolver {
   @UseMiddleware(AuthGuard([EUserRole.DRIVER, EUserRole.ADMIN]), RetryTransactionMiddleware)
   async markAsFinish(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
     const session = ctx.session
-    const driverId = ctx.req.user_id
 
-    if (!driverId) {
-      const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
-      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
-    }
     const shipment = await ShipmentModel.findById(shipmentId)
     if (!shipment) {
       const message = 'ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
@@ -470,7 +465,8 @@ export default class MatchingResolver {
         await ReceiptModel.findByIdAndUpdate(_receipt._id, { document: documentId })
       }
     }
-    await UserModel.findByIdAndUpdate(driverId, { drivingStatus: EDriverStatus.IDLE }, { session })
+    
+    await UserModel.findByIdAndUpdate(shipment.driver, { drivingStatus: EDriverStatus.IDLE }, { session })
     return true
   }
 
