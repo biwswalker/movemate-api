@@ -1,9 +1,9 @@
 import { Field, ID, ObjectType } from 'type-graphql'
 import { prop as Property, getModelForClass, plugin } from '@typegoose/typegoose'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
-import mongoosePagination from 'mongoose-paginate-v2'
+import mongooseAutoPopulate from 'mongoose-autopopulate'
 
-@plugin(mongoosePagination)
+@plugin(mongooseAutoPopulate)
 @ObjectType()
 export class Contact extends TimeStamps {
   @Field(() => ID)

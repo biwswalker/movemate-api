@@ -10,6 +10,7 @@ import SearchHistoryModel, { SearchHistory } from '@models/searchHistory.model'
 import UserModel from '@models/user.model'
 import VehicleTypeModel from '@models/vehicleType.model'
 import { SearchHistoryPaginationPayload } from '@payloads/search.payloads'
+import { userPipelineStage } from '@pipelines/user.pipeline'
 import { reformPaginate } from '@utils/pagination.utils'
 import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
@@ -32,17 +33,6 @@ export default class SearchHistoryResolver {
   ): Promise<SearchHistoryPaginationPayload> {
     // Pagination
     const pagination: PaginateOptions = reformPaginate(paginate)
-
-    const matchingIndividuals = search
-      ? await IndividualCustomerModel.find(
-          { $or: [{ firstname: { $regex: search, $options: 'i' } }, { lastname: { $regex: search, $options: 'i' } }] },
-          '_id',
-        )
-      : []
-    const matchingBusinesses = search
-      ? await BusinessCustomerModel.find({ businessName: { $regex: search, $options: 'i' } }, '_id')
-      : []
-
     const startOfSearch = startDate ? new Date(new Date(startDate).setHours(0, 0, 0, 0)) : null
     const endOfSearch = endDate ? new Date(new Date(endDate).setHours(23, 59, 59, 999)) : null
 
@@ -52,19 +42,9 @@ export default class SearchHistoryResolver {
         ? {
             $or: [
               { ipaddress: { $regex: search, $options: 'i' } }, // Search in ipaddress
-              {
-                user: {
-                  $in: await UserModel.find(
-                    {
-                      $or: [
-                        { individualDetail: { $in: matchingIndividuals } }, // Check if user has a matching individualDetail
-                        { businessDetail: { $in: matchingBusinesses } }, // Check if user has a matching businessDetail
-                      ],
-                    },
-                    '_id',
-                  ),
-                },
-              },
+              { 'user.individualDetail.firstname': { $regex: search, $options: 'i' } },
+              { 'user.individualDetail.lastname': { $regex: search, $options: 'i' } },
+              { 'user.businessDetail.businessName': { $regex: search, $options: 'i' } },
             ],
           }
         : {}),
@@ -75,10 +55,20 @@ export default class SearchHistoryResolver {
               ...(endOfSearch ? { $lte: endOfSearch } : {}),
             },
           }
-        : {}),
+        : {})
     }
 
-    const searchHistory = (await SearchHistoryModel.paginate(filterQuery, pagination)) as SearchHistoryPaginationPayload
+    // Build aggregation pipeline for uniqueness before pagination
+    const pipeline = [
+      ...userPipelineStage('user'),
+      { $group: { _id: { type: '$type', count: '$count', inputRaw: '$inputRaw', ipaddress: '$ipaddress' }, firstDoc: { $first: '$$ROOT' } } },
+      { $replaceRoot: { newRoot: '$firstDoc' } },
+      { $match: filterQuery },
+    ];
+
+    // Use aggregatePaginate with the pipeline
+    const aggregate = SearchHistoryModel.aggregate(pipeline)
+    const searchHistory = (await SearchHistoryModel.aggregatePaginate(aggregate, pagination)) as SearchHistoryPaginationPayload
     if (!searchHistory) {
       const message = `ไม่สามารถเรียกข้อมูลส่วนลดได้`
       throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })

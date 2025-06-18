@@ -125,6 +125,7 @@ export default class BookingResolver {
       const searchHistory = new SearchHistoryModel({
         ipaddress: ip,
         isCache: false,
+        user: customerId,
         inputRaw: JSON.stringify(data),
         resultRaw: JSON.stringify(result),
         limit: ctx.req.limit,
