@@ -18,7 +18,7 @@ export class SettingBusinessType extends TimeStamps {
   readonly _id: string
 
   @Field()
-  @Property({ unique: true })
+  @Property()
   name: string
 
   @Field()
