@@ -22,7 +22,8 @@ import { EPaymentMethod } from '@enums/payments'
 import { EUpdateUserStatus, EUserRole } from '@enums/users'
 import UserPendingModel, { UserPending } from '@models/userPending.model'
 import { GET_PENDING_USERS } from '@pipelines/userPending.pipeline'
-import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
+import { WithTransaction } from '@middlewares/RetryTransaction'
+import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 
 @Resolver(UserPending)
 export default class UserPendingResolver {
@@ -73,7 +74,8 @@ export default class UserPendingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]), RetryTransactionMiddleware)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   async updateCustomerRequest(
     @Arg('id') id: string,
     @Arg('data') data: CutomerBusinessInput,
@@ -101,6 +103,24 @@ export default class UserPendingResolver {
             },
           })
         }
+
+        const existingPendingRequest = await UserPendingModel.findOne({
+          userNumber: userModel.userNumber,
+          approvalBy: null,
+          status: EUpdateUserStatus.PENDING,
+        }).session(session)
+
+        if (existingPendingRequest) {
+          const message = 'มีคำขอแก้ไขข้อมูลที่รอการอนุมัติอยู่แล้ว'
+          throw new GraphQLError(message, {
+            extensions: {
+              code: 'NOT_FOUND',
+              errors: [{ message }],
+            },
+          })
+        }
+
+        // TODO: If no change force return
 
         const customerBusinesslModel = await BusinessCustomerModel.findById(userModel.businessDetail).session(session)
         if (!customerBusinesslModel) {
@@ -190,7 +210,7 @@ export default class UserPendingResolver {
           ...customerBusinesslModel,
           ...formValue,
           businessEmail,
-          creditPayment: _creditInfo._id || '',
+          ...(_creditInfo ? { creditPayment: _creditInfo?._id || '' } : {}),
         }
 
         const _userPending = new UserPendingModel({
@@ -219,6 +239,88 @@ export default class UserPendingResolver {
         throw yupValidationThrow(errors)
       }
       throw errors
+    }
+  }
+
+  @Query(() => UserPending)
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async getPendingUser(@Arg('id') id: string): Promise<UserPending> {
+    try {
+      const pendingUser = await UserPendingModel.findById(id)
+      if (!pendingUser) {
+        throw new GraphQLError('ไม่พบคำขอแก้ไขข้อมูล')
+      }
+      return pendingUser
+    } catch (error) {
+      throw new GraphQLError('ไม่สามารถเรียกข้อมูลคำขอแก้ไขได้ โปรดลองอีกครั้ง')
+    }
+  }
+
+  @Mutation(() => Boolean)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async processPendingUser(
+    @Arg('pendingId') pendingId: string,
+    @Arg('status', () => EUpdateUserStatus) status: EUpdateUserStatus,
+    @Ctx() ctx: GraphQLContext,
+  ): Promise<boolean> {
+    const session = ctx.session
+    const adminId = ctx.req.user_id
+
+    try {
+      const pendingRequest = await UserPendingModel.findById(pendingId).session(session)
+
+      if (!pendingRequest) {
+        throw new GraphQLError('ไม่พบคำขอแก้ไขข้อมูล')
+      }
+
+      if (pendingRequest.status !== EUpdateUserStatus.PENDING) {
+        throw new GraphQLError('คำขอนี้ได้รับการดำเนินการไปแล้ว')
+      }
+
+      if (status === EUpdateUserStatus.APPROVE) {
+        // Copy data from pending to actual user
+        await pendingRequest.copy()
+
+        // Update pending request status
+        pendingRequest.status = EUpdateUserStatus.APPROVE
+        pendingRequest.approvalBy = adminId as any // Cast because Ref<User>
+        await pendingRequest.save({ session })
+
+        // Send notification to user
+        await NotificationModel.sendNotification(
+          {
+            userId: pendingRequest.userId,
+            varient: ENotificationVarient.SUCCESS,
+            title: 'คำขอแก้ไขข้อมูลได้รับการอนุมัติ',
+            message: ['ข้อมูลของคุณได้รับการอัปเดตเรียบร้อยแล้ว'],
+          },
+          session,
+        )
+      } else if (status === EUpdateUserStatus.REJECT) {
+        // Update pending request status
+        pendingRequest.status = EUpdateUserStatus.REJECT
+        pendingRequest.approvalBy = adminId as any // Cast because Ref<User>
+        await pendingRequest.save({ session })
+
+        // Send notification to user
+        await NotificationModel.sendNotification(
+          {
+            userId: pendingRequest.userId,
+            varient: ENotificationVarient.ERROR,
+            title: 'คำขอแก้ไขข้อมูลถูกปฏิเสธ',
+            message: ['คำขอแก้ไขข้อมูลของคุณถูกปฏิเสธโดยผู้ดูแลระบบ'],
+          },
+          session,
+        )
+      } else {
+        throw new GraphQLError('สถานะการดำเนินการไม่ถูกต้อง')
+      }
+
+      return true
+    } catch (error) {
+      console.log('error: ', error)
+      throw error
     }
   }
 }

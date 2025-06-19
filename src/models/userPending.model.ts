@@ -8,6 +8,7 @@ import UserModel, { User } from './user.model'
 import { EPaymentMethod } from '@enums/payments'
 import BusinessCustomerCreditPaymentModel, {
   BusinessCustomerCreditPayment,
+  EDataStatus,
 } from './customerBusinessCreditPayment.model'
 import IndividualCustomerModel, { IndividualCustomer } from './customerIndividual.model'
 import BusinessCustomerModel, { BusinessCustomer } from './customerBusiness.model'
@@ -16,6 +17,7 @@ import DriverDetailModel, { DriverDetail } from './driverDetail.model'
 import { EDriverType, EUpdateUserStatus, EUserRole, EUserType } from '@enums/users'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
 import { find, get, includes } from 'lodash'
+import { ClientSession } from 'mongoose'
 
 @plugin(autopopulate)
 @plugin(mongoosePagination)
@@ -32,7 +34,7 @@ export class UserPending extends TimeStamps {
   @Field(() => ID)
   @Property({ required: true })
   userId: string
-  
+
   @Field()
   @Property({ required: true })
   userNumber: string
@@ -197,71 +199,84 @@ export class UserPending extends TimeStamps {
     return ''
   }
 
-  async copy(): Promise<boolean> {
-    /**
-     * TODO:
-     * Add approved admin user
-     */
+  async copy(session?: ClientSession): Promise<boolean> {
     const _userId = get(this, '_doc.userId', '') || this.userId
     const _profileImage = get(this, '_doc.profileImage', '') || this.profileImage
-    const userModel = await UserModel.findById(_userId).lean()
-    if (_profileImage) {
-      await UserModel.findByIdAndUpdate(userModel._id, { profileImage: _profileImage })
+    const _pendingData = get(this, '_doc') as UserPending
+
+    const user = await UserModel.findById(_userId).session(session)
+    if (!user) {
+      throw new Error(`ไม่พบผู้ใช้งาน ID: ${_userId} ระหว่างการอัปเดตข้อมูล`)
     }
-    if (userModel.userRole === EUserRole.CUSTOMER) {
-      if (userModel.userType === EUserType.INDIVIDUAL && userModel.individualDetail) {
-        const individualCustomerModel = await IndividualCustomerModel.findById(userModel.individualDetail).lean()
-        if (individualCustomerModel) {
-          const _individualDetail = get(this, '_doc.individualDetail', '') || this.individualDetail
-          await IndividualCustomerModel.findByIdAndUpdate(individualCustomerModel._id, _individualDetail)
-        }
-      } else if (userModel.userType === EUserType.BUSINESS) {
-        const businessCustomerModel = await BusinessCustomerModel.findById(userModel.businessDetail).lean()
-        if (businessCustomerModel) {
-          const _businessDetail = get(this, '_doc.businessDetail', '') || this.businessDetail
-          const { changePaymentMethodRequest, creditPayment, ...detail } = _businessDetail
-          let creditId = null
-          let cashId = null
-          if (detail.paymentMethod === EPaymentMethod.CREDIT) {
-            // Update Credit
-            if (businessCustomerModel.creditPayment) {
-              const creditModel = await BusinessCustomerCreditPaymentModel.findById(
-                businessCustomerModel.creditPayment,
-              ).lean()
-              await BusinessCustomerCreditPaymentModel.findByIdAndUpdate(
-                creditModel._id,
-                creditPayment as BusinessCustomerCreditPayment,
-              )
-            } else {
-              const newCreditModel = new BusinessCustomerCreditPaymentModel(creditPayment)
-              await newCreditModel.save()
-              creditId = newCreditModel._id
+
+    // 1. อัปเดตรูปโปรไฟล์ (ถ้ามี)
+    if (_profileImage) {
+      user.profileImage = _profileImage as any
+    }
+
+    // 2. อัปเดตข้อมูลตาม Role
+    if (user.userRole === EUserRole.CUSTOMER) {
+      if (user.userType === EUserType.BUSINESS && user.businessDetail) {
+        const mainBusinessCustomer = await BusinessCustomerModel.findById(user.businessDetail).session(session)
+
+        if (mainBusinessCustomer) {
+          const pendingBusinessData = _pendingData.businessDetail as BusinessCustomer
+          const {
+            creditPayment: pendingCreditPaymentId,
+            cashPayment: pendingCashPaymentId,
+            ...otherDetails
+          } = pendingBusinessData
+
+          // ตรรกะสำหรับอัปเดตข้อมูลการชำระเงิน
+          if (otherDetails.paymentMethod === EPaymentMethod.CREDIT && pendingCreditPaymentId) {
+            const draftCreditDoc = await BusinessCustomerCreditPaymentModel.findByIdAndUpdate(pendingCreditPaymentId, {
+              dataStatus: EDataStatus.ACTIVE,
+            }).session(session)
+            if (draftCreditDoc) {
+              // 1. เปิดใช้งานเอกสารเครดิตฉบับร่าง
+              // draftCreditDoc.dataStatus = EDataStatus.ACTIVE
+              // await draftCreditDoc.save({ session })
+
+              // 2. ลบข้อมูลเครดิตเก่า (ถ้ามี)
+              if (
+                mainBusinessCustomer.creditPayment &&
+                mainBusinessCustomer.creditPayment.toString() !== draftCreditDoc._id.toString()
+              ) {
+                await BusinessCustomerCreditPaymentModel.findByIdAndDelete(mainBusinessCustomer.creditPayment).session(
+                  session,
+                )
+              }
+              // 3. ผูกข้อมูลเครดิตใหม่กับลูกค้า
+              mainBusinessCustomer.creditPayment = draftCreditDoc._id as any
+              mainBusinessCustomer.cashPayment = undefined // ล้างข้อมูล cash ถ้าเปลี่ยนมาเป็น credit
             }
-          } else if (detail.paymentMethod === EPaymentMethod.CASH) {
-            // Update Cash
-            if (!businessCustomerModel.cashPayment) {
-              const newCashModel = new BusinessCustomerCashPaymentModel({ acceptedEReceiptDate: new Date() })
-              await newCashModel.save()
-              cashId = newCashModel._id
+          } else if (otherDetails.paymentMethod === EPaymentMethod.CASH) {
+            // ถ้าเปลี่ยนเป็นจ่ายเงินสด ให้ล้างข้อมูลเครดิตเก่า
+            if (mainBusinessCustomer.creditPayment) {
+              await BusinessCustomerCreditPaymentModel.findByIdAndDelete(mainBusinessCustomer.creditPayment).session(
+                session,
+              )
+              mainBusinessCustomer.creditPayment = undefined
             }
           }
-          await BusinessCustomerModel.findByIdAndUpdate(businessCustomerModel._id, {
-            ...detail,
-            changePaymentMethodRequest: false,
-            ...(creditId ? { creditPayment: creditId } : {}),
-            ...(cashId ? { cashPayment: cashId } : {}),
-          })
+
+          // 4. อัปเดตข้อมูลอื่นๆ ของ BusinessCustomer
+          Object.assign(mainBusinessCustomer, otherDetails)
+          await BusinessCustomerModel.findByIdAndUpdate(mainBusinessCustomer.id, mainBusinessCustomer, { session })
         }
+      } else if (user.userType === EUserType.INDIVIDUAL && user.individualDetail) {
+        const pendingIndividualData = _pendingData.individualDetail
+        await IndividualCustomerModel.findByIdAndUpdate(user.individualDetail, pendingIndividualData, { session })
       }
-    } else if (userModel.userRole === EUserRole.DRIVER) {
-      if (userModel.driverDetail) {
-        const driverDetail = await DriverDetailModel.findById(userModel.driverDetail).lean()
-        if (driverDetail) {
-          await DriverDetailModel.findByIdAndUpdate(driverDetail._id, this.driverDetail)
-        }
+    } else if (user.userRole === EUserRole.DRIVER) {
+      if (user.driverDetail) {
+        const pendingDriverData = _pendingData.driverDetail
+        await DriverDetailModel.findByIdAndUpdate(user.driverDetail, pendingDriverData, { session })
       }
     }
 
+    // บันทึกการเปลี่ยนแปลงใน User model
+    await user.save({ session })
     return true
   }
 }

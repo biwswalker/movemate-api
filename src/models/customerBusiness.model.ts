@@ -15,7 +15,7 @@ export class BusinessCustomer {
   @Field()
   @IsString()
   @IsNotEmpty()
-  @Property({ required: true, unique: true })
+  @Property({ required: true, unique: true, sparse: true })
   userNumber: string;
 
   @Field()
