@@ -23,7 +23,7 @@ import { sum } from 'lodash'
 import { Repeater } from '@graphql-yoga/subscription'
 import { EPaymentMethod } from '@enums/payments'
 import { EShipmentStatus } from '@enums/shipments'
-import { EUserRole, EUserStatus, EUserType } from '@enums/users'
+import { ERegistration, EUserRole, EUserStatus, EUserType } from '@enums/users'
 import TransactionModel from '@models/transaction.model'
 import { TRANSACTION_DRIVER_LIST } from '@pipelines/transaction.pipeline'
 import { EBillingStatus } from '@enums/billing'
@@ -84,8 +84,12 @@ export default class NotificationResolver {
   @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async notifications(@Ctx() ctx: GraphQLContext, @Args() loadmore: LoadmoreArgs) {
     const userId = ctx.req.user_id
+    const platform = ctx.req.headers['platform']
     if (userId) {
       const notifications = await NotificationModel.findByUserId(userId, loadmore)
+      if (platform === ERegistration.APP) {
+        await NotificationModel.updateMany({ _id: { $in: notifications.map((item) => item._id) } }, { read: true })
+      }
       return notifications
     }
     return []

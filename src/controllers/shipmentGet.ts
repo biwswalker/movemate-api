@@ -93,14 +93,9 @@ export async function getNewAllAvailableShipmentForDriverQuery(session: ClientSe
     driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
     ...(!isEmpty(vehicleIds) ? { vehicleId: { $in: vehicleIds } } : {}),
     $or: [
-      { requestedDriver: { $exists: false } }, // ไม่มี requestedDriver
-      { requestedDriver: null }, // requestedDriver เป็น null
-      ...(driverId
-        ? [
-            { requestedDriver: new Types.ObjectId(driverId) }, // requestedDriver ตรงกับ userId
-            { requestedDriver: { $ne: new Types.ObjectId(driverId) } }, // requestedDriver ไม่ตรงกับ userId
-          ]
-        : []),
+      { requestedDriver: { $exists: false } }, // 1. ไม่มี requestedDriver
+      { requestedDriver: null }, // 2. requestedDriver เป็น null
+      ...(driverId ? [{ requestedDriver: new Types.ObjectId(driverId) }] : []), // 3. requestedDriver ตรงกับ driverId
     ],
     ...(driverId && !isEmpty(ignoreShipments) ? { $nor: ignoreShipments } : {}),
   }

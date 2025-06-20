@@ -15,6 +15,7 @@ import { LocationInput } from '@inputs/location.input'
 import SearchHistoryModel, { SearchHistory } from '@models/searchHistory.model'
 import { GraphQLContext } from '@configs/graphQL.config'
 import { getLatestCount, ELimiterType } from '@configs/rateLimit'
+import { GraphQLError } from 'graphql'
 
 const instance = axios.create()
 
@@ -284,7 +285,51 @@ export async function getGeocode(ctx: GraphQLContext, latitude: number, longitud
     },
   })
 
-  const result = get(response, 'data.results.0', undefined) as google.maps.GeocoderResult | undefined
+  const results = get(response, 'data.results', []) as google.maps.GeocoderResult[] || []
+
+  if (results.length === 0) {
+    throw new GraphQLError('ไม่สามารถหาข้อมูลสถานที่จากพิกัดที่ระบุได้');
+  }
+
+  // 1. กำหนดลำดับความสำคัญของประเภทสถานที่ที่เราต้องการ
+  const addressTypePriority = [
+    'street_address', // ที่อยู่ที่แน่นอน
+    'premise',        // ชื่ออาคารหรือสถานที่
+    'subpremise',
+    'route',          // ชื่อถนน
+    'intersection',
+    'political',
+    'locality',       // เมือง
+    'sublocality',
+    'neighborhood',
+    'administrative_area_level_1', // จังหวัด
+    'postal_code',
+  ];
+
+  let bestResult: google.maps.GeocoderResult | undefined;
+  
+  // 2. วนลูปเพื่อหาผลลัพธ์ที่ดีที่สุดตามลำดับความสำคัญ
+  for (const type of addressTypePriority) {
+    const foundResult = results.find((r) => r.types.includes(type));
+    if (foundResult) {
+      bestResult = foundResult;
+      break; // เมื่อเจอผลลัพธ์ที่ดีที่สุดแล้วก็ออกจากลูป
+    }
+  }
+
+  // 3. ถ้าไม่เจอผลลัพธ์ที่ตรงกับลำดับความสำคัญเลย ให้ใช้ผลลัพธ์แรกเป็นค่าเริ่มต้น
+  if (!bestResult) {
+    bestResult = results[0];
+  }
+
+  const result = bestResult; // result คือผลลัพธ์ที่เราเลือกแล้ว
+
+  const placeId = result?.place_id;
+  
+  if (!placeId) {
+    throw new GraphQLError('ไม่สามารถหาข้อมูล placeId จากพิกัดที่ระบุได้');
+  }
+
   // const { place } = await getPlaceDetail(result?.place_id, session)
   // const { displayName, formattedAddress, location, id } = place
   // const marker = new MarkerModel({
@@ -301,7 +346,7 @@ export async function getGeocode(ctx: GraphQLContext, latitude: number, longitud
    * ดังนั้นจะต้องใช้ latitude, longitude แทน
    */
   const marker = new MarkerModel({
-    placeId: `${latitude},${longitude}`,
+    placeId: placeId,
     displayName: get(result, 'formatted_address', '') || '',
     formattedAddress: get(result, 'formatted_address', '') || '',
     latitude: latitude,
