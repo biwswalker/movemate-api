@@ -3,7 +3,6 @@ import {
   ShipmentPayload,
   shipmentNotifyQueue,
   ShipmentNotifyPayload,
-  askCustomerShipmentQueue,
   DeleteShipmentPayload,
 } from '@configs/jobQueue'
 import { EBillingReason, EBillingState, EBillingStatus } from '@enums/billing'
@@ -36,39 +35,58 @@ import Aigle from 'aigle'
 import { REPONSE_NAME } from 'constants/status'
 import { format } from 'date-fns'
 import { GraphQLError } from 'graphql'
-import lodash, { filter, find, get, head, isEmpty, isEqual, last, map, sortBy, sum, tail } from 'lodash'
+import lodash, { filter, find, get, head, includes, isEmpty, isEqual, last, map, sortBy, sum, tail } from 'lodash'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { decryption } from '@utils/encryption'
 import { th } from 'date-fns/locale'
 import { Message } from 'firebase-admin/messaging'
-import { DoneCallback, Job } from 'bull'
-import redis from '@configs/redis'
 import { getNewAllAvailableShipmentForDriver } from './shipmentGet'
+import DriverDetailModel from '@models/driverDetail.model'
+import { isDriverAvailableForShipment } from './driver'
 
 Aigle.mixin(lodash, {})
 
-export async function shipmentNotify(shipmentId: string, driverId: string) {
-  const LIMIT_3 = 3
-  const LIMIT_6 = 6
-  const LIMIT_12 = 12 // 0 - 110 min
-  const FIVEMIN = 5 * 60_000
-  const TENMIN = 10 * 60_000
+export async function shipmentNotify(shipmentId: string, requestedDriverId?: string) {
+  const shipment = await ShipmentModel.findById(shipmentId).lean()
+  if (!shipment) return
 
-  if (driverId) {
-    // TODO: Recheck when noti working logic
-    const driver = await UserModel.findOne({
-      _id: driverId,
-      userRole: EUserRole.DRIVER,
-      drivingStatus: EDriverStatus.IDLE,
-    }).lean()
-    if (driver) {
-      await shipmentNotifyQueue.add({ shipmentId, driverId, each: TENMIN, limit: LIMIT_3 })
+  // ตรวจสอบสถานะเบื้องต้น
+  console.log('Shipment driver accepted currnet status: ', shipment.driverAcceptanceStatus)
+  if (!includes([EDriverAcceptanceStatus.IDLE, EDriverAcceptanceStatus.PENDING], shipment.driverAcceptanceStatus)) {
+    console.log(`Shipment ${shipmentId} is already accepted or cancelled. No notification sent.`)
+    return
+  }
+
+  if (requestedDriverId) {
+    // กรณีที่ 2: เลือกคนขับคนโปรด
+    const favoriteDriver = await UserModel.findById(requestedDriverId).lean()
+
+    // ตรวจสอบว่าคนขับว่างหรือไม่
+    const isAvailable = await isDriverAvailableForShipment(requestedDriverId, shipment);
+
+    if (favoriteDriver && isAvailable) {
+      console.log(`[Notify] Starting FAVORITE_DRIVER stage for shipment ${shipmentId}`)
+      await shipmentNotifyQueue.add({
+        shipmentId,
+        driverId: requestedDriverId,
+        stage: 'FAVORITE_DRIVER',
+        iteration: 1,
+      })
       return
     }
+    // หากคนขับไม่ว่าง ให้แจ้งลูกค้า (อาจจะผ่าน notification อีกแบบ)
+    // แล้วอาจจะเริ่ม INITIAL_BROADCAST
+    // ...
   }
-  await shipmentNotifyQueue.add({ shipmentId, each: TENMIN, limit: LIMIT_12 })
-  await ShipmentModel.findByIdAndUpdate(shipmentId, { notificationCount: 1 })
-  return
+
+  // กรณีที่ 1: ไม่ได้เลือกคนขับคนโปรด (General Broadcast)
+  console.log(`[Notify] Starting INITIAL_BROADCAST stage for shipment ${shipmentId}`)
+  await ShipmentModel.findByIdAndUpdate(shipmentId, { notificationCount: 1 }) // ใช้ notificationCount เพื่อติดตาม stage
+  await shipmentNotifyQueue.add({
+    shipmentId,
+    stage: 'INITIAL_BROADCAST',
+    iteration: 1,
+  })
 }
 
 export const cancelShipmentIfNotInterested = async (
@@ -176,7 +194,7 @@ export const cancelShipmentIfNotInterested = async (
 
     await NotificationModel.sendNotification({
       userId: get(shipment, 'customer._id', ''),
-      varient: ENotificationVarient.WRANING,
+      varient: ENotificationVarient.ERROR,
       title: 'การจองของท่านถูกยกเลิกอัตโนมัติ',
       message: [
         `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${shipment.trackingNumber} ระบบทำการยกเลิกอัตโนมัติเนื่องจากเลยระยะเวลาที่กำหนด และจะดำเนินการคืนให้ท่านในไม่ช้า`,
@@ -241,7 +259,7 @@ export const cancelShipmentIfNotInterested = async (
 
       await NotificationModel.sendNotification({
         userId: get(shipment, 'customer._id', ''),
-        varient: ENotificationVarient.WRANING,
+        varient: ENotificationVarient.ERROR,
         title: 'การจองของท่านถูกยกเลิกอัตโนมัติ',
         message: [
           `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${shipment.trackingNumber} ระบบทำการยกเลิกอัตโนมัติเนื่องจากเลยระยะเวลาที่กำหนด`,
@@ -258,22 +276,28 @@ export const cancelShipmentIfNotInterested = async (
   console.log(`Shipment ${shipmentId} is cancelled.`)
 }
 
-export const pauseShipmentNotify = async (shipmentId: string): Promise<boolean> => {
-  const FIVTY_MIN = 15 * 60_000
+const CUSTOMER_IDLE_TIMEOUT = 30 * 60 * 1000 // 30 นาที
+
+// ฟังก์ชันสำหรับหยุดการแจ้งเตือนและถามลูกค้า
+export const pauseShipmentNotify = async (shipmentId: string, customerMessage: string): Promise<boolean> => {
   const shipment = await ShipmentModel.findById(shipmentId)
-  await shipment.updateOne({ isNotificationPause: true, driver: undefined })
+  if (!shipment || shipment.driverAcceptanceStatus !== EDriverAcceptanceStatus.PENDING) {
+    return false
+  }
+
+  await shipment.updateOne({ isNotificationPause: true })
+
   await NotificationModel.sendNotification({
     varient: ENotificationVarient.WRANING,
     permanent: true,
     userId: get(shipment, 'customer._id', ''),
-    title: 'การค้นหาคนขับได้หยุดชั่วคราว',
-    message: [
-      'ไม่มีพนักงานขนส่งรับงานหรือกำลังดำเนินการขนส่งงานอื่นๆในระบบอยู่',
-      'หากท่านจะใช้งานต่อโปรดดำเนินการในหน้า "ขนส่งของฉัน"',
-    ],
-    masterLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
+    title: 'การค้นหาคนขับหยุดชั่วคราว',
+    message: [customerMessage],
+    masterLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`, // หรือหน้าที่ลูกค้าสามารถกด "ค้นหาต่อ"
     masterText: 'จัดการขนส่ง',
   })
+
+  // ตั้งเวลา 30 นาทีเพื่อยกเลิกงานหากลูกค้าไม่ตอบสนอง
   await cancelShipmentQueue.add(
     {
       shipmentId,
@@ -281,7 +305,7 @@ export const pauseShipmentNotify = async (shipmentId: string): Promise<boolean> 
       message: 'ระบบทำการยกเลิกอัตโนมัติเนื่องจากไม่มีการกดดำเนินการในระยะเวลาที่กำหนด',
       reason: EShipmentCancellationReason.OTHER,
     },
-    { delay: FIVTY_MIN },
+    { delay: CUSTOMER_IDLE_TIMEOUT },
   )
 
   return true
@@ -292,177 +316,92 @@ export const checkShipmentStatus = async (shipmentId: string): Promise<boolean> 
   return shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING
 }
 
-export const sendNewShipmentNotification = async (
-  shipmentId: string,
-  requestDriverId: string,
-): Promise<{ notify: boolean; driver: boolean }> => {
-  const shipment = await ShipmentModel.findById(shipmentId)
+export const sendNewShipmentNotification = async (shipmentId: string, requestDriverId?: string): Promise<void> => {
+  const shipment = await ShipmentModel.findById(shipmentId).populate('vehicleId').lean()
+
   if (!shipment) {
-    return { notify: false, driver: false }
+    console.error(`[FCM] Shipment ${shipmentId} not found.`)
+    return
   }
 
-  if (shipment?.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING) {
-    const currentTime = new Date().getTime()
-    const createdTime = new Date(shipment.createdAt).getTime()
+  // Logic การสร้างข้อความยังคงเดิม
+  const dateText = format(shipment.bookingDateTime, 'dd MMM HH:mm', { locale: th })
+  const vehicleText = get(shipment, 'vehicleId.name', '')
+  const pickup = head(shipment.destinations)
+  const pickupText = pickup.name
+  const dropoffs = tail(shipment.destinations)
+  const firstDropoff = head(dropoffs)
+  const dropoffsText = `${firstDropoff.name}${dropoffs.length > 1 ? ` และอีก ${dropoffs.length - 1} จุด` : ''}`
+  const messageBody = `🚛 งานใหม่! ${dateText} ${vehicleText} 📦 ${pickupText} 📍 ${dropoffsText}`
 
-    // ถ้าผ่านไป 240 นาทีแล้วยังไม่มี driver รับงาน
-    const coutingdownTime = currentTime - createdTime
-    const LIMITIME = 190 * 60 * 1000
-    if (coutingdownTime < LIMITIME) {
-      // ส่ง FCM Notification
-      if (requestDriverId) {
-        // TODO: Recheck when noti working logic
-        const driver = await UserModel.findOne({
-          _id: shipment.requestedDriver,
-          userRole: EUserRole.DRIVER,
-          drivingStatus: EDriverStatus.IDLE,
-        })
-        if (
-          driver &&
-          driver.status === EUserStatus.ACTIVE &&
-          driver.drivingStatus === EDriverStatus.IDLE &&
-          driver.validationStatus === EUserValidationStatus.APPROVE
-        ) {
-          if (driver.fcmToken) {
-            const token = decryption(driver.fcmToken)
-            const dateText = format(shipment.bookingDateTime, 'dd MMM HH:mm', { locale: th })
-            const vehicleText = get(shipment, 'vehicleId.name', '')
-            const pickup = head(shipment.destinations)
-            const pickupText = pickup.name
-            const dropoffs = tail(shipment.destinations)
-            const firstDropoff = head(dropoffs)
-            const dropoffsText = `${firstDropoff.name}${dropoffs.length > 1 ? `และอีก ${dropoffs.length - 1} จุด` : ''}`
-            const message = `🚛 งานใหม่! ${dateText} ${vehicleText} 📦 ${pickupText} 📍 ${dropoffsText}`
-            await NotificationModel.sendFCMNotification({
-              token,
-              data: {
-                navigation: ENavigationType.SHIPMENT,
-                trackingNumber: shipment.trackingNumber,
-              },
-              notification: { title: NOTIFICATION_TITLE, body: message },
-            })
-            return { notify: true, driver: true }
-          }
-        } else {
-          await shipment.updateOne({ isNotificationPause: true })
-          await NotificationModel.sendNotification({
-            varient: ENotificationVarient.WRANING,
-            permanent: true,
-            userId: get(shipment, 'customer._id', ''),
-            title: 'การค้นหาคนขับได้หยุดชั่วคราว',
-            message: [
-              'พนักงานขนส่งคนโปรด กำลังดำเนินการขนส่งงานอื่นๆในระบบอยู่',
-              'หากท่านจะใช้งานต่อโปรดดำเนินการในหน้า "ขนส่งของฉัน"',
-            ],
-            masterLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
-            masterText: 'จัดการขนส่ง',
-          })
-          await cancelShipmentQueue.add(
-            {
-              shipmentId,
-              type: 'idle_customer',
-              message: 'ระบบทำการยกเลิกอัตโนมัติเนื่องจากไม่มีการกดดำเนินการในระยะเวลาที่กำหนด',
-              reason: EShipmentCancellationReason.OTHER,
-            },
-            { delay: 15 * 60_000 },
-          )
-          return { notify: false, driver: false }
-        }
-      } else {
-        // Other drivers
-        const drivers = await UserModel.find({ userRole: EUserRole.DRIVER, drivingStatus: EDriverStatus.IDLE })
-        const messages = map<User, Message>(
-          filter(drivers, ({ fcmToken }) => !isEmpty(fcmToken)),
-          (driver) => {
-            if (
-              driver &&
-              driver.fcmToken &&
-              driver.status === EUserStatus.ACTIVE &&
-              driver.drivingStatus === EDriverStatus.IDLE &&
-              driver.validationStatus === EUserValidationStatus.APPROVE
-            ) {
-              const token = decryption(driver.fcmToken)
-              const dateText = format(shipment.bookingDateTime, 'dd MMM HH:mm', { locale: th })
-              const vehicleText = get(shipment, 'vehicleId.name', '')
-              const pickup = head(shipment.destinations)
-              const pickupText = pickup.name
-              const dropoffs = tail(shipment.destinations)
-              const firstDropoff = head(dropoffs)
-              const dropoffsText = `${firstDropoff.name}${
-                dropoffs.length > 1 ? ` และอีก ${dropoffs.length - 1} จุด` : ''
-              }`
-              const message = `🚛 งานใหม่! ${dateText} ${vehicleText} 📦 ${pickupText} 📍 ${dropoffsText}`
-              return {
-                token,
-                data: {
-                  navigation: ENavigationType.SHIPMENT,
-                  trackingNumber: shipment.trackingNumber,
-                },
-                notification: { title: NOTIFICATION_TITLE, body: message },
-              }
-            }
-            return
-          },
-        )
-        if (!isEmpty(messages)) {
-          await NotificationModel.sendFCMNotification(messages)
-        }
-        return { notify: true, driver: false }
-      }
-    }
+  const fcmPayload = {
+    data: {
+      navigation: ENavigationType.SHIPMENT,
+      trackingNumber: shipment.trackingNumber,
+    },
+    notification: { title: NOTIFICATION_TITLE, body: messageBody },
   }
 
-  return { notify: false, driver: false }
-}
+  // ส่ง FCM Notification
+  if (requestDriverId) {
+    // กรณีเจาะจงคนขับคนโปรด
+    const driver = await UserModel.findOne({
+      _id: requestDriverId,
+      userRole: EUserRole.DRIVER,
+      status: EUserStatus.ACTIVE,
+      drivingStatus: EDriverStatus.IDLE,
+      validationStatus: EUserValidationStatus.APPROVE,
+    }).lean()
 
-shipmentNotifyQueue.process(async (job: Job<ShipmentNotifyPayload>, done: DoneCallback) => {
-  const { shipmentId, driverId, each, limit } = job.data
-  console.log('Shipment Notify queue: ', format(new Date(), 'HH:mm:ss'), job.data)
-  const redisKey = `shipment:${shipmentId}`
-  const newCount = await redis.incr(redisKey)
-  if (newCount < limit) {
-    const { notify, driver } = await sendNewShipmentNotification(shipmentId, driverId)
-    if (notify) {
-      await shipmentNotifyQueue.add({ shipmentId, ...(driver ? { driverId } : {}), limit, each }, { delay: each })
+    if (driver && driver.fcmToken) {
+      const token = decryption(driver.fcmToken)
+      console.log(`[FCM] Sending to favorite driver ${driver.userNumber} for shipment ${shipment.trackingNumber}`)
+      await NotificationModel.sendFCMNotification({ ...fcmPayload, token })
     } else {
-      // Stop notify to customer now
-      redis.set(redisKey, 0)
-    }
-    return done()
-  } else if (newCount === limit) {
-    // It Lastest trigger
-    const shipmentModel = await ShipmentModel.findById(shipmentId)
-    if (shipmentModel.notificationCount > 1) {
-      // Cancelled this shipment
-      console.log('Shipment Notify queue: Cancelled Shipment')
-      await cancelShipmentQueue.add({ shipmentId }, { delay: each })
-    }
-    // Notifi to Customer for ask continue matching
-    console.log('Shipment Notify queue: Ask Customer to Continue')
-    await askCustomerShipmentQueue.add({ shipmentId }, { delay: each })
-  }
-  redis.set(redisKey, 0)
-  return done()
-})
-
-askCustomerShipmentQueue.process(async (job: Job<ShipmentPayload>, done: DoneCallback) => {
-  const { shipmentId } = job.data
-  console.log('askCustomerShipmentQueue: ', format(new Date(), 'HH:mm:ss'), job.data)
-  await pauseShipmentNotify(shipmentId)
-  done()
-})
-
-cancelShipmentQueue.process(async (job: Job<DeleteShipmentPayload>, done: DoneCallback) => {
-  console.log('cancelShipmentQueue: ', format(new Date(), 'HH:mm:ss'), job.data)
-  const { shipmentId, type = 'uninterest', message, reason } = job.data
-  if (type === 'idle_customer') {
-    const shipment = await ShipmentModel.findById(shipmentId).lean()
-    if (shipment.isNotificationPause) {
-      await cancelShipmentIfNotInterested(shipmentId, message, reason)
+      console.log(`[FCM] Favorite driver ${requestDriverId} not available or no FCM token.`)
     }
   } else {
-    console.log('cancelShipmentQueue: ', format(new Date(), 'HH:mm:ss'), job.data)
-    await cancelShipmentIfNotInterested(shipmentId)
+    // 1. ดึง ID ของประเภทรถจากงาน (Shipment)
+    const vehicleTypeId = get(shipment, 'vehicleId._id')
+    if (!vehicleTypeId) {
+      console.error(`[FCM] Cannot find vehicleTypeId for shipment ${shipment.trackingNumber}`)
+      return
+    }
+
+    // 2. ค้นหา DriverDetail IDs ทั้งหมดที่ให้บริการรถประเภทนี้
+    const matchingDriverDetails = await DriverDetailModel.find({
+      serviceVehicleTypes: vehicleTypeId,
+    })
+      .select('_id')
+      .lean()
+
+
+    const matchingDriverDetailIds = matchingDriverDetails.map((d) => d._id)
+
+    if (isEmpty(matchingDriverDetailIds)) {
+      console.log(`[FCM] No drivers found for vehicle type ${vehicleTypeId}`)
+      return
+    }
+
+    // 3. ค้นหา User (คนขับ) ที่พร้อมใช้งานและมี driverDetail ตรงกับที่เราหามา
+    const availableDrivers = await UserModel.find({
+      userRole: EUserRole.DRIVER,
+      status: EUserStatus.ACTIVE,
+      // drivingStatus: EDriverStatus.IDLE,
+      validationStatus: EUserValidationStatus.APPROVE,
+      fcmToken: { $exists: true, $nin: [null, ''] }, // กรองคนที่มี Token เท่านั้น
+      driverDetail: { $in: matchingDriverDetailIds },
+    }).lean()
+
+    // 4. สร้าง FCM messages จากรายชื่อคนขับที่ถูกต้อง
+    const messages: Message[] = availableDrivers.map((driver) => {
+      const token = decryption(driver.fcmToken)
+      return { ...fcmPayload, token }
+    })
+
+    if (!isEmpty(messages)) {
+      console.log(`[FCM] Broadcasting to ${messages.length} drivers for shipment ${shipment.trackingNumber}`)
+      await NotificationModel.sendFCMNotification(messages)
+    }
   }
-  done()
-})
+}

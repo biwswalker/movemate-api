@@ -361,55 +361,44 @@ export default class ShipmentResolver {
   @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   async continueMatchingShipment(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
     const user_id = ctx.req.user_id
-    if (user_id) {
-      const shipmentModel = await ShipmentModel.findOne({ _id: shipmentId, customer: user_id })
-      if (!shipmentModel) {
-        const message = 'ไม่สามารถหาข้อมูลงานขนส่ง เนื่องจากไม่พบงานขนส่งดังกล่าว'
-        throw new GraphQLError(message, {
-          extensions: { code: 'NOT_FOUND', errors: [{ message }] },
-        })
-      }
+    const shipment = await ShipmentModel.findOne({ _id: shipmentId, customer: user_id })
 
-      if (shipmentModel.status !== EShipmentStatus.IDLE) {
-        const message = 'ไม่สามารถดำเนินการค้นหาพนักงานขนส่งต่อได้ เนื่องจากสถานะงานขนส่งถูกเปลี่ยนแล้ว'
-        throw new GraphQLError(message, {
-          extensions: { code: REPONSE_NAME.SHIPMENT_CHANGED_STATUS, errors: [{ message }] },
-        })
-      }
+    if (!shipment || !shipment.isNotificationPause) {
+      throw new GraphQLError('ไม่สามารถดำเนินการต่อได้ในขณะนี้')
+    }
 
-      if (shipmentModel.driverAcceptanceStatus !== EDriverAcceptanceStatus.PENDING) {
-        const message = 'ไม่สามารถดำเนินการค้นหาพนักงานขนส่งต่อได้ เนื่องจากสถานะการรับงานขนส่งถูกเปลี่ยนแล้ว'
-        throw new GraphQLError(message, {
-          extensions: { code: REPONSE_NAME.SHIPMENT_CHANGED_STATUS, errors: [{ message }] },
-        })
-      }
+    const currentNotificationCount = shipment.notificationCount || 0
 
-      // TODO: Validate period of time
-
-      const LIMIT_6 = 6
-      const LIMIT_12 = 12
-      const FIVEMIN = 5 * 60_000
-      const TENMIN = 10 * 60_000
-
-      const notificationCount = shipmentModel.notificationCount || 0
-      const queueTimes =
-        notificationCount === 0
-          ? { each: TENMIN, limit: LIMIT_12 }
-          : notificationCount === 1
-          ? { each: FIVEMIN, limit: LIMIT_6 }
-          : {}
-
-      if (!queueTimes) {
-        const message = 'ไม่สามารถดำเนินการค้นหาพนักงานขนส่งต่อได้ เนื่องจากช่วงเวลาการเตรียมงานไม่พอ'
-        throw new GraphQLError(message, {
-          extensions: { code: REPONSE_NAME.SHIPMENT_CHANGED_STATUS, errors: [{ message }] },
-        })
-      }
-      await shipmentNotifyQueue.add({ shipmentId, each: queueTimes.each, limit: queueTimes.limit })
-      await shipmentModel.updateOne({ notificationCount: notificationCount + 1, isNotificationPause: false })
-
+    // หากเป็นการค้นหาครั้งที่ 2 (หลังจาก favorite driver ไม่ตอบรับ หรือ general broadcast รอบแรกหมด)
+    if (currentNotificationCount === 1) {
+      await shipment.updateOne({
+        isNotificationPause: false,
+        notificationCount: 2, // อัปเดต stage
+      })
+      await shipmentNotifyQueue.add({
+        shipmentId,
+        stage: 'SECOND_BROADCAST',
+        iteration: 1,
+      })
       return true
     }
+
+    // ในกรณีอื่นๆ อาจต้องมี logic เพิ่มเติม
+    // เช่น ถ้า favorite driver ไม่รับ แล้วลูกค้ากดค้นหาต่อ
+    const isFavoriteDriverFail = shipment.requestedDriver && currentNotificationCount === 0
+    if (isFavoriteDriverFail) {
+      await shipment.updateOne({
+        isNotificationPause: false,
+        notificationCount: 1, // อัปเดต stage เป็น general broadcast
+      })
+      await shipmentNotifyQueue.add({
+        shipmentId,
+        stage: 'INITIAL_BROADCAST',
+        iteration: 1,
+      })
+      return true
+    }
+
     return false
   }
 

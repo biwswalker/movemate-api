@@ -3,7 +3,10 @@ import { TemplateOptions } from 'nodemailer-express-handlebars'
 import Mail from 'nodemailer/lib/mailer'
 import dotenv from 'dotenv'
 import { RedisOptions } from 'ioredis'
+import initializeShipmentJob from '@controllers/shipmentJobQueue'
 dotenv.config()
+
+export type TNotificationStage = 'INITIAL_BROADCAST' | 'FAVORITE_DRIVER' | 'SECOND_BROADCAST'
 
 const redisOption: RedisOptions = {
   host: process.env.REDIS_HOST,
@@ -18,9 +21,9 @@ export interface ShipmentPayload {
 
 export interface ShipmentNotifyPayload {
   shipmentId: string
-  driverId?: string
-  limit: number
-  each: number
+  driverId?: string // เฉพาะกรณีเจาะจงคนขับ
+  stage: TNotificationStage
+  iteration: number // นับจำนวนครั้งที่ส่งในแต่ละ stage
 }
 
 export interface DeleteShipmentPayload extends ShipmentPayload {
@@ -31,9 +34,7 @@ export interface DeleteShipmentPayload extends ShipmentPayload {
 
 // Notify
 export const shipmentNotifyQueue = new Queue<ShipmentNotifyPayload>('shipmentNotify', { redis: redisOption })
-export const askCustomerShipmentQueue = new Queue<ShipmentPayload>('askCustomerShipment', { redis: redisOption })
 export const cancelShipmentQueue = new Queue<DeleteShipmentPayload>('cancelShipment', { redis: redisOption })
-export const cancelIdleShipmentQueue = new Queue<DeleteShipmentPayload>('cancelIdleShipment', { redis: redisOption })
 // Email sender
 export const emailSenderQueue = new Queue<Mail.Options & TemplateOptions>('emailSender', { redis: redisOption })
 
@@ -41,12 +42,12 @@ export const emailSenderQueue = new Queue<Mail.Options & TemplateOptions>('email
 export async function obliterateQueue() {
   try {
     await shipmentNotifyQueue.obliterate({ force: true })
-    await askCustomerShipmentQueue.obliterate({ force: true })
     await cancelShipmentQueue.obliterate({ force: true })
-    await cancelIdleShipmentQueue.obliterate({ force: true })
     await emailSenderQueue.obliterate({ force: true })
     console.log('Queue obliterated.')
   } catch (error) {
     console.error('Error obliterating queue:', error)
   }
 }
+
+initializeShipmentJob()

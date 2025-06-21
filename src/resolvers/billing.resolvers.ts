@@ -37,7 +37,7 @@ import ShipmentModel, { Shipment } from '@models/shipment.model'
 import { shipmentNotify } from '@controllers/shipmentNotification'
 import { getNewAllAvailableShipmentForDriver } from '@controllers/shipmentGet'
 import { generateBillingReceipt } from '@controllers/billingReceipt'
-import { EShipmentStatus } from '@enums/shipments'
+import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
 
 @Resolver()
 export default class BillingResolver {
@@ -398,6 +398,14 @@ export default class BillingResolver {
       if (_billing.paymentMethod === EPaymentMethod.CASH) {
         const _shipment = head(_billing.shipments) as Shipment
         if (_shipment) {
+          await ShipmentModel.findByIdAndUpdate(
+            _shipment._id,
+            {
+              driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
+              adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,
+            },
+            { session },
+          )
           shipmentNotify(_shipment._id, get(_shipment, 'requestedDriver._id', ''))
           const newShipments = await getNewAllAvailableShipmentForDriver('', {}, session)
           await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
