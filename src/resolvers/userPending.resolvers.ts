@@ -286,9 +286,28 @@ export default class UserPendingResolver {
           })
         }
 
+        const existingPendingRequest = await UserPendingModel.findOne({
+          userNumber: userModel.userNumber,
+          approvalBy: null,
+          status: EUpdateUserStatus.PENDING,
+        }).session(session)
+
+        if (existingPendingRequest) {
+          const message = 'มีคำขอแก้ไขข้อมูลที่รอการอนุมัติอยู่แล้ว'
+          throw new GraphQLError(message, {
+            extensions: {
+              code: 'NOT_FOUND',
+              errors: [{ message }],
+            },
+          })
+        }
+
         if (driverDetailModel.driverType.includes(EDriverType.BUSINESS)) {
           await BusinessDriverScema(id).validate(detail, { abortEarly: false })
-        } else if (driverDetailModel.driverType.includes(EDriverType.INDIVIDUAL_DRIVER)) {
+        } else if (
+          driverDetailModel.driverType.includes(EDriverType.INDIVIDUAL_DRIVER) ||
+          driverDetailModel.driverType.includes(EDriverType.BUSINESS_DRIVER)
+        ) {
           await IndividualDriverScema(id).validate(detail, { abortEarly: false })
         }
 
