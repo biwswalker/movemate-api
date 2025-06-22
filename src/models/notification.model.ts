@@ -126,14 +126,16 @@ export class Notification extends TimeStamps {
   }
 
   static async sendNotificationToAdmins(data: Omit<INotification, 'userId'>, session?: ClientSession): Promise<void> {
-    const adminUserIds = await UserModel.find({ role: EUserRole.ADMIN }).distinct('_id')
+    const adminUserIds = await UserModel.find({ userRole: EUserRole.ADMIN }).distinct('_id') // ค้นหาแอดมินทั้งหมด
     await Aigle.each(adminUserIds, async (adminUser) => {
       const _notification = new NotificationModel({ ...data, read: false, userId: adminUser })
-      await _notification.save({ session })
-      await UserModel.findByIdAndUpdate(adminUser, { $push: { notifications: _notification._id } }, { session })
+      await _notification.save({ session }) // สร้าง Notification
+      await UserModel.findByIdAndUpdate(adminUser, { $push: { notifications: _notification._id } }, { session }) // เพิ่ม Notification ไปยัง User
       const unreadCount = await NotificationModel.countDocuments({ userId: adminUser, read: false }, { session })
-      await pubsub.publish(NOTFICATIONS.COUNT, adminUser, unreadCount)
+      await pubsub.publish(NOTFICATIONS.COUNT, adminUser, unreadCount) // ส่ง Real-time update
     })
+    const _groupNotification = new NotificationModel({ ...data, userId: 'group' }).toObject()
+    await pubsub.publish(NOTFICATIONS.MESSAGE_GROUP, EUserRole.ADMIN, _groupNotification) // ส่ง Real-time update
   }
 
   static async sendFCMNotification(data: Message | Message[]): Promise<void> {

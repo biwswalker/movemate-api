@@ -62,7 +62,7 @@ export async function shipmentNotify(shipmentId: string, requestedDriverId?: str
     const favoriteDriver = await UserModel.findById(requestedDriverId).lean()
 
     // ตรวจสอบว่าคนขับว่างหรือไม่
-    const isAvailable = await isDriverAvailableForShipment(requestedDriverId, shipment);
+    const isAvailable = await isDriverAvailableForShipment(requestedDriverId, shipment)
 
     if (favoriteDriver && isAvailable) {
       console.log(`[Notify] Starting FAVORITE_DRIVER stage for shipment ${shipmentId}`)
@@ -271,6 +271,14 @@ export const cancelShipmentIfNotInterested = async (
     }
   }
 
+  await NotificationModel.sendNotificationToAdmins({
+    varient: ENotificationVarient.ERROR,
+    title: 'ยกเลิกงานอัตโนมัติ: ไม่มีคนขับ',
+    message: [`ระบบได้ยกเลิกงานขนส่งหมายเลข '${shipment.trackingNumber}' เนื่องจากไม่มีคนขับรับงานภายในเวลาที่กำหนด`],
+    infoText: 'ดูรายละเอียดงาน',
+    infoLink: `/general/shipments/${shipment.trackingNumber}`,
+  })
+
   const newShipments = await getNewAllAvailableShipmentForDriver()
   await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
   console.log(`Shipment ${shipmentId} is cancelled.`)
@@ -374,7 +382,6 @@ export const sendNewShipmentNotification = async (shipmentId: string, requestDri
     })
       .select('_id')
       .lean()
-
 
     const matchingDriverDetailIds = matchingDriverDetails.map((d) => d._id)
 

@@ -22,6 +22,7 @@ import { EPaymentMethod } from '@enums/payments'
 import { EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
 import { ClientSession } from 'mongoose'
+import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 
 @Resolver(User)
 export default class RegisterResolver {
@@ -129,7 +130,7 @@ export default class RegisterResolver {
             },
           })
         }
-        
+
         // business
         // const businessName = get(businessDetail, 'businessName', '')
         // const businessNameField = 'businessName'
@@ -413,6 +414,14 @@ export default class RegisterResolver {
           })
 
           await user.save({ session })
+
+          await NotificationModel.sendNotificationToAdmins({
+            varient: ENotificationVarient.INFO,
+            title: 'ลูกค้าองค์กรใหม่รออนุมัติ',
+            message: [`บริษัท '${business.businessName}' ได้ลงทะเบียนเข้ามาใหม่ กรุณาตรวจสอบและอนุมัติบัญชี`],
+            infoText: 'ตรวจสอบข้อมูล',
+            infoLink: `/management/customer/business/detail/${user._id}`,
+          })
 
           // Email sender
           await addEmailQueue({

@@ -585,6 +585,14 @@ export async function driverCancelledShipment(input: DriverCancelledShipmentInpu
   )
   await initialStepDefinition(shipmentId, true, session)
 
+  await NotificationModel.sendNotificationToAdmins({
+    varient: ENotificationVarient.WRANING,
+    title: 'คนขับยกเลิกงาน!',
+    message: [`คนขับได้ยกเลิกงานขนส่งหมายเลข '${_shipment.trackingNumber}' กรุณาจัดหาคนขับใหม่หรือดำเนินการแก้ไข`],
+    infoText: 'ดูรายละเอียดงาน',
+    infoLink: `/general/shipments/${_shipment.trackingNumber}`,
+  })
+
   /**
    * Add check remaining time is enough to get no
    * Add to JOB notification

@@ -53,8 +53,9 @@ export default class UserPendingResolver {
           : {}),
       }
 
-      const aggregate = UserPendingModel.aggregate(GET_PENDING_USERS(query, sort))
-      console.log('aggregate: ', JSON.stringify(aggregate, undefined, 2))
+      console.log('query: ', query)
+      const _aggregate = await GET_PENDING_USERS(query, sort)
+      const aggregate = UserPendingModel.aggregate(_aggregate)
       const users = (await UserPendingModel.aggregatePaginate(aggregate, pagination)) as UserPendingAggregatePayload
 
       return users
@@ -68,7 +69,8 @@ export default class UserPendingResolver {
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async allpendinguserIds(@Args() query: GetUserPendingArgs): Promise<string[]> {
     try {
-      const users = await UserPendingModel.aggregate(GET_PENDING_USERS(query))
+      const _aggregate = await GET_PENDING_USERS(query)
+      const users = await UserPendingModel.aggregate(_aggregate)
       const ids = map(users, ({ _id }) => _id)
       return ids
     } catch (error) {
@@ -228,6 +230,14 @@ export default class UserPendingResolver {
 
         await _userPending.save({ session })
 
+        await NotificationModel.sendNotificationToAdmins({
+          varient: ENotificationVarient.INFO,
+          title: 'มีคำขอแก้ไขข้อมูลผู้ใช้',
+          message: [`ผู้ใช้ '${userModel.fullname}' (ID: ${userModel.userNumber}) ได้ส่งคำขอแก้ไขข้อมูลส่วนตัว กรุณาตรวจสอบ`],
+          infoText: 'ตรวจสอบคำขอ',
+          infoLink: `/management/customer/update-request` // TODO: Adding requestId for detail of frontend
+        });
+
         return true
       }
       const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน'
@@ -336,6 +346,14 @@ export default class UserPendingResolver {
         })
 
         await _userPending.save({ session })
+
+        await NotificationModel.sendNotificationToAdmins({
+          varient: ENotificationVarient.INFO,
+          title: 'มีคำขอแก้ไขข้อมูลผู้ขับ',
+          message: [`ผู้ใช้ '${userModel.fullname}' (ID: ${userModel.userNumber}) ได้ส่งคำขอแก้ไขข้อมูลส่วนตัว กรุณาตรวจสอบ`],
+          infoText: 'ตรวจสอบคำขอ',
+          infoLink: `/management/driver/update-request` // TODO: Adding requestId for detail of frontend
+        });
 
         return true
       }

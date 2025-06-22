@@ -352,6 +352,14 @@ export default class DriverResolver {
         ],
       })
 
+      await NotificationModel.sendNotificationToAdmins({
+        varient: ENotificationVarient.INFO,
+        title: 'คนขับใหม่รอการอนุมัติ',
+        message: [`คุณ '${driverDetailModel.fullname}' ได้ลงทะเบียนเป็นคนขับใหม่ กรุณาตรวจสอบและอนุมัติบัญชี`],
+        infoText: 'ตรวจสอบข้อมูล',
+        infoLink: `/management/driver/detail/${user._id}`,
+      })
+
       return {
         phoneNumber: detail.phoneNumber,
         driverType: detail.driverType,

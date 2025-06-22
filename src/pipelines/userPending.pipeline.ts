@@ -3,8 +3,10 @@ import { GetUserPendingArgs } from '@inputs/user.input'
 import { PipelineStage } from 'mongoose'
 import { userPipelineStage } from './user.pipeline'
 import { filePipelineStage } from './file.pipline'
+import UserModel from '@models/user.model'
+import { isEmpty } from 'lodash'
 
-export const GET_PENDING_USERS = (
+export const GET_PENDING_USERS = async (
   {
     userId,
     userNumber,
@@ -20,7 +22,10 @@ export const GET_PENDING_USERS = (
     taxId,
   }: Partial<GetUserPendingArgs>,
   sort = {},
-): PipelineStage[] => {
+): Promise<PipelineStage[]> => {
+  const incUserIdsRaw = await UserModel.find({ userRole, ...(userType ? { userType } : {}) }).distinct('_id')
+  const incUserIds = incUserIdsRaw.map((id) => id?.toString() || '')
+
   const detailMatch =
     userRole === EUserRole.CUSTOMER && userType === EUserCriterialType.INDIVIDUAL
       ? {
@@ -61,7 +66,7 @@ export const GET_PENDING_USERS = (
 
   const prematch: PipelineStage = {
     $match: {
-      ...(userId ? { userId } : {}),
+      ...(userId ? { userId } : { userId: { $in: incUserIds } }),
       $or: [
         {
           ...(userType && userType !== EUserCriterialType.ALL ? { userType: userType } : {}),
@@ -73,44 +78,76 @@ export const GET_PENDING_USERS = (
     },
   }
 
-  const postmatch: PipelineStage[] = detailMatch ? [{ $match: detailMatch }] : []
-// "businessDetail.creditPayment.financialFirstname"
+  const postmatch: PipelineStage[] = !isEmpty(detailMatch) ? [{ $match: detailMatch }] : []
+  // "businessDetail.creditPayment.financialFirstname"
 
-  return [
-    ...(prematch.$match ? [prematch] : []),
+  const forBusinessCustomer: PipelineStage[] = [
     {
       $lookup: {
-        from: "businesscustomercreditpayments",
-        localField: "businessDetail.creditPayment",
-        foreignField: "_id",
-        as: "businessDetail.creditPayment",
+        from: 'businesscustomercreditpayments',
+        localField: 'businessDetail.creditPayment',
+        foreignField: '_id',
+        as: 'businessDetail.creditPayment',
         pipeline: [
           ...filePipelineStage('businessRegistrationCertificateFile'),
           ...filePipelineStage('copyIDAuthorizedSignatoryFile'),
           ...filePipelineStage('certificateValueAddedTaxRegistrationFile'),
-        ]
-      }
+        ],
+      },
     },
     {
       $unwind: {
-        path: "$businessDetail.creditPayment",
-        preserveNullAndEmptyArrays: true
-      }
+        path: '$businessDetail.creditPayment',
+        preserveNullAndEmptyArrays: true,
+      },
     },
     {
       $lookup: {
-        from: "businesscustomercashpayments",
-        localField: "businessDetail.cashPayment",
-        foreignField: "_id",
-        as: "businessDetail.cashPayment"
-      }
+        from: 'businesscustomercashpayments',
+        localField: 'businessDetail.cashPayment',
+        foreignField: '_id',
+        as: 'businessDetail.cashPayment',
+      },
     },
     {
       $unwind: {
-        path: "$businessDetail.cashPayment",
-        preserveNullAndEmptyArrays: true
-      }
+        path: '$businessDetail.cashPayment',
+        preserveNullAndEmptyArrays: true,
+      },
     },
+  ]
+
+  const forDriver: PipelineStage[] = [
+    {
+      $lookup: {
+        from: 'vehicletypes',
+        localField: 'driverDetail.serviceVehicleTypes',
+        foreignField: '_id',
+        as: 'driverDetail.serviceVehicleTypes',
+        pipeline: [
+          {
+            $lookup: {
+              from: 'files',
+              localField: 'image',
+              foreignField: '_id',
+              as: 'image',
+            },
+          },
+          {
+            $unwind: {
+              path: '$image',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+        ],
+      },
+    },
+  ]
+
+  return [
+    ...(prematch.$match ? [prematch] : []),
+    ...(userRole === EUserRole.CUSTOMER ? forBusinessCustomer : []),
+    ...(userRole === EUserRole.DRIVER ? forDriver : []),
     {
       $lookup: {
         from: 'files',
