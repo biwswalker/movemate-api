@@ -19,11 +19,15 @@ import { BusinessCustomerSchema } from '@validations/customer.validations'
 import { ValidationError } from 'yup'
 import { yupValidationThrow } from '@utils/error.utils'
 import { EPaymentMethod } from '@enums/payments'
-import { EUpdateUserStatus, EUserRole } from '@enums/users'
+import { EDriverType, EUpdateUserStatus, EUserRole } from '@enums/users'
 import UserPendingModel, { UserPending } from '@models/userPending.model'
 import { GET_PENDING_USERS } from '@pipelines/userPending.pipeline'
 import { WithTransaction } from '@middlewares/RetryTransaction'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
+import { DriverUpdateInput } from '@inputs/driver.input'
+import DriverDetailModel from '@models/driverDetail.model'
+import { BusinessDriverScema, IndividualDriverScema } from '@validations/driver.validations'
+import DriverDocumentModel from '@models/driverDocument.model'
 
 @Resolver(UserPending)
 export default class UserPendingResolver {
@@ -242,6 +246,96 @@ export default class UserPendingResolver {
     }
   }
 
+  @Mutation(() => Boolean)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  async updateDriverRequest(
+    @Arg('id') id: string,
+    @Arg('data') data: DriverUpdateInput,
+    @Ctx() ctx: GraphQLContext,
+  ): Promise<boolean> {
+    const session = ctx.session
+    const { documents, detail } = data
+    try {
+      // Check if the user already exists
+      const platform = ctx.req.headers['platform']
+      if (isEmpty(platform)) {
+        throw new Error('Bad Request: Platform is require')
+      }
+
+      if (id) {
+        const userModel = await UserModel.findById(id).session(session)
+        if (!userModel) {
+          const message = 'ไม่สามารถแก้ไขข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+          throw new GraphQLError(message, {
+            extensions: {
+              code: 'NOT_FOUND',
+              errors: [{ message }],
+            },
+          })
+        }
+
+        const driverDetailModel = await DriverDetailModel.findById(userModel.driverDetail).session(session)
+        if (!driverDetailModel) {
+          const message = 'ไม่สามารถแก้ไขข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+          throw new GraphQLError(message, {
+            extensions: {
+              code: 'NOT_FOUND',
+              errors: [{ message }],
+            },
+          })
+        }
+
+        if (driverDetailModel.driverType.includes(EDriverType.BUSINESS)) {
+          await BusinessDriverScema(id).validate(detail, { abortEarly: false })
+        } else if (driverDetailModel.driverType.includes(EDriverType.INDIVIDUAL_DRIVER)) {
+          await IndividualDriverScema(id).validate(detail, { abortEarly: false })
+        }
+
+        // Handle document files
+        const driverDocumentModel = await DriverDocumentModel.findById(driverDetailModel.documents).session(session)
+
+        // Profile Image
+        const uploadedImage = detail.profileImage ? new FileModel(detail.profileImage) : null
+        if (uploadedImage) {
+          await uploadedImage.save({ session })
+        }
+
+        const _driverDetail = {
+          ...driverDetailModel.toObject(),
+          ...detail,
+          documents: driverDocumentModel._id,
+        }
+
+        const _userPending = new UserPendingModel({
+          user: userModel._id,
+          userId: userModel._id,
+          userNumber: userModel.userNumber,
+          driverDetail: _driverDetail,
+          profileImage: uploadedImage ? uploadedImage._id : userModel.profileImage,
+          status: EUpdateUserStatus.PENDING,
+        })
+
+        await _userPending.save({ session })
+
+        return true
+      }
+      const message = 'ไม่สามารถแก้ไขข้อมูลคนขับได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน'
+      throw new GraphQLError(message, {
+        extensions: {
+          code: 'NOT_FOUND',
+          errors: [{ message }],
+        },
+      })
+    } catch (errors) {
+      console.log('error: ', errors)
+      if (errors instanceof ValidationError) {
+        throw yupValidationThrow(errors)
+      }
+      throw errors
+    }
+  }
+
   @Query(() => UserPending)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getPendingUser(@Arg('id') id: string): Promise<UserPending> {
@@ -321,6 +415,30 @@ export default class UserPendingResolver {
     } catch (error) {
       console.log('error: ', error)
       throw error
+    }
+  }
+
+  @Query(() => Boolean)
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
+  async checkUserPendingStatus(@Arg('userId') userId: string, @Ctx() ctx: GraphQLContext): Promise<boolean> {
+    const requesterId = ctx.req.user_id
+    const requesterRole = ctx.req.user_role
+
+    // Security check: Allow admins to check anyone, but other users can only check themselves.
+    if (requesterRole !== EUserRole.ADMIN && requesterId !== userId) {
+      throw new GraphQLError('You are not authorized to perform this action for another user.')
+    }
+
+    try {
+      const pendingRequest = await UserPendingModel.findOne({
+        userId: userId,
+        status: EUpdateUserStatus.PENDING,
+      })
+
+      return !!pendingRequest
+    } catch (error) {
+      console.log('Error checking user pending status:', error)
+      throw new GraphQLError('Failed to check user pending status.')
     }
   }
 }
