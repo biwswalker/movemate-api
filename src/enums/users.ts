@@ -113,3 +113,23 @@ registerEnumType(EUpdateUserStatus, {
   name: 'EUpdateUserStatus',
   description: 'Update user status permission',
 })
+
+export enum ECreditBillingCycleType {
+  DEFAULT = 'DEFAULT',
+  DATES = 'DATES',
+}
+
+registerEnumType(ECreditBillingCycleType, {
+  name: 'ECreditBillingCycleType',
+  description: 'Credit BillingCycle Type',
+})
+
+export enum ECreditDataStatus {
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE',
+}
+
+registerEnumType(ECreditDataStatus, {
+  name: 'ECreditDataStatus',
+  description: 'Credit data status',
+})

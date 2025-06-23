@@ -19,7 +19,7 @@ import { BusinessCustomerSchema, IndividualCustomerSchema } from '@validations/c
 import { ValidationError } from 'yup'
 import { yupValidationThrow } from '@utils/error.utils'
 import { EPaymentMethod } from '@enums/payments'
-import { EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
+import { ECreditBillingCycleType, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
 import { ClientSession } from 'mongoose'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
@@ -293,10 +293,6 @@ export default class RegisterResolver {
           })
           return true
         } else if (businessDetail.paymentMethod === EPaymentMethod.CREDIT && businessDetail.paymentCreditDetail) {
-          // TODO: Get default config
-          const _defaultCreditLimit = 20000.0
-          const _billedDate = 1
-          const _billedRound = 15
 
           const {
             businessRegistrationCertificateFile,
@@ -344,37 +340,23 @@ export default class RegisterResolver {
             await certValueAddedTaxRegisFileModel.save({ session })
           }
 
+          const _defaultCreditLimit = 20000.0
           const creditPayment = new BusinessCustomerCreditPaymentModel({
             ...creditDetail,
-            billedDateType: 'default',
-            billedDate: {
-              jan: _billedDate,
-              feb: _billedDate,
-              mar: _billedDate,
-              apr: _billedDate,
-              may: _billedDate,
-              jun: _billedDate,
-              jul: _billedDate,
-              aug: _billedDate,
-              sep: _billedDate,
-              oct: _billedDate,
-              nov: _billedDate,
-              dec: _billedDate,
-            },
-            billedRoundType: 'default',
-            billedRound: {
-              jan: _billedRound,
-              feb: _billedRound,
-              mar: _billedRound,
-              apr: _billedRound,
-              may: _billedRound,
-              jun: _billedRound,
-              jul: _billedRound,
-              aug: _billedRound,
-              sep: _billedRound,
-              oct: _billedRound,
-              nov: _billedRound,
-              dec: _billedRound,
+            billingCycleType: ECreditBillingCycleType.DEFAULT,
+            billingCycle: {
+              jan: { issueDate: 1, dueDate: 16, dueMonth: 1 },
+              feb: { issueDate: 1, dueDate: 16, dueMonth: 2 },
+              mar: { issueDate: 1, dueDate: 16, dueMonth: 3 },
+              apr: { issueDate: 1, dueDate: 16, dueMonth: 4 },
+              may: { issueDate: 1, dueDate: 16, dueMonth: 5 },
+              jun: { issueDate: 1, dueDate: 16, dueMonth: 6 },
+              jul: { issueDate: 1, dueDate: 16, dueMonth: 7 },
+              aug: { issueDate: 1, dueDate: 16, dueMonth: 8 },
+              sep: { issueDate: 1, dueDate: 16, dueMonth: 9 },
+              oct: { issueDate: 1, dueDate: 16, dueMonth: 10 },
+              nov: { issueDate: 1, dueDate: 16, dueMonth: 11 },
+              dec: { issueDate: 1, dueDate: 16, dueMonth: 12 },
             },
             creditLimit: _defaultCreditLimit,
             creditUsage: 0,

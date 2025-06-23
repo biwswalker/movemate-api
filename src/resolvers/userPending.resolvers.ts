@@ -13,13 +13,12 @@ import FileModel from '@models/file.model'
 import BusinessCustomerModel, { BusinessCustomer } from '@models/customerBusiness.model'
 import BusinessCustomerCreditPaymentModel, {
   BusinessCustomerCreditPayment,
-  EDataStatus,
 } from '@models/customerBusinessCreditPayment.model'
 import { BusinessCustomerSchema } from '@validations/customer.validations'
 import { ValidationError } from 'yup'
 import { yupValidationThrow } from '@utils/error.utils'
 import { EPaymentMethod } from '@enums/payments'
-import { EDriverType, EUpdateUserStatus, EUserRole } from '@enums/users'
+import { ECreditDataStatus, EDriverType, EUpdateUserStatus, EUserRole } from '@enums/users'
 import UserPendingModel, { UserPending } from '@models/userPending.model'
 import { GET_PENDING_USERS } from '@pipelines/userPending.pipeline'
 import { WithTransaction } from '@middlewares/RetryTransaction'
@@ -206,7 +205,7 @@ export default class UserPendingResolver {
             ...(certificateValueAddedTaxRegistration
               ? { certificateValueAddedTaxRegistrationFile: certificateValueAddedTaxRegistration }
               : { certificateValueAddedTaxRegistrationFile: creditDetail.certificateValueAddedTaxRegistrationFile }),
-            dataStatus: EDataStatus.DRAFT,
+            dataStatus: ECreditDataStatus.DRAFT,
           })
           await _creditPayment.save({ session })
           _creditInfo = _creditPayment
@@ -233,10 +232,12 @@ export default class UserPendingResolver {
         await NotificationModel.sendNotificationToAdmins({
           varient: ENotificationVarient.INFO,
           title: 'มีคำขอแก้ไขข้อมูลผู้ใช้',
-          message: [`ผู้ใช้ '${userModel.fullname}' (ID: ${userModel.userNumber}) ได้ส่งคำขอแก้ไขข้อมูลส่วนตัว กรุณาตรวจสอบ`],
+          message: [
+            `ผู้ใช้ '${userModel.fullname}' (ID: ${userModel.userNumber}) ได้ส่งคำขอแก้ไขข้อมูลส่วนตัว กรุณาตรวจสอบ`,
+          ],
           infoText: 'ตรวจสอบคำขอ',
-          infoLink: `/management/customer/update-request` // TODO: Adding requestId for detail of frontend
-        });
+          infoLink: `/management/customer/update-request`, // TODO: Adding requestId for detail of frontend
+        })
 
         return true
       }
@@ -350,10 +351,12 @@ export default class UserPendingResolver {
         await NotificationModel.sendNotificationToAdmins({
           varient: ENotificationVarient.INFO,
           title: 'มีคำขอแก้ไขข้อมูลผู้ขับ',
-          message: [`ผู้ใช้ '${userModel.fullname}' (ID: ${userModel.userNumber}) ได้ส่งคำขอแก้ไขข้อมูลส่วนตัว กรุณาตรวจสอบ`],
+          message: [
+            `ผู้ใช้ '${userModel.fullname}' (ID: ${userModel.userNumber}) ได้ส่งคำขอแก้ไขข้อมูลส่วนตัว กรุณาตรวจสอบ`,
+          ],
           infoText: 'ตรวจสอบคำขอ',
-          infoLink: `/management/driver/update-request` // TODO: Adding requestId for detail of frontend
-        });
+          infoLink: `/management/driver/update-request`, // TODO: Adding requestId for detail of frontend
+        })
 
         return true
       }

@@ -8,13 +8,11 @@ import UserModel, { User } from './user.model'
 import { EPaymentMethod } from '@enums/payments'
 import BusinessCustomerCreditPaymentModel, {
   BusinessCustomerCreditPayment,
-  EDataStatus,
 } from './customerBusinessCreditPayment.model'
 import IndividualCustomerModel, { IndividualCustomer } from './customerIndividual.model'
 import BusinessCustomerModel, { BusinessCustomer } from './customerBusiness.model'
-import BusinessCustomerCashPaymentModel from './customerBusinessCashPayment.model'
 import DriverDetailModel, { DriverDetail } from './driverDetail.model'
-import { EDriverType, EUpdateUserStatus, EUserRole, EUserType } from '@enums/users'
+import { ECreditDataStatus, EDriverType, EUpdateUserStatus, EUserRole, EUserType } from '@enums/users'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
 import { find, get, includes } from 'lodash'
 import { ClientSession } from 'mongoose'
@@ -230,11 +228,11 @@ export class UserPending extends TimeStamps {
           // ตรรกะสำหรับอัปเดตข้อมูลการชำระเงิน
           if (otherDetails.paymentMethod === EPaymentMethod.CREDIT && pendingCreditPaymentId) {
             const draftCreditDoc = await BusinessCustomerCreditPaymentModel.findByIdAndUpdate(pendingCreditPaymentId, {
-              dataStatus: EDataStatus.ACTIVE,
+              dataStatus: ECreditDataStatus.ACTIVE,
             }).session(session)
             if (draftCreditDoc) {
               // 1. เปิดใช้งานเอกสารเครดิตฉบับร่าง
-              // draftCreditDoc.dataStatus = EDataStatus.ACTIVE
+              // draftCreditDoc.dataStatus = ECreditDataStatus.ACTIVE
               // await draftCreditDoc.save({ session })
 
               // 2. ลบข้อมูลเครดิตเก่า (ถ้ามี)

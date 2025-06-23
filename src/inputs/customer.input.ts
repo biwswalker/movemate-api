@@ -2,7 +2,7 @@ import { IsEmail } from 'class-validator'
 import { ArgsType, Field, Float, InputType, Int } from 'type-graphql'
 import { FileInput } from './file.input'
 import { EPaymentMethod } from '@enums/payments'
-import { EUserStatus, EUserType } from '@enums/users'
+import { ECreditBillingCycleType, EUserStatus, EUserType } from '@enums/users'
 
 @InputType()
 export class RegisterIndividualInput {
@@ -230,42 +230,54 @@ export class CashPaymentDetailInput {
 }
 
 @InputType()
-class BilledMonthInput {
+export class MonthlyBillingCycleInput {
   @Field(() => Int)
-  jan: number
+  issueDate: number
 
   @Field(() => Int)
-  feb: number
+  dueDate: number
 
   @Field(() => Int)
-  mar: number
+  dueMonth: number
+}
 
-  @Field(() => Int)
-  apr: number
+@InputType()
+class YearBillingCycleInput {
+  @Field(() => MonthlyBillingCycleInput)
+  jan: MonthlyBillingCycleInput
 
-  @Field(() => Int)
-  may: number
+  @Field(() => MonthlyBillingCycleInput)
+  feb: MonthlyBillingCycleInput
 
-  @Field(() => Int)
-  jun: number
+  @Field(() => MonthlyBillingCycleInput)
+  mar: MonthlyBillingCycleInput
 
-  @Field(() => Int)
-  jul: number
+  @Field(() => MonthlyBillingCycleInput)
+  apr: MonthlyBillingCycleInput
 
-  @Field(() => Int)
-  aug: number
+  @Field(() => MonthlyBillingCycleInput)
+  may: MonthlyBillingCycleInput
 
-  @Field(() => Int)
-  sep: number
+  @Field(() => MonthlyBillingCycleInput)
+  jun: MonthlyBillingCycleInput
 
-  @Field(() => Int)
-  oct: number
+  @Field(() => MonthlyBillingCycleInput)
+  jul: MonthlyBillingCycleInput
 
-  @Field(() => Int)
-  nov: number
+  @Field(() => MonthlyBillingCycleInput)
+  aug: MonthlyBillingCycleInput
 
-  @Field(() => Int)
-  dec: number
+  @Field(() => MonthlyBillingCycleInput)
+  sep: MonthlyBillingCycleInput
+
+  @Field(() => MonthlyBillingCycleInput)
+  oct: MonthlyBillingCycleInput
+
+  @Field(() => MonthlyBillingCycleInput)
+  nov: MonthlyBillingCycleInput
+
+  @Field(() => MonthlyBillingCycleInput)
+  dec: MonthlyBillingCycleInput
 }
 
 @InputType()
@@ -276,17 +288,11 @@ export class CreditPaymentDetailInput {
   @Field()
   acceptedFirstCreditTermDate: string
 
-  @Field()
-  billedDateType: string // default | dates
+  @Field(() => ECreditBillingCycleType)
+  billingCycleType: ECreditBillingCycleType
 
-  @Field(() => BilledMonthInput)
-  billedDate: BilledMonthInput
-
-  @Field()
-  billedRoundType: string // default | dates
-
-  @Field(() => BilledMonthInput)
-  billedRound: BilledMonthInput
+  @Field(() => YearBillingCycleInput)
+  billingCycle: YearBillingCycleInput
 
   @Field(() => Float)
   creditLimit: number

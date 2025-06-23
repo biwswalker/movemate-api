@@ -3,8 +3,9 @@ import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
 import { EShipmentStatus } from '@enums/shipments'
 import { EUserRole, EUserStatus, EUserType } from '@enums/users'
 import BusinessCustomerCreditPaymentModel, {
-  BilledMonth,
   BusinessCustomerCreditPayment,
+  MonthlyBillingCycle,
+  YearlyBillingCycle,
 } from '@models/customerBusinessCreditPayment.model'
 import BillingModel, { Billing } from '@models/finance/billing.model'
 import InvoiceModel from '@models/finance/invoice.model'
@@ -18,7 +19,7 @@ import { GET_CUSTOMER_WITH_TODAY_BILLED_DATE } from '@pipelines/user.pipeline'
 import addEmailQueue from '@utils/email.utils'
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
-import { addDays, addMonths, differenceInDays, format } from 'date-fns'
+import { addDays, addMonths, differenceInDays, format, setDate, setDay, setMonth } from 'date-fns'
 import { th } from 'date-fns/locale'
 import lodash, { get, includes, isEmpty, last, reduce, sortBy, sum, toNumber, toString, uniq } from 'lodash'
 import { ClientSession, Types } from 'mongoose'
@@ -46,19 +47,28 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
        * Get billing date / due date
        */
       const prevMonth = addMonths(today, -1)
-      const prevMonthText = format(prevMonth, 'MMM').toLowerCase() as keyof BilledMonth
-      const monthText = format(today, 'MMM').toLowerCase() as keyof BilledMonth
-      const prevBillingDate = creditPaymentDetail.billedDate[prevMonthText] || 1
-      const billingDate = creditPaymentDetail.billedDate[monthText] || 1
-      const duedateDate = creditPaymentDetail.billedRound[monthText] || 15
+      const prevMonthText = format(prevMonth, 'MMM').toLowerCase() as keyof YearlyBillingCycle
+      const currentMonthText = format(today, 'MMM').toLowerCase() as keyof YearlyBillingCycle
+      const currentMonthNumber = toNumber(format(today, 'MM'))
+
+      const _prevBillingCycle: MonthlyBillingCycle = creditPaymentDetail.billingCycle[prevMonthText] || {
+        dueDate: 16,
+        dueMonth: currentMonthNumber,
+        issueDate: 1,
+      }
+      const _currentBillingCycle: MonthlyBillingCycle = creditPaymentDetail.billingCycle[currentMonthText] || {
+        dueDate: 16,
+        dueMonth: currentMonthNumber,
+        issueDate: 1,
+      }
+
       /**
        * Convert Billing day number to Date and get Billing start/end date
        * Period: (Previous Month - Previous Day)
        */
-      const prevBilledDate = prevMonth.setDate(prevBillingDate)
-      const billedDate = new Date().setDate(billingDate)
-      const previousMonth = addMonths(prevBilledDate, 0).setHours(0, 0, 0, 0) // Previous Month
-      const previousDay = addDays(billedDate, -1).setHours(23, 59, 59, 999) // Previous Day
+      const prevIssueBillingCycleDate = setDate(prevMonth, _prevBillingCycle.issueDate).setHours(0, 0, 0, 0)
+      const issueDate = setDate(today, _currentBillingCycle.issueDate)
+      const currentIssueBillingCycleDate = addDays(issueDate, -1).setHours(23, 59, 59, 999)
 
       /**
        * Get Complete Shipment
@@ -68,8 +78,17 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
         customer: customerId,
         status: EShipmentStatus.DELIVERED,
         paymentMethod: EPaymentMethod.CREDIT,
-        deliveredDate: { $gte: previousMonth, $lte: previousDay },
+        deliveredDate: { $gte: prevIssueBillingCycleDate, $lte: currentIssueBillingCycleDate },
       })
+
+      console.log(
+        `🧾 [Billing] - Create Billing for ${_shipments.length} shipments for customer ${
+          _customer.fullname
+        } period: ${format(prevIssueBillingCycleDate, 'dd MMM yyyy HH:mm:ss')} - ${format(
+          currentIssueBillingCycleDate,
+          'dd MMM yyyy  HH:mm:ss',
+        )}`,
+      )
 
       if (!_shipments || isEmpty(_shipments)) {
         return
@@ -101,7 +120,7 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
       const _invoiceNumber = await generateTrackingNumber(`IV${_monthyear}`, 'invoice', 3)
       const _invoice = new InvoiceModel({
         invoiceNumber: _invoiceNumber,
-        invoiceDate: billedDate,
+        invoiceDate: issueDate,
         name: _customer.fullname,
         address: creditPaymentDetail.financialAddress,
         province: creditPaymentDetail.financialProvince,
@@ -134,7 +153,10 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
       /**
        * Convert Duedate day number to Date
        */
-      const paymentDueDate = new Date(new Date().setDate(duedateDate)).setHours(23, 59, 59, 999)
+      const paymentDueDate = setDate(
+        setMonth(new Date(), _currentBillingCycle.dueMonth),
+        _currentBillingCycle.dueDate,
+      ).setHours(23, 59, 59, 999)
       /**
        * Create Billing for Credit user
        */
@@ -146,9 +168,9 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
         user: customerId,
         shipments: _shipments,
         payments: [_payment],
-        issueDate: billedDate,
-        billingStartDate: previousMonth,
-        billingEndDate: previousDay,
+        issueDate: issueDate,
+        billingStartDate: prevIssueBillingCycleDate,
+        billingEndDate: currentIssueBillingCycleDate,
         paymentDueDate: paymentDueDate,
         invoice: _invoice,
       })
@@ -162,6 +184,9 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
         creditPaymentDetail._id,
         { creditOutstandingBalance: balance },
         { session },
+      )
+      console.log(
+        `✅ [Billing] - Create Billing for ${_customer.fullname} completed, billing number: ${_billing.billingNumber}`,
       )
     }
   }
@@ -369,16 +394,12 @@ export async function checkBillingStatus() {
   // Notify to admin
   const bannedCustomerUniq = uniq(_bannedCustomer)
   if (!isEmpty(bannedCustomerUniq)) {
-    const admins = await UserModel.find({ userRole: EUserRole.ADMIN, status: EUserStatus.ACTIVE })
-    await Aigle.forEach(admins, async (admin) => {
-      await NotificationModel.sendNotification({
-        userId: admin._id,
-        varient: ENotificationVarient.WRANING,
-        title: `พบบัญชีค้างชำระ`,
-        message: [`พบบัญชีค้างชำระ และถูกระงับใช้งานจำนวน ${bannedCustomerUniq.length} บัญชี`],
-        infoLink: `/management/customer/business`,
-        infoText: 'คลิกเพื่อดูรายละเอียด',
-      })
+    await NotificationModel.sendNotificationToAdmins({
+      varient: ENotificationVarient.WRANING,
+      title: `พบบัญชีค้างชำระ`,
+      message: [`พบบัญชีค้างชำระ และถูกระงับใช้งานจำนวน ${bannedCustomerUniq.length} บัญชี`],
+      infoLink: `/management/customer/business`,
+      infoText: 'คลิกเพื่อดูรายละเอียด',
     })
   }
 }

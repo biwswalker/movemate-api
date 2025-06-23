@@ -79,28 +79,32 @@ const CashPaymentSchema = Yup.object().shape({
   acceptedEReceipt: Yup.boolean(),
 })
 
-const BilledMonthDateSchema = Yup.object().shape({
-  jan: Yup.number(),
-  feb: Yup.number(),
-  mar: Yup.number(),
-  apr: Yup.number(),
-  may: Yup.number(),
-  jun: Yup.number(),
-  jul: Yup.number(),
-  aug: Yup.number(),
-  sep: Yup.number(),
-  oct: Yup.number(),
-  nov: Yup.number(),
-  dec: Yup.number(),
+const MonthBillingCycleSchema = Yup.object().shape({
+  issueDate: Yup.number(),
+  dueDate: Yup.number(),
+  dueMonth: Yup.number(),
+})
+
+const YearlyBillingCycleSchema = Yup.object().shape({
+  jan: MonthBillingCycleSchema,
+  feb: MonthBillingCycleSchema,
+  mar: MonthBillingCycleSchema,
+  apr: MonthBillingCycleSchema,
+  may: MonthBillingCycleSchema,
+  jun: MonthBillingCycleSchema,
+  jul: MonthBillingCycleSchema,
+  aug: MonthBillingCycleSchema,
+  sep: MonthBillingCycleSchema,
+  oct: MonthBillingCycleSchema,
+  nov: MonthBillingCycleSchema,
+  dec: MonthBillingCycleSchema,
 })
 
 const CreditPaymentSchema = Yup.object().shape({
   acceptedFirstCreditTerm: Yup.boolean(),
   acceptedFirstCreditTermDate: Yup.string(),
-  billedDateType: Yup.string(),
-  billedDate: BilledMonthDateSchema,
-  billedRoundType: Yup.string(),
-  billedRound: BilledMonthDateSchema,
+  billingCycleType: Yup.string(),
+  billingCycle: YearlyBillingCycleSchema,
   creditLimit: Yup.number(),
   creditUsage: Yup.number(),
   financialAddress: Yup.string().when('paymentMethod', creditMethodValidation('ระบุที่อยู่ ผู้ติดต่อด้านการเงิน')),
@@ -167,13 +171,12 @@ export const BusinessCustomerSchema = (userId?: string) =>
         return !individualResult && !businessResult
       }),
     businessTitle: Yup.string().required('กรุณาเลือกคำนำหน้าบริษัท/องค์กร'),
-    businessName: Yup.string()
-      .required('ระบุชื่อบริษัท/องค์กร'),
-      // Cancel this because we allow same business name for different users and different branches
-      // .test('exiting-business-name', 'ชื่อบริษัท/องค์กรถูกใช้งานแล้ว', async (value) => {
-      //   const result = await UserModel.existingBusinessName(value, userId)
-      //   return !result
-      // }),
+    businessName: Yup.string().required('ระบุชื่อบริษัท/องค์กร'),
+    // Cancel this because we allow same business name for different users and different branches
+    // .test('exiting-business-name', 'ชื่อบริษัท/องค์กรถูกใช้งานแล้ว', async (value) => {
+    //   const result = await UserModel.existingBusinessName(value, userId)
+    //   return !result
+    // }),
     businessBranch: Yup.string(),
     businessType: Yup.string().required('กรุณาเลือกประเภทธุรกิจ'),
     businessTypeOther: Yup.string().when('businessType', ([businessType], schema) => {

@@ -577,7 +577,7 @@ export const GET_CUSTOMER_WITH_TODAY_BILLED_DATE = () => {
     },
     {
       $match: {
-        [`businessDetail.creditPayment.billedDate.${currentMonth}`]: currentDay,
+        [`businessDetail.creditPayment.billingCycle.${currentMonth}.issueDate`]: currentDay,
       },
     },
   ]

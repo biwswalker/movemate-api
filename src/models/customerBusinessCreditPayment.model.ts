@@ -1,159 +1,149 @@
-import { ObjectType, Field, ID, Int, Float, InputType } from "type-graphql";
-import {
-  prop as Property,
-  Ref,
-  Severity,
-  getModelForClass,
-  plugin,
-} from "@typegoose/typegoose";
-import { File } from "./file.model";
+import { ObjectType, Field, ID, Int, Float } from 'type-graphql'
+import { prop as Property, Ref, Severity, getModelForClass, plugin } from '@typegoose/typegoose'
+import { File } from './file.model'
 import autopopulate from 'mongoose-autopopulate'
-import { IsEnum, IsNotEmpty } from "class-validator";
+import { IsEnum, IsNotEmpty } from 'class-validator'
+import { ECreditBillingCycleType, ECreditDataStatus } from '@enums/users'
 
-export enum EBilledType {
-  DEFAULT = 'default',
-  DATES = 'dates'
-}
+@ObjectType()
+export class MonthlyBillingCycle {
+  @Field(() => Int)
+  @Property()
+  issueDate: number
 
-export enum EDataStatus {
-  DRAFT = 'DRAFT',
-  ACTIVE = 'ACTIVE'
+  @Field(() => Int)
+  @Property()
+  dueDate: number
+
+  @Field(() => Int)
+  @Property()
+  dueMonth: number
 }
 
 @ObjectType()
-export class BilledMonth {
-  @Field(() => Int)
+export class YearlyBillingCycle {
+  @Field(() => MonthlyBillingCycle)
   @Property()
-  jan: number;
+  jan: MonthlyBillingCycle
 
-  @Field(() => Int)
+  @Field(() => MonthlyBillingCycle)
   @Property()
-  feb: number;
+  feb: MonthlyBillingCycle
 
-  @Field(() => Int)
+  @Field(() => MonthlyBillingCycle)
   @Property()
-  mar: number;
+  mar: MonthlyBillingCycle
 
-  @Field(() => Int)
+  @Field(() => MonthlyBillingCycle)
   @Property()
-  apr: number;
+  apr: MonthlyBillingCycle
 
-  @Field(() => Int)
+  @Field(() => MonthlyBillingCycle)
   @Property()
-  may: number;
+  may: MonthlyBillingCycle
 
-  @Field(() => Int)
+  @Field(() => MonthlyBillingCycle)
   @Property()
-  jun: number;
+  jun: MonthlyBillingCycle
 
-  @Field(() => Int)
+  @Field(() => MonthlyBillingCycle)
   @Property()
-  jul: number;
+  jul: MonthlyBillingCycle
 
-  @Field(() => Int)
+  @Field(() => MonthlyBillingCycle)
   @Property()
-  aug: number;
+  aug: MonthlyBillingCycle
 
-  @Field(() => Int)
+  @Field(() => MonthlyBillingCycle)
   @Property()
-  sep: number;
+  sep: MonthlyBillingCycle
 
-  @Field(() => Int)
+  @Field(() => MonthlyBillingCycle)
   @Property()
-  oct: number;
+  oct: MonthlyBillingCycle
 
-  @Field(() => Int)
+  @Field(() => MonthlyBillingCycle)
   @Property()
-  nov: number;
+  nov: MonthlyBillingCycle
 
-  @Field(() => Int)
+  @Field(() => MonthlyBillingCycle)
   @Property()
-  dec: number;
+  dec: MonthlyBillingCycle
 }
 
 @plugin(autopopulate)
 @ObjectType()
 export class BusinessCustomerCreditPayment {
   @Field(() => ID)
-  readonly _id: string;
-  
+  readonly _id: string
+
   @Field({ nullable: true })
-  @IsEnum(EDataStatus)
-  @Property({ enum: EDataStatus, default: EDataStatus.ACTIVE })
-  readonly dataStatus: EDataStatus;
+  @IsEnum(ECreditDataStatus)
+  @Property({ enum: ECreditDataStatus, default: ECreditDataStatus.ACTIVE })
+  readonly dataStatus: ECreditDataStatus
 
   // Credit
   @Field({ nullable: true })
   @Property({ default: false })
-  isSameAddress: boolean;
+  isSameAddress: boolean
 
   @Field()
   @Property({ required: true })
-  financialFirstname: string;
+  financialFirstname: string
 
   @Field()
   @Property({ required: true })
-  financialLastname: string;
+  financialLastname: string
 
   @Field()
   @Property({ required: true })
-  financialContactNumber: string;
+  financialContactNumber: string
 
   @Field(() => [String])
   @Property({ required: true, allowMixed: Severity.ALLOW })
-  financialContactEmails: string[];
+  financialContactEmails: string[]
 
   @Field()
   @Property({ required: true })
-  financialAddress: string;
+  financialAddress: string
 
   @Field()
   @Property({ required: true })
-  financialPostcode: string;
+  financialPostcode: string
 
   @Field()
   @Property({ required: true })
-  financialProvince: string;
+  financialProvince: string
 
   @Field()
   @Property({ required: true })
-  financialDistrict: string;
+  financialDistrict: string
 
   @Field()
   @Property({ required: true })
-  financialSubDistrict: string;
+  financialSubDistrict: string
 
   @Field()
-  @IsEnum(EBilledType)
+  @IsEnum(ECreditBillingCycleType)
   @IsNotEmpty()
-  @Property({ enum: EBilledType, default: EBilledType.DEFAULT, required: true })
-  billedDateType: TBilledMonthType;
+  @Property({ enum: ECreditBillingCycleType, default: ECreditBillingCycleType.DEFAULT, required: true })
+  billingCycleType: ECreditBillingCycleType
 
-  @Field(type => BilledMonth)
+  @Field((type) => YearlyBillingCycle)
   @Property({ required: true })
-  billedDate: BilledMonth;
-
-  @Field()
-  @IsEnum(EBilledType)
-  @IsNotEmpty()
-  @Property({ enum: EBilledType, default: EBilledType.DEFAULT, required: true })
-  billedRoundType: TBilledMonthType;
-
-  @Field(type => BilledMonth)
-  @Property({ required: true })
-  billedRound: BilledMonth;
+  billingCycle: YearlyBillingCycle
 
   @Field({ nullable: true })
   @Property()
-  acceptedFirstCreditTermDate: Date;
+  acceptedFirstCreditTermDate: Date
 
   @Field(() => File)
   @Property({ ref: () => File, autopopulate: true })
-  businessRegistrationCertificateFile: Ref<File>;
+  businessRegistrationCertificateFile: Ref<File>
 
   @Field(() => File)
   @Property({ ref: () => File, autopopulate: true })
-  copyIDAuthorizedSignatoryFile: Ref<File>;
+  copyIDAuthorizedSignatoryFile: Ref<File>
 
   @Field(() => File, { nullable: true })
   @Property({ ref: () => File, autopopulate: true })
@@ -162,19 +152,17 @@ export class BusinessCustomerCreditPayment {
   // Credit
   @Field(() => Float)
   @Property({ required: true })
-  creditLimit: number;
+  creditLimit: number
 
   @Field(() => Float)
   @Property({ required: true })
-  creditUsage: number;
+  creditUsage: number
 
   @Field(() => Float, { defaultValue: 0 })
   @Property({ required: true, default: 0 })
-  creditOutstandingBalance: number;
+  creditOutstandingBalance: number
 }
 
-const BusinessCustomerCreditPaymentModel = getModelForClass(
-  BusinessCustomerCreditPayment
-);
+const BusinessCustomerCreditPaymentModel = getModelForClass(BusinessCustomerCreditPayment)
 
-export default BusinessCustomerCreditPaymentModel;
+export default BusinessCustomerCreditPaymentModel
