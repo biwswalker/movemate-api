@@ -299,6 +299,13 @@ export async function emailIssueBillingToCustomer(session?: ClientSession) {
     paymentMethod: EPaymentMethod.CREDIT,
   }).session(session)
 
+  console.log(
+    `💸 [Billing] - Email issue billing to customer, total: ${_billings.length} bill for today: ${format(
+      startRange,
+      'dd MMM yyyy HH:mm:ss',
+    )} - ${format(endRange, 'dd MMM yyyy  HH:mm:ss')}`,
+  )
+
   await Aigle.forEach(_billings, async (billing) => {
     const customer = await UserModel.findById(billing.user).session(session)
     if (customer) {

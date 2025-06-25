@@ -130,13 +130,20 @@ export function WithTransaction(options?: mongoose.mongo.TransactionOptions) {
       try {
         const result = await session.withTransaction(
           async () => {
+            // Find the context argument by its shape
+            const ctx = args.find((arg) => arg && typeof arg === 'object' && 'req' in arg && 'res' in arg) as GraphQLContext
+
             // Find the context argument (usually the last one in GraphQL resolvers)
-            const ctx = args.find((arg) => arg && arg.session !== undefined) || args[args.length - 1] // GraphQL context is typically the last argument
+            // const ctx = args.find((arg) => arg && arg.session !== undefined) || args[args.length - 1] // GraphQL context is typically the last argument
 
             if (ctx) {
               ctx.session = session
+            } else {
+              console.error(
+                'Transaction decorator could not find GraphQLContext. Make sure one of the arguments is the context object.',
+              )
             }
-
+            
             // Call the original method with session in context
             return await originalMethod.apply(this, args)
           },

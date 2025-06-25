@@ -9,7 +9,7 @@ import BillingModel from '@models/finance/billing.model'
 import { BillingReason } from '@models/finance/objects'
 import PaymentModel from '@models/finance/payment.model'
 import { Quotation } from '@models/finance/quotation.model'
-import NotificationModel, { ENotificationVarient } from '@models/notification.model'
+import NotificationModel, { ENavigationType, ENotificationVarient } from '@models/notification.model'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import StepDefinitionModel, {
   EStepDefinition,
@@ -34,6 +34,7 @@ import lodash, { filter, find, get, head, isArray, isEmpty, isEqual, last, reduc
 import { ClientSession } from 'mongoose'
 import { getNewAllAvailableShipmentForDriver } from './shipmentGet'
 import { initialStepDefinition } from './steps'
+import { EUserRole } from '@enums/users'
 
 Aigle.mixin(lodash, {})
 
@@ -334,9 +335,9 @@ interface CancelledShipmentInput {
   reason: string
 }
 
-export async function cancelledShipment(input: CancelledShipmentInput, customerId: string, session?: ClientSession) {
+export async function cancelledShipment(input: CancelledShipmentInput, userId: string, session?: ClientSession) {
   const { shipmentId, reason } = input
-  const _shipment = await ShipmentModel.findOne({ _id: shipmentId, customer: customerId }).session(session)
+  const _shipment = await ShipmentModel.findOne({ _id: shipmentId }).session(session)
   if (!_shipment) {
     const message = 'ไม่สามารถหาข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่ง'
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -442,7 +443,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, customerI
   /**
    * Update Shipment
    */
-  await ShipmentModel.findByIdAndUpdate(
+  const _updatedShipment = await ShipmentModel.findByIdAndUpdate(
     _shipment._id,
     {
       status: isCredit ? EShipmentStatus.CANCELLED : EShipmentStatus.REFUND,
@@ -454,10 +455,14 @@ export async function cancelledShipment(input: CancelledShipmentInput, customerI
     { session },
   )
 
+  const updatedBy = await UserModel.findById(userId)
+  const isCancelledByAdmin = updatedBy.userRole === EUserRole.ADMIN
+
   /**
    * เพิ่ม Transaction ของ driver
    */
   if (isDriverAccepted && _shipment.driver) {
+    const driverId = get(_updatedShipment, 'driver._id', '')
     const driverSubtotal = forDriver
     const driverTax = driverSubtotal * 0.01
     const driverTotal = sum([driverSubtotal, -driverTax])
@@ -465,7 +470,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, customerI
       amountTax: driverTax, // WHT
       amountBeforeTax: driverSubtotal,
       amount: driverTotal,
-      ownerId: get(_shipment, 'driver._id', ''),
+      ownerId: driverId,
       ownerType: ETransactionOwner.DRIVER,
       description: description,
       refId: _shipment._id,
@@ -474,19 +479,55 @@ export async function cancelledShipment(input: CancelledShipmentInput, customerI
       status: ETransactionStatus.PENDING,
     })
     await driverTransaction.save({ session })
+
+    // Driver Notification
+    await NotificationModel.sendNotification(
+      {
+        userId: driverId,
+        varient: ENotificationVarient.WRANING,
+        title: 'งานขนส่งของท่านถูกยกเลิก',
+        message: [
+          `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${_shipment.trackingNumber} ของท่านได้ยกเลิกแล้วโดย${
+            isCancelledByAdmin ? 'ผู้ดูแลระบบ' : 'ลูกค้า'
+          } เหตุผล: ${reason}`,
+          `กรุณาตรวจสอบรายละเอียดงานขนส่งของท่าน`,
+        ],
+      },
+      session,
+      true,
+      { navigation: ENavigationType.SHIPMENT_WORK, trackingNumber: _shipment.trackingNumber },
+    )
   }
 
-  await NotificationModel.sendNotification({
-    userId: get(_shipment, 'customer._id', ''),
-    varient: ENotificationVarient.WRANING,
-    title: 'การจองของท่านถูกยกเลิกแล้ว',
-    message: [
-      `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${_shipment.trackingNumber} ของท่านได้ยกเลิกแล้วโดยท่านเอง`,
-      ...(!isCredit ? ['ระบบกำลังคำนวนยอดคืนเงิน และจะดำเนินการคืนให้ท่านในไม่ช้า'] : []),
-    ],
-    infoText: 'ดูงานขนส่ง',
-    infoLink: `/main/tracking?tracking_number=${_shipment.trackingNumber}`,
-  })
+  await NotificationModel.sendNotification(
+    {
+      userId: get(_shipment, 'customer._id', ''),
+      varient: ENotificationVarient.WRANING,
+      title: 'การจองของท่านถูกยกเลิกแล้ว',
+      message: [
+        `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${_shipment.trackingNumber} ของท่านได้ยกเลิกแล้วโดย${
+          isCancelledByAdmin ? 'ผู้ดูแลระบบ' : 'ท่านเอง'
+        }`,
+        ...(!isCredit ? ['ระบบกำลังคำนวนยอดคืนเงิน และจะดำเนินการคืนให้ท่านในไม่ช้า'] : []),
+      ],
+      infoText: 'ดูงานขนส่ง',
+      infoLink: `/main/tracking?tracking_number=${_shipment.trackingNumber}`,
+    },
+    session,
+  )
+
+  await NotificationModel.sendNotificationToAdmins(
+    {
+      varient: ENotificationVarient.WRANING,
+      title: 'งานขนส่งถูกยกเลิก',
+      message: [
+        `การจองหมายเลข ${_shipment.trackingNumber} ถูกยกเลิกโดย ${
+          isCancelledByAdmin ? updatedBy.fullname : 'ลูกค้า'
+        } เหตุผล: ${reason}`,
+      ],
+    },
+    session,
+  )
 
   const newShipments = await getNewAllAvailableShipmentForDriver()
   await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
@@ -553,22 +594,14 @@ function calculateCancelledRefundPrice(_shipment: Shipment, isCompletePayment: b
   }
 }
 
-interface DriverCancelledShipmentInput {
+interface CancelledShipmentInput {
   shipmentId: string
   reason: string
 }
 
-export async function driverCancelledShipment(input: DriverCancelledShipmentInput, session?: ClientSession) {
+export async function driverCancelledShipment(input: CancelledShipmentInput, session?: ClientSession) {
   const { shipmentId, reason } = input
   const today = new Date()
-
-  /**
-   * Notification & Email
-   * To Customer
-   * To Driver & FCM to Driver
-   * To Admin
-   *
-   */
 
   const _shipment = await ShipmentModel.findByIdAndUpdate(
     shipmentId,
@@ -585,13 +618,26 @@ export async function driverCancelledShipment(input: DriverCancelledShipmentInpu
   )
   await initialStepDefinition(shipmentId, true, session)
 
-  await NotificationModel.sendNotificationToAdmins({
-    varient: ENotificationVarient.WRANING,
-    title: 'คนขับยกเลิกงาน!',
-    message: [`คนขับได้ยกเลิกงานขนส่งหมายเลข '${_shipment.trackingNumber}' กรุณาจัดหาคนขับใหม่หรือดำเนินการแก้ไข`],
-    infoText: 'ดูรายละเอียดงาน',
-    infoLink: `/general/shipments/${_shipment.trackingNumber}`,
-  })
+  await NotificationModel.sendNotificationToAdmins(
+    {
+      varient: ENotificationVarient.WRANING,
+      title: 'คนขับยกเลิกงาน!',
+      message: [`คนขับได้ยกเลิกงานขนส่งหมายเลข '${_shipment.trackingNumber}' กรุณาจัดหาคนขับใหม่หรือดำเนินการแก้ไข`],
+      infoText: 'ดูรายละเอียดงาน',
+      infoLink: `/general/shipments/${_shipment.trackingNumber}`,
+    },
+    session,
+  )
+
+  await NotificationModel.sendNotification(
+    {
+      userId: _shipment.customer.toString(),
+      varient: ENotificationVarient.WRANING,
+      title: 'คนขับยกเลิกการจัดส่ง',
+      message: [`งานขนส่งหมายเลข ${_shipment.trackingNumber} ของคุณถูกยกเลิกโดยคนขับ`, `ระบบกำลังจัดหาคนขับใหม่ให้คุณ`],
+    },
+    session,
+  )
 
   /**
    * Add check remaining time is enough to get no

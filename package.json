@@ -11,7 +11,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "docker:build": "sudo docker build -t movemate-api .",
     "copy-file": "copyfiles *.handlebars -u 2 src/templates/*.handlebars dist/templates/ && copyfiles -u 2 src/assets/fonts/** src/assets/images/** src/assets/images/secures/** dist/assets/",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "migrate:credit-payment": "ts-node src/migrations/businessCustomerCreditPayment.ts"
   },
   "keywords": [],
   "author": "biwswalker",

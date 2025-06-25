@@ -10,6 +10,7 @@ import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 import { ClientSession } from 'mongoose'
 import { EUserRole } from '@enums/users'
 import Aigle from 'aigle'
+import { decryption } from '@utils/encryption'
 
 Aigle.mixin(lodash, {})
 
@@ -116,13 +117,34 @@ export class Notification extends TimeStamps {
   @Property({ default: Date.now })
   updatedAt: Date
 
-  static async sendNotification(data: INotification, session?: ClientSession): Promise<void> {
+  static async sendNotification(
+    data: INotification,
+    session?: ClientSession,
+    pushNotificationIncluded = false,
+    extra?: Record<string, any>
+  ): Promise<void> {
     const notification = new NotificationModel({ ...data, read: false })
     await notification.save({ session })
     await UserModel.findByIdAndUpdate(data.userId, { $push: { notifications: notification._id } }, { session })
+    // Message Notification
+    const _notificationObject = notification.toObject()
+    await pubsub.publish(NOTFICATIONS.MESSAGE, data.userId, _notificationObject) // ส่ง Real-time update
+    // Count Notification
     const unreadCount = await NotificationModel.countDocuments({ userId: data.userId, read: false }, { session })
     await pubsub.publish(NOTFICATIONS.COUNT, data.userId, unreadCount)
-    // Publish to new noti
+    // Publish push Notification
+    if (pushNotificationIncluded) {
+      const { fcmToken } = await UserModel.findOne({ _id: data.userId }, { fcmToken: 1 }) // ค้นหา FCM Token ของ User
+      if (fcmToken) {
+        const token = decryption(fcmToken)
+        await this.sendFCMNotification({
+          token,
+          ...(extra ? { data: extra } : {}),
+          notification: { title: data.title, body: data.message.join(' ') },
+        })
+      }
+    }
+    console.log('[Notification] End SendNotification', data.title)
   }
 
   static async sendNotificationToAdmins(data: Omit<INotification, 'userId'>, session?: ClientSession): Promise<void> {
@@ -136,6 +158,7 @@ export class Notification extends TimeStamps {
     })
     const _groupNotification = new NotificationModel({ ...data, userId: 'group' }).toObject()
     await pubsub.publish(NOTFICATIONS.MESSAGE_GROUP, EUserRole.ADMIN, _groupNotification) // ส่ง Real-time update
+    console.log('[Notification] SendNotificationToAdmins', data.title)
   }
 
   static async sendFCMNotification(data: Message | Message[]): Promise<void> {
