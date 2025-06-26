@@ -22,11 +22,11 @@ import { ECreditDataStatus, EDriverType, EUpdateUserStatus, EUserRole } from '@e
 import UserPendingModel, { UserPending } from '@models/userPending.model'
 import { GET_PENDING_USERS } from '@pipelines/userPending.pipeline'
 import { WithTransaction } from '@middlewares/RetryTransaction'
-import NotificationModel, { ENotificationVarient } from '@models/notification.model'
+import NotificationModel, { ENavigationType, ENotificationVarient } from '@models/notification.model'
 import { DriverUpdateInput } from '@inputs/driver.input'
 import DriverDetailModel from '@models/driverDetail.model'
 import { BusinessDriverScema, IndividualDriverScema } from '@validations/driver.validations'
-import DriverDocumentModel from '@models/driverDocument.model'
+import DriverDocumentModel, { DriverDocument } from '@models/driverDocument.model'
 
 @Resolver(UserPending)
 export default class UserPendingResolver {
@@ -324,6 +324,84 @@ export default class UserPendingResolver {
 
         // Handle document files
         const driverDocumentModel = await DriverDocumentModel.findById(driverDetailModel.documents).session(session)
+        
+        const frontOfVehicleFile = documents.frontOfVehicle ? new FileModel(documents.frontOfVehicle) : null
+        if (frontOfVehicleFile) await frontOfVehicleFile.save({ session })
+
+        const backOfVehicleFile = documents.backOfVehicle ? new FileModel(documents.backOfVehicle) : null
+        if (backOfVehicleFile) await backOfVehicleFile.save({ session })
+
+        const leftOfVehicleFile = documents.leftOfVehicle ? new FileModel(documents.leftOfVehicle) : null
+        if (leftOfVehicleFile) await leftOfVehicleFile.save({ session })
+
+        const rigthOfVehicleFile = documents.rigthOfVehicle ? new FileModel(documents.rigthOfVehicle) : null
+        if (rigthOfVehicleFile) await rigthOfVehicleFile.save({ session })
+
+        const copyVehicleRegistrationFile = documents.copyVehicleRegistration
+          ? new FileModel(documents.copyVehicleRegistration)
+          : null
+        if (copyVehicleRegistrationFile) await copyVehicleRegistrationFile.save({ session })
+
+        const copyIDCardFile = documents.copyIDCard ? new FileModel(documents.copyIDCard) : null
+        if (copyIDCardFile) await copyIDCardFile.save({ session })
+
+        const copyDrivingLicenseFile = documents.copyDrivingLicense ? new FileModel(documents.copyDrivingLicense) : null
+        if (copyDrivingLicenseFile) await copyDrivingLicenseFile.save({ session })
+
+        const copyBookBankFile = documents.copyBookBank ? new FileModel(documents.copyBookBank) : null
+        if (copyBookBankFile) await copyBookBankFile.save({ session })
+
+        const copyHouseRegistrationFile = documents.copyHouseRegistration
+          ? new FileModel(documents.copyHouseRegistration)
+          : null
+        if (copyHouseRegistrationFile) await copyHouseRegistrationFile.save({ session })
+
+        const insurancePolicyFile = documents.insurancePolicy ? new FileModel(documents.insurancePolicy) : null
+        if (insurancePolicyFile) await insurancePolicyFile.save({ session })
+
+        const criminalRecordCheckCertFile = documents.criminalRecordCheckCert
+          ? new FileModel(documents.criminalRecordCheckCert)
+          : null
+        if (criminalRecordCheckCertFile) await criminalRecordCheckCertFile.save({ session })
+
+        const businessRegistrationCertificateFile = documents.businessRegistrationCertificate
+          ? new FileModel(documents.businessRegistrationCertificate)
+          : null
+        if (businessRegistrationCertificateFile) await businessRegistrationCertificateFile.save({ session })
+
+        const certificateValueAddedTaxRegistrationFile = documents.certificateValueAddedTaxRegistration
+          ? new FileModel(documents.certificateValueAddedTaxRegistration)
+          : null
+        if (certificateValueAddedTaxRegistrationFile) await certificateValueAddedTaxRegistrationFile.save({ session })
+
+        const _driverDocument = {
+          // ...driverDocumentModel.toObject(),
+          ...(frontOfVehicleFile && { frontOfVehicle: frontOfVehicleFile._id }),
+          ...(backOfVehicleFile && { backOfVehicle: backOfVehicleFile._id }),
+          ...(leftOfVehicleFile && { leftOfVehicle: leftOfVehicleFile._id }),
+          ...(rigthOfVehicleFile && { rigthOfVehicle: rigthOfVehicleFile._id }),
+          ...(copyVehicleRegistrationFile && { copyVehicleRegistration: copyVehicleRegistrationFile._id }),
+          ...(copyIDCardFile && { copyIDCard: copyIDCardFile._id }),
+          ...(copyDrivingLicenseFile && { copyDrivingLicense: copyDrivingLicenseFile._id }),
+          ...(copyBookBankFile && { copyBookBank: copyBookBankFile._id }),
+          ...(copyHouseRegistrationFile && { copyHouseRegistration: copyHouseRegistrationFile._id }),
+          ...(insurancePolicyFile && { insurancePolicy: insurancePolicyFile._id }),
+          ...(criminalRecordCheckCertFile && { criminalRecordCheckCert: criminalRecordCheckCertFile._id }),
+          ...(businessRegistrationCertificateFile && {
+            businessRegistrationCertificate: businessRegistrationCertificateFile._id,
+          }),
+          ...(certificateValueAddedTaxRegistrationFile && {
+            certificateValueAddedTaxRegistration: certificateValueAddedTaxRegistrationFile._id,
+          }),
+        }
+
+        let _documentsId = ''
+        if(!isEmpty(_driverDocument)) {
+          const _documents = await new DriverDocumentModel({ ...omit(driverDocumentModel.toObject(), ['_id']), ..._driverDocument }).save({ session })
+          _documentsId = _documents._id
+        } else {
+          _documentsId = driverDocumentModel._id
+        }
 
         // Profile Image
         const uploadedImage = detail.profileImage ? new FileModel(detail.profileImage) : null
@@ -334,7 +412,7 @@ export default class UserPendingResolver {
         const _driverDetail = {
           ...driverDetailModel.toObject(),
           ...detail,
-          documents: driverDocumentModel._id,
+          documents: _documentsId,
         }
 
         const _userPending = new UserPendingModel({
@@ -430,6 +508,8 @@ export default class UserPendingResolver {
             message: ['ข้อมูลของคุณได้รับการอัปเดตเรียบร้อยแล้ว'],
           },
           session,
+          true,
+          { navigation: ENavigationType.PROFILE },
         )
       } else if (status === EUpdateUserStatus.REJECT) {
         // Update pending request status
@@ -446,6 +526,8 @@ export default class UserPendingResolver {
             message: ['คำขอแก้ไขข้อมูลของคุณถูกปฏิเสธโดยผู้ดูแลระบบ'],
           },
           session,
+          true,
+          { navigation: ENavigationType.PROFILE },
         )
       } else {
         throw new GraphQLError('สถานะการดำเนินการไม่ถูกต้อง')

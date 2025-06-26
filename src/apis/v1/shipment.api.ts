@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { shipmentNotifyQueue } from '@configs/jobQueue' // Import queue ของคุณ
+import { sendNewShipmentNotification } from '@controllers/shipmentNotification'
 
 const test_api = Router()
 
@@ -23,11 +24,12 @@ test_api.get('/test/favorite-driver/:shipmentId/:driverId', async (req, res) => 
 test_api.get('/test/broadcast/:shipmentId', async (req, res) => {
   const { shipmentId } = req.params
   try {
-    await shipmentNotifyQueue.add({
-      shipmentId,
-      stage: 'INITIAL_BROADCAST',
-      iteration: 1,
-    })
+    // await shipmentNotifyQueue.add({
+    //   shipmentId,
+    //   stage: 'INITIAL_BROADCAST',
+    //   iteration: 1,
+    // })
+    await sendNewShipmentNotification(shipmentId)
     res.status(200).send(`Successfully added INITIAL_BROADCAST job for Shipment ID: ${shipmentId}`)
   } catch (error) {
     res.status(500).send(`Error: ${error.message}`)

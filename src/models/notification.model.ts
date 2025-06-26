@@ -21,6 +21,9 @@ export enum ENavigationType {
   SHIPMENT_WORK = 'shipment-work',
   FINANCE = 'finance',
   NOTIFICATION = 'notification',
+  PROFILE = 'profile',
+  PROFILE_DETAIL = 'profile-detail',
+  PROFILE_DOCUMENT = 'profile-document',
 }
 registerEnumType(ENavigationType, {
   name: 'ENavigationType',

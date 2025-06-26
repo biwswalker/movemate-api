@@ -394,7 +394,7 @@ export const sendNewShipmentNotification = async (shipmentId: string, requestDri
     const availableDrivers = await UserModel.find({
       userRole: EUserRole.DRIVER,
       status: EUserStatus.ACTIVE,
-      // drivingStatus: EDriverStatus.IDLE,
+      drivingStatus: { $in: [EDriverStatus.IDLE, EDriverStatus.WORKING] },
       validationStatus: EUserValidationStatus.APPROVE,
       fcmToken: { $exists: true, $nin: [null, ''] }, // กรองคนที่มี Token เท่านั้น
       driverDetail: { $in: matchingDriverDetailIds },

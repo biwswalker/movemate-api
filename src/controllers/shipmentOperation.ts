@@ -309,8 +309,9 @@ export async function finishJob(shipmentId: string, session?: ClientSession): Pr
     /**
      * Notification
      */
+    const _customerId = get(shipment, 'customer._id', '')
     await NotificationModel.sendNotification({
-      userId: shipment?.customer as string,
+      userId: _customerId,
       varient: ENotificationVarient.SUCCESS,
       title: 'งานขนส่งสำเร็จ',
       message: [
@@ -484,7 +485,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
     await NotificationModel.sendNotification(
       {
         userId: driverId,
-        varient: ENotificationVarient.WRANING,
+        varient: ENotificationVarient.ERROR,
         title: 'งานขนส่งของท่านถูกยกเลิก',
         message: [
           `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${_shipment.trackingNumber} ของท่านได้ยกเลิกแล้วโดย${
@@ -502,7 +503,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
   await NotificationModel.sendNotification(
     {
       userId: get(_shipment, 'customer._id', ''),
-      varient: ENotificationVarient.WRANING,
+      varient: ENotificationVarient.ERROR,
       title: 'การจองของท่านถูกยกเลิกแล้ว',
       message: [
         `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${_shipment.trackingNumber} ของท่านได้ยกเลิกแล้วโดย${
@@ -518,7 +519,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
 
   await NotificationModel.sendNotificationToAdmins(
     {
-      varient: ENotificationVarient.WRANING,
+      varient: ENotificationVarient.ERROR,
       title: 'งานขนส่งถูกยกเลิก',
       message: [
         `การจองหมายเลข ${_shipment.trackingNumber} ถูกยกเลิกโดย ${

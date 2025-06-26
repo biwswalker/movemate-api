@@ -33,6 +33,7 @@ import ShipmentModel from '@models/shipment.model'
 import { REPONSE_NAME } from 'constants/status'
 import { addSeconds } from 'date-fns'
 import { Types } from 'mongoose'
+import { WithTransaction } from '@middlewares/RetryTransaction'
 
 @Resolver(User)
 export default class DriverResolver {
@@ -65,12 +66,14 @@ export default class DriverResolver {
   }
 
   @Mutation(() => Boolean)
+  @WithTransaction()
   @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async addExitingEmployee(@Arg('driverId') driverId: string, @Ctx() ctx: GraphQLContext): Promise<boolean> {
+    const session = ctx.session
     try {
       const userId = ctx.req.user_id
-      const agent = await UserModel.findById(userId)
-      const driver = await UserModel.findById(driverId)
+      const agent = await UserModel.findById(userId).session(session)
+      const driver = await UserModel.findById(driverId).session(session)
       if (!driver) {
         const message = 'ไม่พบคนขับ'
         throw new GraphQLError(message)
@@ -78,13 +81,13 @@ export default class DriverResolver {
       const existingParent = await UserModel.findOne({
         _id: driverId,
         $or: [{ parents: { $in: [userId] } }, { requestedParents: { $in: [userId] } }],
-      })
+      }).session(session)
       if (existingParent) {
         const message = 'ท่านได้เพิ่มคนขับคนนี้ไปแล้ว'
         throw new GraphQLError(message)
       }
 
-      await UserModel.findByIdAndUpdate(driver._id, { $push: { requestedParents: userId } })
+      await UserModel.findByIdAndUpdate(driver._id, { $push: { requestedParents: userId } }, { session })
 
       /**
        * Notification
@@ -96,15 +99,7 @@ export default class DriverResolver {
         varient: ENotificationVarient.INFO,
         title: title,
         message: [message],
-      })
-      if (driver.fcmToken) {
-        const token = decryption(driver.fcmToken)
-        await NotificationModel.sendFCMNotification({
-          token,
-          data: { navigation: ENavigationType.INDEX },
-          notification: { title: NOTIFICATION_TITLE, body: `${title}จาก ${driver.fullname}` },
-        })
-      }
+      }, session, true, { navigation: ENavigationType.INDEX })
 
       return true
     } catch (error) {
