@@ -496,7 +496,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
       },
       session,
       true,
-      { navigation: ENavigationType.SHIPMENT_WORK, trackingNumber: _shipment.trackingNumber },
+      { navigation: ENavigationType.SHIPMENT, trackingNumber: _shipment.trackingNumber },
     )
   }
 

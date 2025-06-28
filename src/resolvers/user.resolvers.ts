@@ -534,6 +534,7 @@ export default class UserResolver {
   }
 
   @Mutation(() => User)
+  @WithTransaction()
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async approvalUser(
     @Arg('id') id: string,
@@ -541,12 +542,13 @@ export default class UserResolver {
     @Arg('reason', { nullable: true }) reason: string,
     @Ctx() ctx: GraphQLContext,
   ): Promise<User> {
+    const session = ctx.session
     try {
       const adminId = ctx.req.user_id
       if (!id) {
         throw new AuthenticationError('ไม่พบผู้ใช้')
       }
-      const user = await UserModel.findById(id).exec()
+      const user = await UserModel.findById(id).session(session).exec()
 
       if (!user) {
         throw new AuthenticationError('ไม่พบผู้ใช้')
@@ -598,14 +600,17 @@ export default class UserResolver {
               upgradeRequest: null,
               isChangePasswordRequire: true,
             }
-            await user.updateOne({
-              status,
-              validationStatus: result,
-              password: hashedPassword,
-              validationRejectedMessage: reason || '',
-              validationBy: adminId,
-              ...newBusinessDetail,
-            })
+            await user.updateOne(
+              {
+                status,
+                validationStatus: result,
+                password: hashedPassword,
+                validationRejectedMessage: reason || '',
+                validationBy: adminId,
+                ...newBusinessDetail,
+              },
+              { session },
+            )
             const movemate_link = `https://www.movematethailand.com`
             await addEmailQueue({
               from: process.env.MAILGUN_SMTP_EMAIL,
@@ -620,16 +625,22 @@ export default class UserResolver {
                 movemate_link,
               },
             })
-            await NotificationModel.sendNotification({
-              userId: user._id,
-              varient: ENotificationVarient.SUCCESS,
-              title: 'บัญชีของท่านได้รับการอัพเกรดแล้ว',
-              message: [`บัญชี ${userNumber} ได้อัพเกรดเป็นรูปแบบ corporate แล้ว ท่านสามารถใช้งานได้ในขณะนี้`],
-              infoText: 'ดูโปรไฟล์',
-              infoLink: '/main/profile',
-            })
+            await NotificationModel.sendNotification(
+              {
+                userId: user._id,
+                varient: ENotificationVarient.SUCCESS,
+                title: 'บัญชีของท่านได้รับการอัพเกรดแล้ว',
+                message: [`บัญชี ${userNumber} ได้อัพเกรดเป็นรูปแบบ corporate แล้ว ท่านสามารถใช้งานได้ในขณะนี้`],
+                infoText: 'ดูโปรไฟล์',
+                infoLink: '/main/profile',
+              },
+              session,
+            )
           } else {
-            await user.updateOne({ status, validationStatus: result, validationBy: adminId, password: hashedPassword })
+            await user.updateOne(
+              { status, validationStatus: result, validationBy: adminId, password: hashedPassword },
+              { session },
+            )
             const host = getCurrentHost(ctx)
             const userNumberToken = generateExpToken({ userNumber: user.userNumber })
             const activate_link = `${host}/api/v1/activate/customer/${userNumberToken}`
@@ -662,13 +673,16 @@ export default class UserResolver {
 
           const sentemail = user.userType === EUserType.INDIVIDUAL ? individualDetail.email : businesData.businessEmail
 
-          await user.updateOne({
-            status,
-            validationStatus: result,
-            validationRejectedMessage: reason || '',
-            validationBy: adminId,
-            ...newBusinessDetail,
-          })
+          await user.updateOne(
+            {
+              status,
+              validationStatus: result,
+              validationRejectedMessage: reason || '',
+              validationBy: adminId,
+              ...newBusinessDetail,
+            },
+            { session },
+          )
           await addEmailQueue({
             from: process.env.MAILGUN_SMTP_EMAIL,
             to: sentemail,
@@ -682,14 +696,17 @@ export default class UserResolver {
           })
 
           if (user.userType === EUserType.INDIVIDUAL) {
-            await NotificationModel.sendNotification({
-              userId: user._id,
-              varient: ENotificationVarient.ERROR,
-              title: 'การอัพเกรดบัญชีไม่ได้รับการอนุมัติ',
-              message: [
-                `บัญชี ${businesData.businessName} ไม่ผ่านพิจารณาการอัพเกรดเป็นรูปแบบ corporate หากมีข้อสงสัยโปรดติดต่อเรา`,
-              ],
-            })
+            await NotificationModel.sendNotification(
+              {
+                userId: user._id,
+                varient: ENotificationVarient.ERROR,
+                title: 'การอัพเกรดบัญชีไม่ได้รับการอนุมัติ',
+                message: [
+                  `บัญชี ${businesData.businessName} ไม่ผ่านพิจารณาการอัพเกรดเป็นรูปแบบ corporate หากมีข้อสงสัยโปรดติดต่อเรา`,
+                ],
+              },
+              session,
+            )
           }
         }
       } else if (user.userRole === EUserRole.DRIVER) {
@@ -702,14 +719,17 @@ export default class UserResolver {
           // New driver and notify
           const password_decryption = generateRef(10).toLowerCase()
           const hashedPassword = await bcrypt.hash(password_decryption, 10)
-          await user.updateOne({
-            status,
-            validationBy: adminId,
-            validationStatus: result,
-            password: hashedPassword,
-            isChangePasswordRequire: true,
-            validationRejectedMessage: reason || '',
-          })
+          await user.updateOne(
+            {
+              status,
+              validationBy: adminId,
+              validationStatus: result,
+              password: hashedPassword,
+              isChangePasswordRequire: true,
+              validationRejectedMessage: reason || '',
+            },
+            { session },
+          )
 
           // Sent password
           const smsMessage = `รหัสสำหรับเข้าสู่ระบบของ Movemate Driver ของคุณคือ ${password_decryption}`
@@ -732,39 +752,30 @@ export default class UserResolver {
             })
           }
         } else {
-          await user.updateOne({
-            status,
-            validationStatus: result,
-            validationRejectedMessage: reason || '',
-            validationBy: adminId,
-          })
+          await user.updateOne(
+            {
+              status,
+              validationStatus: result,
+              validationRejectedMessage: reason || '',
+              validationBy: adminId,
+            },
+            { session },
+          )
         }
 
         const title = isApproved ? 'บัญชีของท่านได้รับการอนุมัติ' : 'บัญชีของท่านไม่ผ่านการอนุมัติ'
         const messages = isApproved
           ? ['ขอแสดงความยินดีด้วย', 'บัญชีของท่านได้รับการอนุมัติเป็นคนขับของ Movemate หากมีข้อสงสัยโปรดติดต่อเรา']
           : [`บัญชี ${driverDetail.fullname} ไม่ผ่านพิจารณาคนขับ Movemvate หากมีข้อสงสัยโปรดติดต่อเรา`]
-        await NotificationModel.sendNotification({
-          userId: user._id,
-          varient: isApproved ? ENotificationVarient.SUCCESS : ENotificationVarient.ERROR,
-          title: title,
-          message: messages,
-        })
-
-        if (
-          user.fcmToken &&
-          includes([EUserStatus.ACTIVE, EUserStatus.BANNED, EUserStatus.DENIED, EUserStatus.INACTIVE], status)
+        await NotificationModel.sendNotification(
+          {
+            userId: user._id,
+            varient: isApproved ? ENotificationVarient.SUCCESS : ENotificationVarient.ERROR,
+            title: title,
+            message: messages,
+          },
+          session,
         )
-          await NotificationModel.sendFCMNotification({
-            token: user.fcmToken,
-            data: { navigation: ENavigationType.NOTIFICATION },
-            notification: {
-              title: NOTIFICATION_TITLE,
-              body: isApproved
-                ? 'ขอแสดงความยินดีด้วย บัญชีของท่านได้รับการอนุมัติเป็นคนขับของ Movemate'
-                : `บัญชี ${driverDetail.fullname} ไม่ผ่านพิจารณาคนขับ Movemvate หากมีข้อสงสัยโปรดติดต่อเรา`,
-            },
-          })
         await pubsub.publish(USERS.STATUS, user._id, status)
       }
 

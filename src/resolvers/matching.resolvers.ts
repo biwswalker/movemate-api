@@ -546,7 +546,7 @@ export default class MatchingResolver {
           const message = `🔔 งานใหม่จากนายหน้า! ${dateText} ${vehicleText} 📦 ${pickupText} 📍 ${dropoffsText}`
           await NotificationModel.sendFCMNotification({
             token,
-            data: { navigation: ENavigationType.SHIPMENT_WORK, trackingNumber: shipment.trackingNumber },
+            data: { navigation: ENavigationType.SHIPMENT, trackingNumber: shipment.trackingNumber },
             notification: { title: NOTIFICATION_TITLE, body: message },
           })
         }

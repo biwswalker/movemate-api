@@ -3,7 +3,7 @@ import UserModel, { User } from '@models/user.model'
 import bcrypt from 'bcrypt'
 import { AuthGuard } from '@guards/auth.guards'
 import { GraphQLContext } from '@configs/graphQL.config'
-import { generateId, getCurrentHost } from '@utils/string.utils'
+import { generateId, generateRandomNumberPattern, getCurrentHost } from '@utils/string.utils'
 import addEmailQueue from '@utils/email.utils'
 import { GraphQLError } from 'graphql'
 import AdminModel from '@models/admin.model'
@@ -41,8 +41,8 @@ export default class AdminResolver {
       }
 
       const userNumber = await generateId('MMAM', 'admin')
-      const userPassword = await generateId('ADMIN', 'password')
-      const hashedPassword = await bcrypt.hash(userPassword, 10)
+      const rawPassword = generateRandomNumberPattern('MMPWD########').toLowerCase()
+      const hashedPassword = await bcrypt.hash(rawPassword, 10)
       const admin = new AdminModel({
         userNumber,
         ...data,
@@ -80,7 +80,7 @@ export default class AdminResolver {
         context: {
           fullname: admin.fullname,
           username: userNumber,
-          password: userPassword.toLowerCase(),
+          password: rawPassword,
           activate_link,
           movemate_link,
         },
