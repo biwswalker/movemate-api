@@ -177,7 +177,7 @@ export default class ShipmentResolver {
     const user_id = ctx.req.user_id
     const user_role = ctx.req.user_role
     try {
-      const { sort = {}, ...reformSorts }: PaginateOptions = reformPaginate(paginate);
+      const { sort = {}, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
       const filterQuery = omitBy(query, isEmpty)
       const aggregate = ShipmentModel.aggregate(
         SHIPMENT_LIST(
@@ -198,7 +198,7 @@ export default class ShipmentResolver {
       }
       return shipments
     } catch (error) {
-      console.log('shipmentList error: ', JSON.stringify(error, undefined, 2))
+      console.log(error)
       throw error
     }
   }
@@ -224,7 +224,7 @@ export default class ShipmentResolver {
 
       return ids
     } catch (error) {
-      console.log('allshipmentIds error: ', JSON.stringify(error, undefined, 2))
+      console.log(error)
       throw new GraphQLError('ไม่สามารถเรียกข้อมูลงานขนส่งได้ โปรดลองอีกครั้ง')
     }
   }
