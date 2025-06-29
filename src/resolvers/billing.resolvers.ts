@@ -226,7 +226,7 @@ export default class BillingResolver {
             },
             attachments: [{ filename: path.basename(filePath), path: filePath }],
           })
-          await BillingDocumentModel.updateOne({ emailTime: new Date() })
+          await BillingDocumentModel.findByIdAndUpdate(documentId, { emailTime: new Date() })
         } else if (type === 'receipt') {
           const filePath = path.join(__dirname, '..', '..', 'generated/receipt', _document.filename)
           const businessContactNumber = get(_customer, 'businessDetail.contactNumber', '')
@@ -247,7 +247,7 @@ export default class BillingResolver {
             },
             attachments: [{ filename: path.basename(filePath), path: filePath }],
           })
-          await BillingDocumentModel.updateOne({ emailTime: new Date() })
+          await BillingDocumentModel.findByIdAndUpdate(documentId, { emailTime: new Date() })
         }
       }
       return true
