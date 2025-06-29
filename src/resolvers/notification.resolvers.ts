@@ -23,11 +23,13 @@ import { sum } from 'lodash'
 import { Repeater } from '@graphql-yoga/subscription'
 import { EPaymentMethod } from '@enums/payments'
 import { EShipmentStatus } from '@enums/shipments'
-import { ERegistration, EUserRole, EUserStatus, EUserType } from '@enums/users'
+import { ERegistration, EUpdateUserStatus, EUserRole, EUserStatus, EUserType } from '@enums/users'
 import TransactionModel from '@models/transaction.model'
 import { TRANSACTION_DRIVER_LIST } from '@pipelines/transaction.pipeline'
 import { EBillingStatus } from '@enums/billing'
 import BillingModel from '@models/finance/billing.model'
+import UserPendingModel from '@models/userPending.model'
+import { GET_PENDING_USERS } from '@pipelines/userPending.pipeline'
 
 export async function getAdminMenuNotificationCount(): Promise<AdminNotificationCountPayload> {
   const individualCustomer = await UserModel.countDocuments({
@@ -50,6 +52,20 @@ export async function getAdminMenuNotificationCount(): Promise<AdminNotification
     userType: EUserType.BUSINESS,
     userRole: EUserRole.DRIVER,
   }).catch(() => 0)
+  const _driverPendingAggregate = await GET_PENDING_USERS({
+    userRole: EUserRole.DRIVER,
+    status: EUpdateUserStatus.PENDING,
+  })
+  const driverPending = await UserPendingModel.aggregate(_driverPendingAggregate)
+    .then((response) => response.length || 0)
+    .catch(() => 0)
+  const _customerPendingAggregate = await GET_PENDING_USERS({
+    userRole: EUserRole.CUSTOMER,
+    status: EUpdateUserStatus.PENDING,
+  })
+  const customerPending = await UserPendingModel.aggregate(_customerPendingAggregate)
+    .then((response) => response.length || 0)
+    .catch(() => 0)
   const shipment = await ShipmentModel.countDocuments({
     $or: [{ status: EShipmentStatus.IDLE }, { status: EShipmentStatus.REFUND }],
   }).catch(() => 0)
@@ -64,12 +80,14 @@ export async function getAdminMenuNotificationCount(): Promise<AdminNotification
   const financialPayment = await TransactionModel.aggregate(TRANSACTION_DRIVER_LIST({ isPending: true }))
 
   const payload: AdminNotificationCountPayload = {
-    customer: sum([individualCustomer, businessCustomer]),
+    customer: sum([individualCustomer, businessCustomer, customerPending]),
     individualCustomer,
     businessCustomer,
-    driver: sum([individualDriver, businessDriver]),
+    customerPending,
+    driver: sum([individualDriver, businessDriver, driverPending]),
     individualDriver,
     businessDriver,
+    driverPending,
     shipment,
     financial: sum([financialCash, financialCredit]),
     financialCash,

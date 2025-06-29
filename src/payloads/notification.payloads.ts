@@ -9,11 +9,15 @@ export class AdminNotificationCountPayload {
   @Field(() => Int)
   businessCustomer: number
   @Field(() => Int)
+  customerPending: number
+  @Field(() => Int)
   driver: number
   @Field(() => Int)
   individualDriver: number
   @Field(() => Int)
   businessDriver: number
+  @Field(() => Int)
+  driverPending: number
   @Field(() => Int)
   shipment: number
   @Field(() => Int)

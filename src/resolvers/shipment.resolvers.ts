@@ -177,7 +177,7 @@ export default class ShipmentResolver {
     const user_id = ctx.req.user_id
     const user_role = ctx.req.user_role
     try {
-      const { sort = {}, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
+      const { sort = {}, ...reformSorts }: PaginateOptions = reformPaginate(paginate);
       const filterQuery = omitBy(query, isEmpty)
       const aggregate = ShipmentModel.aggregate(
         SHIPMENT_LIST(
@@ -198,7 +198,7 @@ export default class ShipmentResolver {
       }
       return shipments
     } catch (error) {
-      console.log(error)
+      console.log('shipmentList error: ', JSON.stringify(error, undefined, 2))
       throw error
     }
   }
@@ -213,18 +213,6 @@ export default class ShipmentResolver {
     const user_role = ctx.req.user_role
     try {
       const filterQuery = omitBy(query, isEmpty)
-      console.log(
-        'raw: ',
-        JSON.stringify(
-          SHIPMENT_LIST(
-            { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery },
-            user_role,
-            user_id,
-          ),
-          undefined,
-          2,
-        ),
-      )
       const shipments = await ShipmentModel.aggregate(
         SHIPMENT_LIST(
           { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery },
@@ -233,11 +221,10 @@ export default class ShipmentResolver {
         ),
       )
       const ids = map(shipments, ({ _id }) => _id)
-      console.log('users: ', shipments, ids)
 
       return ids
     } catch (error) {
-      console.log(error)
+      console.log('allshipmentIds error: ', JSON.stringify(error, undefined, 2))
       throw new GraphQLError('ไม่สามารถเรียกข้อมูลงานขนส่งได้ โปรดลองอีกครั้ง')
     }
   }
