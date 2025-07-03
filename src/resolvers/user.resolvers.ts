@@ -1049,7 +1049,7 @@ export default class UserResolver {
           await addEmailQueue({
             from: process.env.MAILGUN_SMTP_EMAIL,
             to: email,
-            subject: 'ยืนยันตัวตนคุณ',
+            subject: 'มีการขอแก้ไขรหัสผ่าน กรุณายืนยันตัวตน',
             template: 'forgot_password',
             context: {
               code,

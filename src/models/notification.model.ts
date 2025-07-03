@@ -123,7 +123,7 @@ export class Notification extends TimeStamps {
     data: INotification,
     session?: ClientSession,
     pushNotificationIncluded = false,
-    extra?: Record<string, any>
+    extra?: Record<string, any>,
   ): Promise<void> {
     const notification = new NotificationModel({ ...data, read: false })
     await notification.save({ session })
@@ -155,11 +155,14 @@ export class Notification extends TimeStamps {
       const _notification = new NotificationModel({ ...data, read: false, userId: adminUser })
       await _notification.save({ session }) // สร้าง Notification
       await UserModel.findByIdAndUpdate(adminUser, { $push: { notifications: _notification._id } }, { session }) // เพิ่ม Notification ไปยัง User
+      const _notificationObject = _notification.toObject()
+      await pubsub.publish(NOTFICATIONS.MESSAGE, adminUser, _notificationObject) // ส่ง Real-time update
       const unreadCount = await NotificationModel.countDocuments({ userId: adminUser, read: false }, { session })
       await pubsub.publish(NOTFICATIONS.COUNT, adminUser, unreadCount) // ส่ง Real-time update
     })
-    const _groupNotification = new NotificationModel({ ...data, userId: 'group' }).toObject()
-    await pubsub.publish(NOTFICATIONS.MESSAGE_GROUP, EUserRole.ADMIN, _groupNotification) // ส่ง Real-time update
+    // Not using group anymore because FE can't detect noti Id
+    // const _groupNotification = new NotificationModel({ ...data, userId: 'group' }).toObject()
+    // await pubsub.publish(NOTFICATIONS.MESSAGE_GROUP, EUserRole.ADMIN, _groupNotification) // ส่ง Real-time update
     console.log('[Notification] SendNotificationToAdmins', data.title)
   }
 
@@ -182,8 +185,10 @@ export class Notification extends TimeStamps {
   }
   static async markNotificationAsRead(_id: string): Promise<void> {
     const notification = await NotificationModel.findByIdAndUpdate(_id, { read: true })
-    const unreadCount = await NotificationModel.countDocuments({ userId: notification.userId, read: false })
-    await pubsub.publish(NOTFICATIONS.COUNT, notification.userId, unreadCount)
+    if (notification) {
+      const unreadCount = await NotificationModel.countDocuments({ userId: notification.userId, read: false })
+      await pubsub.publish(NOTFICATIONS.COUNT, notification.userId, unreadCount)
+    }
   }
 
   static async findByUserId(userId: string, { skip, limit }: LoadmoreArgs): Promise<Notification[]> {

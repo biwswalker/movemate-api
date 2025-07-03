@@ -47,18 +47,14 @@ export const IndividualCustomerSchema = (userId?: string) =>
     isVerifiedEmail: Yup.boolean(),
     isVerifiedPhoneNumber: Yup.boolean(),
     taxId: Yup.string()
+      .transform((value) => (String(value).trim() === '' ? null : value))
       .nullable()
-      .transform((value) => (value === '' ? null : value))
-      .when('$self', {
-        is: (value: any) => value !== null,
-        then: (schema) =>
-          schema
-            .matches(/^[0-9]+$/, 'เลขประจำตัวผู้เสียภาษีเป็นตัวเลขเท่านั้น')
-            .length(13, 'เลขประจำตัวผู้เสียภาษี 13 หลัก')
-            .test('exiting-taxId', 'เลขประจำตัวผู้เสียภาษีถูกใช้งานแล้ว', async (value) => {
-              const result = await UserModel.existingTaxId(value, userId)
-              return !result
-            }),
+      .matches(/^[0-9]+$/, 'เลขประจำตัวผู้เสียภาษีเป็นตัวเลขเท่านั้น')
+      .length(13, 'เลขประจำตัวผู้เสียภาษี 13 หลัก')
+      .test('exiting-taxId', 'เลขประจำตัวผู้เสียภาษีถูกใช้งานแล้ว', async (value) => {
+        if(!value) return true
+        const result = await UserModel.existingTaxId(value, userId)
+        return !result
       }),
     address: Yup.string(),
     province: Yup.string(),

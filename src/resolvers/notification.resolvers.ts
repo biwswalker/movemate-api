@@ -98,6 +98,12 @@ export async function getAdminMenuNotificationCount(): Promise<AdminNotification
 }
 @Resolver()
 export default class NotificationResolver {
+  private async publishGetNotificationUnreadCount(userId: string) {
+    const notificationCount = await NotificationModel.countDocuments({ userId, read: false })
+    await pubsub.publish(NOTFICATIONS.COUNT, userId, notificationCount)
+    return notificationCount
+  }
+
   @Query(() => [Notification])
   @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async notifications(@Ctx() ctx: GraphQLContext, @Args() loadmore: LoadmoreArgs) {
@@ -119,6 +125,7 @@ export default class NotificationResolver {
     const userId = ctx.req.user_id
     if (userId) {
       const notification = await NotificationModel.findOne({ userId, _id: notificationId })
+      await NotificationModel.markNotificationAsRead(notificationId)
       return notification
     }
     return undefined
@@ -130,17 +137,16 @@ export default class NotificationResolver {
     const userId = ctx.req.user_id
     const userRole = ctx.req.user_role
     if (userId) {
-      const notification = await NotificationModel.countDocuments({ userId, read: false })
-      await pubsub.publish(NOTFICATIONS.COUNT, userId, notification)
+      const notificationCount = await this.publishGetNotificationUnreadCount(userId)
       if (userRole === EUserRole.CUSTOMER) {
         const shipment = await ShipmentModel.countDocuments({
           customer: userId,
           status: { $in: [EShipmentStatus.IDLE, EShipmentStatus.PROGRESSING, EShipmentStatus.REFUND] },
         })
         await pubsub.publish(NOTFICATIONS.PROGRESSING_SHIPMENT, userId, shipment)
-        return { notification, shipment }
+        return { notification: notificationCount, shipment }
       }
-      return { notification, shipment: 0 }
+      return { notification: notificationCount, shipment: 0 }
     }
     return { notification: 0, shipment: 0 }
   }
@@ -220,6 +226,41 @@ export default class NotificationResolver {
     topicId: ({ context }: SubscribeResolverData<number, any, AuthContext>) => context.user_role,
   })
   listenNotificationGroupMessage(@Root() payload: Notification, @Ctx() _: AuthContext): Notification {
+    return payload
+  }
+
+  @Subscription(() => [Notification], {
+    subscribe: async ({ context, args }) => {
+      const { user_id } = context as AuthContext
+      if (!user_id) {
+        throw new Error('Authentication required')
+      }
+
+      // สร้าง Repeater ซึ่งเป็นตัวจัดการ stream ของข้อมูล
+      return new Repeater(async (push, stop) => {
+        // 1. ส่งข้อมูลเริ่มต้น (Initial Data) ทันทีที่เชื่อมต่อ
+        const initialNotifications = await NotificationModel.findByUserId(user_id, args as LoadmoreArgs)
+        await push(initialNotifications)
+
+        // 2. Subscribe เฉพาะ topic ของ user คนนี้
+        const subscription = pubsub.subscribe(NOTFICATIONS.MESSAGE, user_id)
+
+        // 3. วนลูปเพื่อรอรับข้อมูลใหม่ๆ ที่ถูก publish เข้ามา
+        for await (const newNotification of subscription) {
+          // newNotification จะเป็น object Notification ตัวเดียว
+          await push([newNotification])
+        }
+
+        await stop
+      })
+    },
+  } as any)
+  realtimeNotifications(
+    @Root() payload: Notification[],
+    @Args() args: LoadmoreArgs,
+    @Ctx() ctx: AuthContext,
+  ): Notification[] {
+    // ส่งข้อมูลที่ได้รับไปยัง client
     return payload
   }
 }
