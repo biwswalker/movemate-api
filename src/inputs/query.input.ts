@@ -19,7 +19,7 @@ export class PaginationArgs {
 @ArgsType()
 export class LoadmoreArgs {
   @Field(() => Int, { defaultValue: 5, nullable: true })
-  limit: number;
+  limit?: number;
 
   @Field(() => [String], { nullable: true })
   sortField?: string[];
@@ -28,5 +28,5 @@ export class LoadmoreArgs {
   sortAscending?: boolean = true;
 
   @Field(() => Int, { defaultValue: 0, nullable: true })
-  skip: number;
+  skip?: number;
 }

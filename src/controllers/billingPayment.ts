@@ -9,7 +9,7 @@ import { REPONSE_NAME } from 'constants/status'
 import { GraphQLError } from 'graphql'
 import lodash, { get, includes } from 'lodash'
 import { ClientSession, Types } from 'mongoose'
-import { markShipmentAsRefunded, markShipmentVerified } from './shipmentVerify'
+import { markShipmentAsNoRefund, markShipmentAsRefunded, markShipmentVerified } from './shipmentVerify'
 import { addCustomerCreditUsage, updateCustomerCreditUsageBalance } from './customer'
 import { getAdminMenuNotificationCount } from '@resolvers/notification.resolvers'
 import TransactionModel, {
@@ -84,11 +84,15 @@ export async function markBillingAsPaid(
   /**
    * Update Payment status
    */
-  await PaymentModel.findByIdAndUpdate(_payment._id, {
-    status: EPaymentStatus.COMPLETE,
-    ...(_evidenceId ? { $push: { evidence: _evidenceId } } : {}),
-    updatedBy: adminId,
-  }, { session })
+  await PaymentModel.findByIdAndUpdate(
+    _payment._id,
+    {
+      status: EPaymentStatus.COMPLETE,
+      ...(_evidenceId ? { $push: { evidence: _evidenceId } } : {}),
+      updatedBy: adminId,
+    },
+    { session },
+  )
   /**
    * Generate Receipt
    * Only credit customer
@@ -314,7 +318,11 @@ export async function markBillingAsRefunded(input: MarkBillingAsRefundInput, adm
      * Only billing state REFUND no CHANGE
      */
     await Aigle.forEach(_billing.shipments as Shipment[], async (shipment) => {
-      await markShipmentAsRefunded(shipment._id, adminId, session)
+      if (isRefunded) {
+        await markShipmentAsRefunded(shipment._id, adminId, session)
+      } else {
+        await markShipmentAsNoRefund(shipment._id, adminId, session)
+      }
     })
   }
 

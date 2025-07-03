@@ -15,6 +15,7 @@ export const enum NOTFICATIONS {
 
 export const enum SHIPMENTS {
   GET_MATCHING_SHIPMENT = 'GET_MATCHING_SHIPMENT',
+  UPDATE = 'SHIPMENT_UPDATE',
 }
 
 export const enum LOCATIONS {
@@ -34,4 +35,5 @@ export default createPubSub<{
   [LOCATIONS.REQUEST_LIMIT]: [LocationRequestLimitPayload]
   [SHIPMENTS.GET_MATCHING_SHIPMENT]: [Shipment[]]
   [USERS.STATUS]: [string, EUserStatus]
+  [SHIPMENTS.UPDATE]: [string, Shipment]
 }>()

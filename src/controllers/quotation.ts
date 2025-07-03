@@ -245,7 +245,7 @@ export async function calculateQuotation(
     const customerTypes = get(customer, 'userType', '')
     isTaxCalculation = customerTypes === EUserType.BUSINESS && subTotalPrice > 1000
     if (isTaxCalculation) {
-      whtName = 'ค่าภาษีบริการขนส่งสินค้าจากบริษัท 1% (WHT)'
+      whtName = 'ภาษีหัก ณ ที่จ่าย 1% (WHT)'
       whtPrice = subTotalAfterDiscountPrice * 0.01
     }
   }

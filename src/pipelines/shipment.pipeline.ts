@@ -206,10 +206,13 @@ export const SHIPMENT_LIST = (
     driverAgentName,
     customerId,
     driverId,
+    sortOrder,
   }: GetShipmentInput,
   user_role: string | undefined,
   user_id: string | undefined,
   sort = {},
+  skip: number | undefined = undefined,
+  limit: number | undefined = undefined,
 ) => {
   const statusFilterOr =
     status === EShipmentStatusCriteria.ALL
@@ -246,7 +249,7 @@ export const SHIPMENT_LIST = (
           },
         }
       : {}),
-    ...(user_role === EUserRole.CUSTOMER && user_id ? { customer: user_id } : {}),
+    ...(user_role === EUserRole.CUSTOMER && user_id ? { customer: new Types.ObjectId(user_id) } : {}),
     ...(customerId ? { customer: new Types.ObjectId(customerId) } : {}),
     ...(driverId ? { driver: new Types.ObjectId(driverId) } : {}),
     ...(status === EShipmentStatusCriteria.PAYMENT_VERIFY
@@ -273,6 +276,13 @@ export const SHIPMENT_LIST = (
       ? [{ status: { $in: statusFilterOr } }]
       : []),
   ]
+
+  const initialMatch = {
+    $match: {
+      ...matchConditions,
+      ...(!isEmpty(orQuery) ? { $or: orQuery } : {}),
+    },
+  }
 
   // TODO: Refactor this
   const payments = paymentMethod ? [{ $match: { paymentMethod } }] : []
@@ -326,57 +336,60 @@ export const SHIPMENT_LIST = (
       ]
     : []
 
-  const sorts: PipelineStage[] = [{ $sort: { statusWeight: 1, ...sort } }]
+  // 2. All Lookups and subsequent filters
+  const secondaryMatchConditions = [...payments, ...customers, ...drivers, ...agentDrivers]
 
-  const orderConditions: PipelineStage = {
+  const lookups = LOOKUPs
+
+  const addSortField: PipelineStage = {
     $addFields: {
       statusWeight: {
         $switch: {
-          branches: [
-            {
-              case: {
-                $eq: ['$status', EShipmentStatus.IDLE],
-              },
-              then: 0,
-            },
-            {
-              case: {
-                $eq: ['$status', EShipmentStatus.REFUND],
-              },
-              then: 1,
-            },
-            {
-              case: {
-                $eq: ['$status', EShipmentStatus.PROGRESSING],
-              },
-              then: 2,
-            },
-            {
-              case: {
-                $eq: ['$status', EShipmentStatus.DELIVERED],
-              },
-              then: 3,
-            },
-          ],
-          default: 4,
+          branches: sortOrder
+            ? sortOrder.map((status, index) => ({ case: { $eq: ['$status', status] }, then: index }))
+            : [
+                {
+                  case: { $eq: ['$status', EShipmentStatus.IDLE] },
+                  then: 0,
+                },
+                {
+                  case: { $eq: ['$status', EShipmentStatus.REFUND] },
+                  then: 1,
+                },
+                {
+                  case: { $eq: ['$status', EShipmentStatus.PROGRESSING] },
+                  then: 2,
+                },
+                {
+                  case: { $eq: ['$status', EShipmentStatus.DELIVERED] },
+                  then: 3,
+                },
+              ],
+          default: 99,
         },
       },
     },
   }
 
-  return [
-    {
-      $match: {
-        ...matchConditions,
-        ...(!isEmpty(orQuery) ? { $or: orQuery } : {}),
-      },
+  const sortStage: PipelineStage = { $sort: { statusWeight: 1, ...sort } }
+  const paginationStages: PipelineStage[] = [
+    ...(skip !== undefined ? [{ $skip: skip }] : []),
+    ...(limit !== undefined ? [{ $limit: limit }] : []),
+  ]
+  const projectStages: PipelineStage = {
+    $project: {
+      route: false,
+      formula: false,
     },
-    ...LOOKUPs,
-    orderConditions,
-    ...payments,
-    ...customers,
-    ...drivers,
-    ...agentDrivers,
-    ...sorts,
+  }
+
+  return [
+    initialMatch,
+    ...lookups,
+    ...secondaryMatchConditions,
+    addSortField,
+    sortStage,
+    ...paginationStages,
+    projectStages,
   ]
 }

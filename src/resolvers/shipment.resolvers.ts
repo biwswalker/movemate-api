@@ -1,11 +1,11 @@
-import { GraphQLContext } from '@configs/graphQL.config'
+import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { GetShipmentInput, ShipmentInput } from '@inputs/shipment.input'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
 import { FilterQuery, PaginateOptions } from 'mongoose'
-import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
+import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, Root, Subscription, UseMiddleware } from 'type-graphql'
 import lodash, { find, get, isEmpty, map, omitBy, sum } from 'lodash'
 import {
   ShipmentPaginationAggregatePayload,
@@ -42,6 +42,7 @@ import { EServiceStatus } from '@enums/additionalService'
 import { PricingCalculationMethodPayload } from '@payloads/pricing.payloads'
 import { AuditLogDecorator } from 'decorators/AuditLog.decorator'
 import { EAuditActions } from '@enums/audit'
+import { Repeater } from '@graphql-yoga/subscription'
 
 Aigle.mixin(lodash, {})
 
@@ -233,23 +234,17 @@ export default class ShipmentResolver {
   @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async shipments(
     @Ctx() ctx: GraphQLContext,
-    @Arg('data') data: GetShipmentInput,
-    @Args() { skip, ...paginateOpt }: LoadmoreArgs,
+    @Arg('data') filter: GetShipmentInput,
+    @Args() { skip, limit, sortAscending, sortField }: LoadmoreArgs,
   ): Promise<Shipment[]> {
     const user_id = ctx.req.user_id
     const user_role = ctx.req.user_role
     try {
-      // Pagination
-      console.log('----------------------', paginateOpt)
-      const reformSorts = reformPaginate({ ...paginateOpt })
-      const paginate = { skip, ...reformSorts }
-      const filterQuery = this.shipmentQuery(data, user_role, user_id)
+      const { sort = {} }: PaginateOptions = reformPaginate({ sortField, sortAscending })
+      const shipments = await ShipmentModel.aggregate(
+        SHIPMENT_LIST(filter, user_role, user_id, sort, skip || 0, limit || 10),
+      )
 
-      console.log('---shipments---')
-      console.log('paginate: ', paginate)
-      console.log('filterQuery: ', filterQuery)
-
-      const shipments = ShipmentModel.find(filterQuery, undefined, paginate)
       if (!shipments) {
         const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
         throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
@@ -532,4 +527,49 @@ export default class ShipmentResolver {
       throw error
     }
   }
+
+  @Subscription(() => [Shipment], {
+    subscribe: async ({ context, args }) => {
+      const { user_id, user_role } = context as AuthContext
+      const { limit, sortField, sortAscending, skip } = args as LoadmoreArgs
+      const filters = args?.filters || ({} as GetShipmentInput)
+
+      if (!user_id) {
+        throw new Error('Authentication required')
+      }
+      return new Repeater(async (push, stop) => {
+        // 1. ส่งข้อมูลเริ่มต้น (Initial Data)
+        // ดึงข้อมูล Shipment ล่าสุดที่เกี่ยวข้องกับ user คนนี้
+        const { sort = {} }: PaginateOptions = reformPaginate({ sortField, sortAscending })
+        const _initialShipments = await ShipmentModel.aggregate(
+          SHIPMENT_LIST(filters, user_role, user_id, sort, skip || 0, limit || 10),
+        )
+        await push(_initialShipments)
+
+        // 2. Subscribe รอรับข้อมูลอัปเดตสำหรับ user คนนี้โดยเฉพาะ
+        const subscription = pubsub.subscribe(SHIPMENTS.UPDATE, user_id)
+
+        // 3. วนลูปเพื่อรอรับข้อมูลใหม่ๆ ที่ถูก publish เข้ามา
+        for await (const updatedShipment of subscription) {
+          // เมื่อมีข้อมูลใหม่เข้ามา ให้ส่งไปที่ client
+          // เราส่งเป็น Array เพราะ Type ของ Subscription คือ [Shipment]
+          await push([updatedShipment])
+        }
+
+        await stop
+      })
+    },
+  })
+  // @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
+  realtimeShipments(
+    @Root() payload: Shipment[],
+    @Arg('filters') filters: GetShipmentInput,
+    @Args() loadMores: LoadmoreArgs,
+    @Ctx() ctx: AuthContext,
+  ): Shipment[] {
+    // ส่งข้อมูลที่ได้รับ (ทั้ง initial และ update) ไปยัง client
+    return payload
+  }
+
+  // await pubsub.publish(NOTFICATIONS.SHIPMENT_UPDATES, updatedShipment.customerId.toString(), updatedShipment)
 }

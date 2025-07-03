@@ -3,7 +3,7 @@ import { FileInput } from './file.input'
 import { LocationInput } from './location.input'
 import { PODAddressInput } from './booking.input'
 import { EPaymentMethod } from '@enums/payments'
-import { EShipmentStatusCriteria } from '@enums/shipments'
+import { EShipmentStatus, EShipmentStatusCriteria } from '@enums/shipments'
 
 @InputType()
 export class DestinationInput {
@@ -165,4 +165,7 @@ export class GetShipmentInput {
 
   @Field({ nullable: true })
   driverId?: string
+
+  @Field(() => [EShipmentStatus], { nullable: true })
+  sortOrder?: EShipmentStatus[]
 }
