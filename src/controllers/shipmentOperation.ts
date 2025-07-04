@@ -535,6 +535,12 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
   console.log(`Shipment ${shipmentId} is cancelled.`)
 }
 
+/**
+ * Pricing calcuation
+ * @param _shipment 
+ * @param isCompletePayment 
+ * @returns 
+ */
 function calculateCancelledRefundPrice(_shipment: Shipment, isCompletePayment: boolean) {
   const today = new Date()
 
@@ -569,7 +575,7 @@ function calculateCancelledRefundPrice(_shipment: Shipment, isCompletePayment: b
     return {
       forDriver: totalPayCost,
       forCustomer: 0,
-      description: `ผู้ใช้ยกเลิกงานขนส่งก่อนเวลาน้อยกว่า ${urgentCancellingTime} นาที`,
+      description: `${_shipment.trackingNumber} ผู้ใช้ยกเลิกงานขนส่งก่อนเวลาน้อยกว่า ${urgentCancellingTime} นาที`,
     }
   } else if (differenceTime > urgentCancellingTime && differenceTime <= middleCancellingTime) {
     /**
@@ -580,7 +586,7 @@ function calculateCancelledRefundPrice(_shipment: Shipment, isCompletePayment: b
     return {
       forDriver: _percent * totalPayCost,
       forCustomer: _percent * totalPayPrice,
-      description: `ผู้ใช้ยกเลิกงานขนส่งก่อนเวลาน้อยกว่า ${middleCancellingTime} นาที`,
+      description: `${_shipment.trackingNumber} ผู้ใช้ยกเลิกงานขนส่งก่อนเวลาน้อยกว่า ${middleCancellingTime} นาที`,
     }
   } else {
     /**
@@ -590,7 +596,7 @@ function calculateCancelledRefundPrice(_shipment: Shipment, isCompletePayment: b
     return {
       forDriver: 0,
       forCustomer: totalPayPrice,
-      description: `ผู้ใช้ยกเลิกงานขนส่ง`,
+      description: `${_shipment.trackingNumber} ผู้ใช้ยกเลิกงานขนส่ง`,
     }
   }
 }

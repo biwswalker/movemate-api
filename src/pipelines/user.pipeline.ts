@@ -184,15 +184,6 @@ export function GET_USER_LOOKUPS() {
     },
   }
 
-  const notificationsLookup: PipelineStage.Lookup = {
-    $lookup: {
-      from: 'notifications',
-      localField: 'notifications',
-      foreignField: '_id',
-      as: 'notifications',
-    },
-  }
-
   const parentsLookup: PipelineStage.Lookup = {
     $lookup: {
       from: 'users',
@@ -259,7 +250,6 @@ export function GET_USER_LOOKUPS() {
     upgradeRequestUnwind,
     ...filePipelineStage('profileImage'),
     parentsLookup,
-    notificationsLookup,
     parentsProject,
   ]
 }

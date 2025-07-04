@@ -50,7 +50,6 @@ export default class BillingResolver {
     try {
       const { sort, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
       // Aggregrated
-      console.log('BILLING_CYCLE_LIST: ', JSON.stringify(BILLING_CYCLE_LIST(data, sort)))
       const aggregate = BillingModel.aggregate(BILLING_CYCLE_LIST(data, sort))
       const _billings = (await BillingModel.aggregatePaginate(aggregate, reformSorts)) as BillingListPayload
       if (!_billings) {
