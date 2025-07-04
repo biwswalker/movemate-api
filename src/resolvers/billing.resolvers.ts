@@ -140,7 +140,7 @@ export default class BillingResolver {
     imageEvidence ? await imageEvidenceFile.save({ session }) : undefined
     await markBillingAsRefunded({ ...data, imageEvidenceId: imageEvidenceFile?._id }, adminId, session)
 
-    const adminNotificationCount = await getAdminMenuNotificationCount()
+    const adminNotificationCount = await getAdminMenuNotificationCount(session)
     await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
     return true
   }
@@ -409,10 +409,13 @@ export default class BillingResolver {
           shipmentNotify(_shipment._id, get(_shipment, 'requestedDriver._id', ''))
           const newShipments = await getNewAllAvailableShipmentForDriver('', {}, session)
           await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
-          const adminNotificationCount = await getAdminMenuNotificationCount()
-          await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
         }
       }
+
+      // Update count admin
+      const adminNotificationCount = await getAdminMenuNotificationCount(session)
+      await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+
       return true
     } else if (data.result === 'reject') {
       await markBillingAsRejected(
@@ -420,8 +423,18 @@ export default class BillingResolver {
         adminId,
         session,
       )
+
+      // Update count admin
+      const adminNotificationCount = await getAdminMenuNotificationCount(session)
+      await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+
       return true
     }
+
+    // Update count admin
+    const adminNotificationCount = await getAdminMenuNotificationCount(session)
+    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+
     return false
   }
 }

@@ -30,33 +30,43 @@ import { EBillingStatus } from '@enums/billing'
 import BillingModel from '@models/finance/billing.model'
 import UserPendingModel from '@models/userPending.model'
 import { GET_PENDING_USERS } from '@pipelines/userPending.pipeline'
+import { ClientSession } from 'mongoose'
 
-export async function getAdminMenuNotificationCount(): Promise<AdminNotificationCountPayload> {
+export async function getAdminMenuNotificationCount(session?: ClientSession): Promise<AdminNotificationCountPayload> {
   const individualCustomer = await UserModel.countDocuments({
     status: EUserStatus.PENDING,
     userType: EUserType.INDIVIDUAL,
     userRole: EUserRole.CUSTOMER,
-  }).catch(() => 0)
+  })
+    .session(session)
+    .catch(() => 0)
   const businessCustomer = await UserModel.countDocuments({
     status: EUserStatus.PENDING,
     userType: EUserType.BUSINESS,
     userRole: EUserRole.CUSTOMER,
-  }).catch(() => 0)
+  })
+    .session(session)
+    .catch(() => 0)
   const individualDriver = await UserModel.countDocuments({
     status: EUserStatus.PENDING,
     userType: EUserType.INDIVIDUAL,
     userRole: EUserRole.DRIVER,
-  }).catch(() => 0)
+  })
+    .session(session)
+    .catch(() => 0)
   const businessDriver = await UserModel.countDocuments({
     status: EUserStatus.PENDING,
     userType: EUserType.BUSINESS,
     userRole: EUserRole.DRIVER,
-  }).catch(() => 0)
+  })
+    .session(session)
+    .catch(() => 0)
   const _driverPendingAggregate = await GET_PENDING_USERS({
     userRole: EUserRole.DRIVER,
     status: EUpdateUserStatus.PENDING,
   })
   const driverPending = await UserPendingModel.aggregate(_driverPendingAggregate)
+    .session(session)
     .then((response) => response.length || 0)
     .catch(() => 0)
   const _customerPendingAggregate = await GET_PENDING_USERS({
@@ -64,21 +74,30 @@ export async function getAdminMenuNotificationCount(): Promise<AdminNotification
     status: EUpdateUserStatus.PENDING,
   })
   const customerPending = await UserPendingModel.aggregate(_customerPendingAggregate)
+    .session(session)
     .then((response) => response.length || 0)
     .catch(() => 0)
   const shipment = await ShipmentModel.countDocuments({
     $or: [{ status: EShipmentStatus.IDLE }, { status: EShipmentStatus.REFUND }],
-  }).catch(() => 0)
+  })
+    .session(session)
+    .catch(() => 0)
   const financialCash = await BillingModel.countDocuments({
     status: { $in: [EBillingStatus.VERIFY, EBillingStatus.PENDING] },
     paymentMethod: EPaymentMethod.CASH,
-  }).catch(() => 0)
+  })
+    .session(session)
+    .catch(() => 0)
   const financialCredit = await BillingModel.countDocuments({
     status: { $in: [EBillingStatus.VERIFY, EBillingStatus.PENDING] },
     paymentMethod: EPaymentMethod.CREDIT,
-  }).catch(() => 0)
+  })
+    .session(session)
+    .catch(() => 0)
   const financialPayment = await TransactionModel.aggregate(TRANSACTION_DRIVER_LIST({ isPending: true }))
-
+    .session(session)
+    .then((response) => response.length || 0)
+    .catch(() => 0)
   const payload: AdminNotificationCountPayload = {
     customer: sum([individualCustomer, businessCustomer, customerPending]),
     individualCustomer,
@@ -89,10 +108,10 @@ export async function getAdminMenuNotificationCount(): Promise<AdminNotification
     businessDriver,
     driverPending,
     shipment,
-    financial: sum([financialCash, financialCredit]),
+    financial: sum([financialCash, financialCredit, financialPayment]),
     financialCash,
     financialCredit,
-    financialPayment: financialPayment.length,
+    financialPayment,
   }
   return payload
 }

@@ -11,6 +11,8 @@ import { REPONSE_NAME } from 'constants/status'
 import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
 import { MakePayBillingInput } from '@inputs/payment.input'
 import { makePayBilling } from '@controllers/billingPayment'
+import { getAdminMenuNotificationCount } from './notification.resolvers'
+import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 
 @Resolver()
 export default class PaymentResolver {
@@ -54,7 +56,6 @@ export default class PaymentResolver {
     }
   }
 
-
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]), RetryTransactionMiddleware)
   async makeAdditionalPayment(
@@ -63,7 +64,14 @@ export default class PaymentResolver {
     @Arg('data', () => MakePayBillingInput) data: MakePayBillingInput,
     @Ctx() ctx: GraphQLContext,
   ): Promise<boolean> {
-    await makePayBilling(data, billingId, paymentId)
+    const session = ctx.session
+
+    await makePayBilling(data, billingId, paymentId, session)
+
+    // Sent admin noti count updates
+    const adminNotificationCount = await getAdminMenuNotificationCount(session)
+    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+
     return true
   }
 }

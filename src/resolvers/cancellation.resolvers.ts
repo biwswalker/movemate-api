@@ -4,6 +4,8 @@ import { EUserRole } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
 import { WithTransaction } from '@middlewares/RetryTransaction'
 import { Arg, Ctx, Mutation, Resolver, UseMiddleware } from 'type-graphql'
+import { getAdminMenuNotificationCount } from './notification.resolvers'
+import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 
 @Resolver()
 export default class CancellationResolver {
@@ -19,6 +21,10 @@ export default class CancellationResolver {
     const actionUserId = ctx.req.user_id
     // Handle Refund
     await cancelledShipment({ shipmentId, reason }, actionUserId, session)
+
+    // Sent admin noti count updates
+    const adminNotificationCount = await getAdminMenuNotificationCount(session)
+    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
     return true
   }
 
@@ -33,6 +39,10 @@ export default class CancellationResolver {
     const session = ctx.session
     // Handle make new Matching
     await driverCancelledShipment({ shipmentId, reason }, session)
+
+    // Sent admin noti count updates
+    const adminNotificationCount = await getAdminMenuNotificationCount(session)
+    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
     return true
   }
 }

@@ -179,15 +179,8 @@ export default class ShipmentResolver {
     const user_role = ctx.req.user_role
     try {
       const { sort = {}, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
-      const filterQuery = omitBy(query, isEmpty)
-      const aggregate = ShipmentModel.aggregate(
-        SHIPMENT_LIST(
-          { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery },
-          user_role,
-          user_id,
-          sort,
-        ),
-      )
+      // const filterQuery = omitBy(query, isEmpty)
+      const aggregate = ShipmentModel.aggregate(SHIPMENT_LIST(query, user_role, user_id, sort))
       const shipments = (await ShipmentModel.aggregatePaginate(
         aggregate,
         reformSorts,

@@ -154,8 +154,6 @@ export async function markBillingAsPaid(
     await ReceiptModel.findByIdAndUpdate(_receiptId, { document: documentId }, { session })
   }
 
-  await getAdminMenuNotificationCount()
-
   return _newBilling
 }
 
@@ -219,8 +217,6 @@ export async function markBillingAsRejected(
       await markShipmentVerified({ result: 'reject', shipmentId: shipment._id, reason }, adminId, session)
     })
   }
-
-  await getAdminMenuNotificationCount()
 }
 
 interface MarkBillingAsRefundInput {
@@ -395,9 +391,7 @@ export async function makePayBilling(
   await PaymentModel.findByIdAndUpdate(paymentId, {
     status: EPaymentStatus.VERIFY,
     $push: { evidence: _evidence },
-  })
-
-  await getAdminMenuNotificationCount()
+  }).session(session)
 
   return true
 }

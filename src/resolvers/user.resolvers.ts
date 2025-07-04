@@ -779,7 +779,7 @@ export default class UserResolver {
         await pubsub.publish(USERS.STATUS, user._id, status)
       }
 
-      const adminNotificationCount = await getAdminMenuNotificationCount()
+      const adminNotificationCount = await getAdminMenuNotificationCount(session)
       await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
 
       return user

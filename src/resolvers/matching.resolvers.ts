@@ -19,7 +19,7 @@ import {
   SentPODDocumentShipmentStepInput,
 } from '@inputs/matching.input'
 import { addSeconds, format } from 'date-fns'
-import pubsub, { SHIPMENTS } from '@configs/pubsub'
+import pubsub, { NOTFICATIONS, SHIPMENTS } from '@configs/pubsub'
 import { Repeater } from '@graphql-yoga/subscription'
 import addEmailQueue from '@utils/email.utils'
 import { EPaymentMethod } from '@enums/payments'
@@ -47,6 +47,7 @@ import _ from 'mongoose-paginate-v2'
 import { generateBillingReceipt } from '@controllers/billingReceipt'
 import { AuditLogDecorator } from 'decorators/AuditLog.decorator'
 import { EAuditActions } from '@enums/audit'
+import { getAdminMenuNotificationCount } from './notification.resolvers'
 
 @Resolver()
 export default class MatchingResolver {
@@ -148,8 +149,6 @@ export default class MatchingResolver {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
-
-    console.log('----------')
 
     if (status && status !== EShipmentMatchingCriteria.NEW) {
       const query = await getAcceptedShipmentForDriverQuery(status, userId)
@@ -328,8 +327,12 @@ export default class MatchingResolver {
         }
       }
 
-      const newShipments = await getNewAllAvailableShipmentForDriver()
+      const newShipments = await getNewAllAvailableShipmentForDriver(undefined, undefined, session)
       await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
+
+      // Sent admin noti count updates
+      const adminNotificationCount = await getAdminMenuNotificationCount(session)
+      await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
 
       return true
     }
@@ -464,27 +467,37 @@ export default class MatchingResolver {
         await ReceiptModel.findByIdAndUpdate(_receipt._id, { document: documentId })
       }
     }
-    
+
     await UserModel.findByIdAndUpdate(shipment.driver, { drivingStatus: EDriverStatus.IDLE }, { session })
+
+    // Sent admin noti count updates
+    const adminNotificationCount = await getAdminMenuNotificationCount(session)
+    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
     return true
   }
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async markAsCancelled(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
+    const session = ctx.session
     const userId = ctx.req.user_id
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
-    const shipment = await ShipmentModel.findById(shipmentId)
+    const shipment = await ShipmentModel.findById(shipmentId).session(session)
     if (!shipment) {
       const message = 'ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
     // await shipment.cancelledJobByDriver()
-    await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.IDLE })
+    await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.IDLE }, { session })
+
+    // Sent admin noti count updates
+    const adminNotificationCount = await getAdminMenuNotificationCount(session)
+    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+
     return true
   }
 
@@ -563,6 +576,10 @@ export default class MatchingResolver {
       }
       const newShipments = await getNewAllAvailableShipmentForDriver()
       await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
+
+      // Sent admin noti count updates
+      const adminNotificationCount = await getAdminMenuNotificationCount(session)
+      await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
 
       return true
     }

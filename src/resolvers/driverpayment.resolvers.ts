@@ -23,6 +23,8 @@ import { format } from 'date-fns'
 import { GraphQLError } from 'graphql'
 import { map } from 'lodash'
 import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
+import { getAdminMenuNotificationCount } from './notification.resolvers'
+import pubsub, { NOTFICATIONS } from '@configs/pubsub'
 
 @Resolver()
 export default class DriverPaymentResolver {
@@ -64,7 +66,7 @@ export default class DriverPaymentResolver {
     const generateFullYearMonth = format(today, 'yyyyMM')
     const _paymentNumber = await generateTrackingNumber(`PDRIV${generateMonth}`, 'payment', 3)
     const _whtNumber = await generateTrackingNumber(`WHT-TE${generateFullYearMonth}`, 'wht', 3)
-    
+
     // Create driver payment detail
     const driverPayment = new DriverPaymentModel({
       driver: driverId,
@@ -120,6 +122,8 @@ export default class DriverPaymentResolver {
     const documentId = await generateDriverWHTCert(driverPayment._id, session)
     await DriverPaymentModel.findByIdAndUpdate(driverPayment._id, { document: documentId }, { session })
 
+    const adminNotificationCount = await getAdminMenuNotificationCount(session)
+    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
     return true
   }
 
