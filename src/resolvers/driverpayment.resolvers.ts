@@ -122,8 +122,7 @@ export default class DriverPaymentResolver {
     const documentId = await generateDriverWHTCert(driverPayment._id, session)
     await DriverPaymentModel.findByIdAndUpdate(driverPayment._id, { document: documentId }, { session })
 
-    const adminNotificationCount = await getAdminMenuNotificationCount(session)
-    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+    await getAdminMenuNotificationCount(session)
     return true
   }
 

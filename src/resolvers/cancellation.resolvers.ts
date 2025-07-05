@@ -23,8 +23,7 @@ export default class CancellationResolver {
     await cancelledShipment({ shipmentId, reason }, actionUserId, session)
 
     // Sent admin noti count updates
-    const adminNotificationCount = await getAdminMenuNotificationCount(session)
-    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+    await getAdminMenuNotificationCount(session)
     return true
   }
 
@@ -41,8 +40,7 @@ export default class CancellationResolver {
     await driverCancelledShipment({ shipmentId, reason }, session)
 
     // Sent admin noti count updates
-    const adminNotificationCount = await getAdminMenuNotificationCount(session)
-    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+    await getAdminMenuNotificationCount(session)
     return true
   }
 }

@@ -29,6 +29,10 @@ export class PaymentEvidence {
   @Field({ nullable: true })
   @Property()
   bankNumber?: string
+
+  @Field({ nullable: true })
+  @Property()
+  amount?: number
 }
 
 const PaymentEvidenceModel = getModelForClass(PaymentEvidence)

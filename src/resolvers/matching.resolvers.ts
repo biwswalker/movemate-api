@@ -331,8 +331,7 @@ export default class MatchingResolver {
       await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
 
       // Sent admin noti count updates
-      const adminNotificationCount = await getAdminMenuNotificationCount(session)
-      await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+      await getAdminMenuNotificationCount(session)
 
       return true
     }
@@ -471,8 +470,7 @@ export default class MatchingResolver {
     await UserModel.findByIdAndUpdate(shipment.driver, { drivingStatus: EDriverStatus.IDLE }, { session })
 
     // Sent admin noti count updates
-    const adminNotificationCount = await getAdminMenuNotificationCount(session)
-    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
+    await getAdminMenuNotificationCount(session)
     return true
   }
 
@@ -495,9 +493,7 @@ export default class MatchingResolver {
     await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.IDLE }, { session })
 
     // Sent admin noti count updates
-    const adminNotificationCount = await getAdminMenuNotificationCount(session)
-    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
-
+    await getAdminMenuNotificationCount(session)
     return true
   }
 
@@ -578,9 +574,7 @@ export default class MatchingResolver {
       await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
 
       // Sent admin noti count updates
-      const adminNotificationCount = await getAdminMenuNotificationCount(session)
-      await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
-
+      await getAdminMenuNotificationCount(session)
       return true
     }
     const message = 'ไม่สามารถรับงานขนส่งนี้ได้ เนื่องจากงานขนส่งดังกล่าวมีผู้รับไปแล้ว'

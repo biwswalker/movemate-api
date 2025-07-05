@@ -69,9 +69,7 @@ export default class PaymentResolver {
     await makePayBilling(data, billingId, paymentId, session)
 
     // Sent admin noti count updates
-    const adminNotificationCount = await getAdminMenuNotificationCount(session)
-    await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
-
+    await getAdminMenuNotificationCount(session)
     return true
   }
 }

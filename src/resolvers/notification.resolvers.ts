@@ -23,7 +23,14 @@ import { sum } from 'lodash'
 import { Repeater } from '@graphql-yoga/subscription'
 import { EPaymentMethod } from '@enums/payments'
 import { EShipmentStatus } from '@enums/shipments'
-import { ERegistration, EUpdateUserStatus, EUserRole, EUserStatus, EUserType } from '@enums/users'
+import {
+  ERegistration,
+  EUpdateUserStatus,
+  EUserRole,
+  EUserStatus,
+  EUserType,
+  EUserValidationStatus,
+} from '@enums/users'
 import TransactionModel from '@models/transaction.model'
 import { TRANSACTION_DRIVER_LIST } from '@pipelines/transaction.pipeline'
 import { EBillingStatus } from '@enums/billing'
@@ -41,9 +48,19 @@ export async function getAdminMenuNotificationCount(session?: ClientSession): Pr
     .session(session)
     .catch(() => 0)
   const businessCustomer = await UserModel.countDocuments({
-    status: EUserStatus.PENDING,
-    userType: EUserType.BUSINESS,
-    userRole: EUserRole.CUSTOMER,
+    $or: [
+      {
+        status: EUserStatus.PENDING,
+        userType: EUserType.BUSINESS,
+        userRole: EUserRole.CUSTOMER,
+      },
+      {
+        userType: EUserType.INDIVIDUAL,
+        userRole: EUserRole.CUSTOMER,
+        validationStatus: EUserValidationStatus.PENDING,
+        upgradeRequest: { $ne: null },
+      },
+    ],
   })
     .session(session)
     .catch(() => 0)
@@ -113,8 +130,11 @@ export async function getAdminMenuNotificationCount(session?: ClientSession): Pr
     financialCredit,
     financialPayment,
   }
+
+  await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, payload)
   return payload
 }
+
 @Resolver()
 export default class NotificationResolver {
   private async publishGetNotificationUnreadCount(userId: string) {

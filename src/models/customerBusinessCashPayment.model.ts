@@ -1,16 +1,16 @@
-import { ObjectType, Field, ID } from "type-graphql";
-import { prop as Property, getModelForClass } from "@typegoose/typegoose";
+import { ObjectType, Field, ID } from 'type-graphql'
+import { prop as Property, getModelForClass } from '@typegoose/typegoose'
 
 @ObjectType()
 export class BusinessCustomerCashPayment {
   @Field(() => ID)
-  readonly _id: string;
-  // Cash
-  @Field()
+  readonly _id: string
+
+  @Field({ nullable: true })
   @Property()
-  acceptedEReceiptDate: Date;
+  acceptedEReceiptDate: Date
 }
 
-const BusinessCustomerCashPaymentModel = getModelForClass(BusinessCustomerCashPayment);
+const BusinessCustomerCashPaymentModel = getModelForClass(BusinessCustomerCashPayment)
 
-export default BusinessCustomerCashPaymentModel;
+export default BusinessCustomerCashPaymentModel

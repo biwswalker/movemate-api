@@ -228,10 +228,11 @@ interface MarkBillingAsRefundInput {
   imageEvidenceId?: string
   paymentDate?: Date
   paymentTime?: Date
+  amount?: number
 }
 
 export async function markBillingAsRefunded(input: MarkBillingAsRefundInput, adminId: string, session?: ClientSession) {
-  const { billingId, paymentId, isRefunded, reason, imageEvidenceId, paymentDate, paymentTime } = input
+  const { billingId, paymentId, isRefunded, reason, imageEvidenceId, paymentDate, paymentTime, amount } = input
   const _billing = await BillingModel.findById(billingId).session(session).lean()
   const _payment = await PaymentModel.findById(paymentId).session(session).lean()
 
@@ -261,6 +262,7 @@ export async function markBillingAsRefunded(input: MarkBillingAsRefundInput, adm
       image: imageEvidenceId,
       paymentDate: new Date(paymentDate),
       paymentTime: new Date(paymentTime),
+      amount,
     })
     await _evidence.save({ session })
     _evidenceId = _evidence._id
@@ -295,8 +297,10 @@ export async function markBillingAsRefunded(input: MarkBillingAsRefundInput, adm
   if (isRefunded) {
     const _movemateTransaction = new TransactionModel({
       amountTax: 0, // WHT
-      amountBeforeTax: _payment.subTotal,
-      amount: _payment.total,
+      amountBeforeTax: amount,
+      amount,
+      // amountBeforeTax: _payment.subTotal,
+      // amount: _payment.total,
       ownerId: MOVEMATE_OWNER_ID,
       ownerType: ETransactionOwner.MOVEMATE,
       description: `คืนเงินหมายเลขใบแจ้งหนี้ ${_billing.billingNumber}`,

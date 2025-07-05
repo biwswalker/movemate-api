@@ -24,6 +24,7 @@ export const enum LOCATIONS {
 
 export const enum USERS {
   STATUS = 'STATUS',
+  FORCE_LOGOUT = 'FORCE_LOGOUT',
 }
 
 export default createPubSub<{
@@ -34,6 +35,7 @@ export default createPubSub<{
   [NOTFICATIONS.GET_MENU_BADGE_COUNT]: [AdminNotificationCountPayload]
   [LOCATIONS.REQUEST_LIMIT]: [LocationRequestLimitPayload]
   [SHIPMENTS.GET_MATCHING_SHIPMENT]: [Shipment[]]
-  [USERS.STATUS]: [string, EUserStatus]
   [SHIPMENTS.UPDATE]: [string, Shipment]
+  [USERS.STATUS]: [string, EUserStatus]
+  [USERS.FORCE_LOGOUT]: [string, string]
 }>()

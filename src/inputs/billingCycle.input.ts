@@ -61,4 +61,7 @@ export class ProcessBillingRefundInput {
 
   @Field({ nullable: true })
   paymentTime: Date
+
+  @Field({ nullable: true })
+  amount: number
 }

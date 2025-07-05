@@ -55,6 +55,7 @@ registerEnumType(EUserCriterialStatus, {
 })
 
 export enum EUserValidationStatus {
+  IDLE = 'IDLE',
   PENDING = 'PENDING',
   APPROVE = 'APPROVE',
   DENIED = 'DENIED',

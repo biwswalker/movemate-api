@@ -42,17 +42,13 @@ import BusinessCustomerCashPaymentModel from '@models/customerBusinessCashPaymen
 import SettingCustomerPoliciesModel from '@models/settingCustomerPolicies.model'
 import SettingDriverPoliciesModel from '@models/settingDriverPolicies.model'
 import { VerifyPayload } from '@payloads/verify.payloads'
-import { addHours, addMinutes, addSeconds } from 'date-fns'
+import { addMinutes, addSeconds } from 'date-fns'
 import { decryption, generateExpToken } from '@utils/encryption'
-import NotificationModel, {
-  ENavigationType,
-  ENotificationVarient,
-  NOTIFICATION_TITLE,
-} from '@models/notification.model'
+import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import { fDateTime } from '@utils/formatTime'
 import DriverDetailModel, { DriverDetail } from '@models/driverDetail.model'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
-import pubsub, { NOTFICATIONS, USERS } from '@configs/pubsub'
+import pubsub, { USERS } from '@configs/pubsub'
 import { FileInput } from '@inputs/file.input'
 import { EPaymentMethod } from '@enums/payments'
 import {
@@ -555,7 +551,7 @@ export default class UserResolver {
       }
 
       // Check pending status
-      if (user.validationStatus !== EUserValidationStatus.PENDING) {
+      if (!includes([EUserValidationStatus.PENDING, EUserValidationStatus.DENIED], user.validationStatus)) {
         throw new GraphQLError('ผู้ใช้ท่านนี้มีการอนุมัติเรียบร้อยแล้ว')
       }
       // Check approval status
@@ -665,8 +661,8 @@ export default class UserResolver {
           const newBusinessDetail =
             user.userType === EUserType.INDIVIDUAL
               ? {
-                  upgradeRequest: null,
-                  validationStatus: EUserValidationStatus.PENDING,
+                  // upgradeRequest: null,
+                  validationStatus: EUserValidationStatus.IDLE,
                   status: EUserStatus.ACTIVE,
                 }
               : {}
@@ -779,9 +775,7 @@ export default class UserResolver {
         await pubsub.publish(USERS.STATUS, user._id, status)
       }
 
-      const adminNotificationCount = await getAdminMenuNotificationCount(session)
-      await pubsub.publish(NOTFICATIONS.GET_MENU_BADGE_COUNT, adminNotificationCount)
-
+      await getAdminMenuNotificationCount(session)
       return user
     } catch (error) {
       throw error
@@ -795,6 +789,7 @@ export default class UserResolver {
     @Arg('data') data: CutomerBusinessInput,
     @Ctx() ctx: GraphQLContext,
   ): Promise<boolean> {
+    const session = ctx.session
     const { businessEmail, profileImage, creditPayment, cashPayment, ...formValue } = data
     try {
       // Check if the user already exists
@@ -806,7 +801,7 @@ export default class UserResolver {
       if (id) {
         await BusinessCustomerSchema(id).validate(data, { abortEarly: false })
 
-        const userModel = await UserModel.findById(id)
+        const userModel = await UserModel.findById(id).session(session)
         if (!userModel) {
           const message = 'ไม่สามารถอัพเกรดได้ เนื่องจากไม่พบผู้ใช้งาน'
           throw new GraphQLError(message, {
@@ -822,7 +817,7 @@ export default class UserResolver {
           throw new GraphQLError(message)
         }
 
-        if (userModel.upgradeRequest) {
+        if (userModel.upgradeRequest && userModel.validationStatus === EUserValidationStatus.PENDING) {
           const message = 'ไม่สามารถอัพเกรดได้ เนื่องจากมีคำขอก่อนหน้านี้แล้ว'
           throw new GraphQLError(message)
         }
@@ -842,36 +837,31 @@ export default class UserResolver {
           ? new FileModel(businessRegistrationCertificateFile)
           : null
         if (businessRegistrationCertificate) {
-          await businessRegistrationCertificate.save()
+          await businessRegistrationCertificate.save({ session })
         }
         // Document Image 2
         const copyIDAuthorizedSignatory = copyIDAuthorizedSignatoryFile
           ? new FileModel(copyIDAuthorizedSignatoryFile)
           : null
         if (copyIDAuthorizedSignatory) {
-          await copyIDAuthorizedSignatory.save()
+          await copyIDAuthorizedSignatory.save({ session })
         }
         // Document Image 3
         const certificateValueAddedTaxRegistration = certificateValueAddedTaxRegistrationFile
           ? new FileModel(certificateValueAddedTaxRegistrationFile)
           : null
         if (certificateValueAddedTaxRegistration) {
-          await certificateValueAddedTaxRegistration.save()
+          await certificateValueAddedTaxRegistration.save({ session })
         }
 
         const cashPaymentDetail =
-          formValue.paymentMethod === EPaymentMethod.CREDIT && cashPayment
-            ? new BusinessCustomerCashPaymentModel({
-                acceptedEreceiptDate: cashPayment.acceptedEReceiptDate,
-              })
+          formValue.paymentMethod === EPaymentMethod.CASH && cashPayment
+            ? { acceptedEReceiptDate: cashPayment.acceptedEReceiptDate || new Date() }
             : null
-        if (cashPaymentDetail) {
-          await cashPaymentDetail.save()
-        }
 
         const creditPaymentDetail =
           formValue.paymentMethod === EPaymentMethod.CREDIT && creditPayment
-            ? new BusinessCustomerCreditPaymentModel({
+            ? {
                 ...omit(creditPayment, [
                   'businessRegistrationCertificateFile',
                   'copyIDAuthorizedSignatoryFile',
@@ -884,26 +874,104 @@ export default class UserResolver {
                 ...(certificateValueAddedTaxRegistration
                   ? { certificateValueAddedTaxRegistrationFile: certificateValueAddedTaxRegistration }
                   : {}),
-              })
+              }
             : null
-        if (creditPaymentDetail) {
-          await creditPaymentDetail.save()
+
+        if (userModel.upgradeRequest) {
+          // Update Data
+          const businessCustomerId = get(userModel, 'upgradeRequest._id', '')
+          const businessCustomerData = await BusinessCustomerModel.findById(businessCustomerId).session(session)
+          let cashPaymentId = undefined
+          let creditPaymentId = undefined
+          if (businessCustomerData) {
+            // Cash Data
+            if (cashPaymentDetail) {
+              if (businessCustomerData.cashPayment) {
+                cashPaymentId = get(businessCustomerData, 'cashPayment._id', '')
+                await BusinessCustomerCashPaymentModel.findByIdAndUpdate(cashPaymentId, cashPaymentDetail).session(
+                  session,
+                )
+              } else {
+                const _cashPayment = new BusinessCustomerCashPaymentModel(cashPaymentDetail)
+                await _cashPayment.save({ session })
+                cashPaymentId = _cashPayment._id
+              }
+            }
+            // Credit Data
+            if (creditPaymentDetail) {
+              if (businessCustomerData.creditPayment) {
+                creditPaymentId = get(businessCustomerData, 'creditPayment._id', '')
+                await BusinessCustomerCreditPaymentModel.findByIdAndUpdate(
+                  creditPaymentId,
+                  creditPaymentDetail,
+                ).session(session)
+              } else {
+                const _creditPayment = new BusinessCustomerCreditPaymentModel(creditPaymentDetail)
+                await _creditPayment.save({ session })
+                creditPaymentId = _creditPayment._id
+              }
+            }
+            // Business Data
+            await businessCustomerData.updateOne(
+              {
+                businessEmail,
+                ...formValue,
+                ...(cashPaymentId ? { cashPayment: cashPaymentId } : {}),
+                ...(creditPaymentId ? { creditPayment: creditPaymentId } : {}),
+              },
+              { session },
+            )
+          }
+
+          await userModel.updateOne({ validationStatus: EUserValidationStatus.PENDING }, { session })
+        } else {
+          // === New Data ===
+          // Cash Data
+          const _cashPayment = cashPaymentDetail ? new BusinessCustomerCashPaymentModel(cashPaymentDetail) : null
+          if (_cashPayment) {
+            await _cashPayment.save({ session })
+          }
+          // Credit Data
+          const _creditPayment = creditPaymentDetail
+            ? new BusinessCustomerCreditPaymentModel(creditPaymentDetail)
+            : null
+          if (_creditPayment) {
+            await _creditPayment.save({ session })
+          }
+          // Business Data
+          const customer = new BusinessCustomerModel({
+            userNumber,
+            businessEmail,
+            ...formValue,
+            ...(_cashPayment ? { cashPayment: _cashPayment } : {}),
+            ...(_creditPayment ? { creditPayment: _creditPayment } : {}),
+          })
+
+          await customer.save({ session })
+
+          await userModel.updateOne(
+            {
+              validationStatus: EUserValidationStatus.PENDING,
+              upgradeRequest: customer,
+            },
+            { session },
+          )
         }
 
-        const customer = new BusinessCustomerModel({
-          userNumber,
-          businessEmail,
-          ...formValue,
-          ...(cashPaymentDetail ? { cashPayment: cashPaymentDetail } : {}),
-          ...(creditPaymentDetail ? { creditPayment: creditPaymentDetail } : {}),
-        })
+        await NotificationModel.sendNotificationToAdmins(
+          {
+            varient: ENotificationVarient.INFO,
+            title: 'มีคำขออัพเกรดเป็นสมาชิกรูปแบบองค์กร',
+            message: [
+              `ผู้ใช้ '${userModel.fullname}' (ID: ${userModel.userNumber}) ได้ส่งคำขออัพเกรดเป็นสมาชิกรูปแบบองค์กร กรุณาตรวจสอบ`,
+            ],
+            infoText: 'ตรวจสอบคำขอ',
+            infoLink: `/management/customer/business/${userModel.username}`,
+          },
+          session,
+        )
 
-        await customer.save()
-
-        await userModel.updateOne({
-          validationStatus: EUserValidationStatus.PENDING,
-          upgradeRequest: customer,
-        })
+        await getAdminMenuNotificationCount(session)
 
         return true
       }

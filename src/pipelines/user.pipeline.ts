@@ -12,7 +12,7 @@ import { isEmpty, toNumber } from 'lodash'
 import { PipelineStage, Types } from 'mongoose'
 import { filePipelineStage } from './file.pipline'
 
-export function GET_USER_LOOKUPS() {
+export function GET_USER_LOOKUPS(lightweight = false) {
   const businessDetailLookup: PipelineStage.Lookup = {
     $lookup: {
       from: 'businesscustomers',
@@ -26,11 +26,13 @@ export function GET_USER_LOOKUPS() {
             localField: 'creditPayment',
             foreignField: '_id',
             as: 'creditPayment',
-            pipeline: [
-              ...filePipelineStage('businessRegistrationCertificateFile'),
-              ...filePipelineStage('copyIDAuthorizedSignatoryFile'),
-              ...filePipelineStage('certificateValueAddedTaxRegistrationFile'),
-            ],
+            ...(!lightweight && {
+              pipeline: [
+                ...filePipelineStage('businessRegistrationCertificateFile'),
+                ...filePipelineStage('copyIDAuthorizedSignatoryFile'),
+                ...filePipelineStage('certificateValueAddedTaxRegistrationFile'),
+              ],
+            }),
           },
         },
         {
@@ -93,22 +95,24 @@ export function GET_USER_LOOKUPS() {
             localField: 'serviceVehicleTypes',
             foreignField: '_id',
             as: 'serviceVehicleTypes',
-            pipeline: [
-              {
-                $lookup: {
-                  from: 'files',
-                  localField: 'image',
-                  foreignField: '_id',
-                  as: 'image',
+            ...(!lightweight && {
+              pipeline: [
+                {
+                  $lookup: {
+                    from: 'files',
+                    localField: 'image',
+                    foreignField: '_id',
+                    as: 'image',
+                  },
                 },
-              },
-              {
-                $unwind: {
-                  path: '$image',
-                  preserveNullAndEmptyArrays: true,
+                {
+                  $unwind: {
+                    path: '$image',
+                    preserveNullAndEmptyArrays: true,
+                  },
                 },
-              },
-            ],
+              ],
+            }),
           },
         },
       ],
@@ -384,15 +388,15 @@ export const GET_USERS = (
   }
 
   const prematch: PipelineStage = {
-    $match: isEmpty(statusFilter) ? _prematchData : { $or: [...statusFilter, _prematchData] }
+    $match: isEmpty(statusFilter) ? _prematchData : { $or: [...statusFilter, _prematchData] },
     // {
-      // $or: [
-      //   {
-      //   },
-      //   ...statusFilter,
-      //   // ...(parentId ? [{ parents: { $in: [parentId] } }] : []),
-      //   // ...(parentId ? [{ requestedParents: { $in: [parentId] } }] : []),
-      // ],
+    // $or: [
+    //   {
+    //   },
+    //   ...statusFilter,
+    //   // ...(parentId ? [{ parents: { $in: [parentId] } }] : []),
+    //   // ...(parentId ? [{ requestedParents: { $in: [parentId] } }] : []),
+    // ],
     // }
   }
 
@@ -406,14 +410,13 @@ export const GET_USERS = (
         statusWeight: {
           $switch: {
             branches: [
-              {
-                case: {
-                  $eq: ['$status', EUserStatus.PENDING],
-                },
-                then: 0,
-              },
+              { case: { $eq: ['$status', EUserStatus.PENDING] }, then: 0 },
+              { case: { $eq: ['$status', EUserStatus.ACTIVE] }, then: 1 },
+              { case: { $eq: ['$status', EUserStatus.INACTIVE] }, then: 2 },
+              { case: { $eq: ['$status', EUserStatus.BANNED] }, then: 3 },
+              { case: { $eq: ['$status', EUserStatus.DENIED] }, then: 3 },
             ],
-            default: 1,
+            default: 99,
           },
         },
         validationStatusWeight: {
@@ -461,7 +464,7 @@ export const EXISTING_USERS = (_id: string, email: string, userType: EUserType, 
               preserveNullAndEmptyArrays: true,
             },
           },
-          { $match: { 'individualDetail.email': email } },
+          { $match: { $or: [{ 'individualDetail.email': email }, { 'upgradeRequest.businessEmail': email }] } },
         ]
       : [
           {
@@ -478,7 +481,7 @@ export const EXISTING_USERS = (_id: string, email: string, userType: EUserType, 
               preserveNullAndEmptyArrays: true,
             },
           },
-          { $match: { 'businessDetail.businessEmail': email } },
+          { $match: { $or: [{ 'businessDetail.businessEmail': email }, { 'upgradeRequest.businessEmail': email }] } },
         ]
     : []),
 ]
@@ -487,20 +490,36 @@ export const EXISTING_PHONENUMBER = (phonenumber: string, id: string) => [
   ...(id ? [{ $match: { _id: { $ne: new Types.ObjectId(id) } } }] : []),
   ...GET_USER_LOOKUPS(),
   {
-    $match: { $or: [{ 'individualDetail.phoneNumber': phonenumber }, { 'businessDetail.contactNumber': phonenumber }] },
+    $match: {
+      $or: [
+        { 'individualDetail.phoneNumber': phonenumber },
+        { 'businessDetail.contactNumber': phonenumber },
+        { 'upgradeRequest.contactNumber': phonenumber },
+      ],
+    },
   },
 ]
 
 export const EXISTING_TAXID = (taxId: string, id: string) => [
   ...(id ? [{ $match: { _id: { $ne: new Types.ObjectId(id) } } }] : []),
   ...GET_USER_LOOKUPS(),
-  { $match: { $or: [{ 'individualDetail.taxId': taxId }, { 'businessDetail.taxNumber': taxId }] } },
+  {
+    $match: {
+      $or: [
+        { 'individualDetail.taxId': taxId },
+        { 'businessDetail.taxNumber': taxId },
+        { 'upgradeRequest.taxNumber': taxId },
+      ],
+    },
+  },
 ]
 
 export const EXISTING_BUSINESS_NAME = (businessName: string, id: string) => [
   ...(id ? [{ $match: { _id: { $ne: new Types.ObjectId(id) } } }] : []),
   ...GET_USER_LOOKUPS(),
-  { $match: { 'businessDetail.businessName': businessName } },
+  {
+    $match: { $or: [{ 'businessDetail.businessName': businessName }, { 'upgradeRequest.businessName': businessName }] },
+  },
 ]
 
 export const GET_CUSTOMER_BY_EMAIL = (email: string) => [
