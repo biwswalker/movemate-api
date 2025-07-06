@@ -85,6 +85,20 @@ export const DRIVER_PAYMENTS = (queries: GetDriverPaymentArgs, sort = {}) => {
         preserveNullAndEmptyArrays: true,
       },
     },
+    {
+      $lookup: {
+        from: 'billingdocuments',
+        localField: 'document',
+        foreignField: '_id',
+        as: 'document',
+      },
+    },
+    {
+      $unwind: {
+        path: '$document',
+        preserveNullAndEmptyArrays: true,
+      },
+    },
   ]
 
   const shipment: PipelineStage[] = shipmentTracking
@@ -105,9 +119,7 @@ export const DRIVER_PAYMENTS = (queries: GetDriverPaymentArgs, sort = {}) => {
       ]
     : []
 
-  const driverNumbers: PipelineStage[] = driverNumber
-    ? [{ $match: { 'driver.userNumber': driverNumber } }]
-    : []
+  const driverNumbers: PipelineStage[] = driverNumber ? [{ $match: { 'driver.userNumber': driverNumber } }] : []
 
   const postmatch: PipelineStage[] = [...shipment, ...driverNames, ...driverNumbers]
 
