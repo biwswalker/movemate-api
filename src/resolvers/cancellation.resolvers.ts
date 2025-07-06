@@ -5,7 +5,7 @@ import { AuthGuard } from '@guards/auth.guards'
 import { WithTransaction } from '@middlewares/RetryTransaction'
 import { Arg, Ctx, Mutation, Resolver, UseMiddleware } from 'type-graphql'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
-import pubsub, { NOTFICATIONS } from '@configs/pubsub'
+import { GraphQLError } from 'graphql'
 
 @Resolver()
 export default class CancellationResolver {
@@ -36,6 +36,9 @@ export default class CancellationResolver {
     @Arg('reason') reason: string,
   ): Promise<boolean> {
     const session = ctx.session
+    if (!shipmentId) {
+      throw new GraphQLError('ไม่พบงานขนส่ง')
+    }
     // Handle make new Matching
     await driverCancelledShipment({ shipmentId, reason }, session)
 

@@ -75,6 +75,14 @@ export default class AuthResolver {
         }
       }
 
+      if (user.userRole === EUserRole.DRIVER) {
+        if (user.status === EUserStatus.BANNED) {
+          await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
+          const message = `บัญชีของท่านถูกระงับการใช้งานจากผู้ดูแลระบบ โปรดติดต่อเจ้าหน้าที่หากมีข้อสงสัย`
+          throw new GraphQLError(message, { extensions: { code: 'BANNED_USER', message } })
+        }
+      }
+
       const validateResult = await user.validatePassword(hashedPassword)
 
       if (!validateResult) {

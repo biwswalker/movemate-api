@@ -636,9 +636,10 @@ export async function driverCancelledShipment(input: CancelledShipmentInput, ses
     session,
   )
 
+  const customerId = get(_shipment, 'customer._id', '')
   await NotificationModel.sendNotification(
     {
-      userId: _shipment.customer.toString(),
+      userId: customerId,
       varient: ENotificationVarient.WRANING,
       title: 'คนขับยกเลิกการจัดส่ง',
       message: [`งานขนส่งหมายเลข ${_shipment.trackingNumber} ของคุณถูกยกเลิกโดยคนขับ`, `ระบบกำลังจัดหาคนขับใหม่ให้คุณ`],

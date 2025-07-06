@@ -410,7 +410,8 @@ export default class ShipmentResolver {
       if (shipment.paymentMethod === EPaymentMethod.CREDIT) {
         const newShipments = await getNewAllAvailableShipmentForDriver()
         await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
-        shipmentNotify(shipment._id, shipment.requestedDriver ? shipment.requestedDriver.toString() || '' : '')
+        const requestedDriver = get(shipment, 'requestedDriver._id', '')
+        shipmentNotify(shipment._id, requestedDriver)
       }
       await clearLimiter(ctx.ip, ELimiterType.LOCATION, customerId)
     }

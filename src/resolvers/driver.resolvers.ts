@@ -34,6 +34,7 @@ import { REPONSE_NAME } from 'constants/status'
 import { addSeconds } from 'date-fns'
 import { Types } from 'mongoose'
 import { WithTransaction } from '@middlewares/RetryTransaction'
+import pubsub, { USERS } from '@configs/pubsub'
 
 @Resolver(User)
 export default class DriverResolver {
@@ -94,12 +95,17 @@ export default class DriverResolver {
        */
       const title = 'คำขอร่วมงานเป็นคนขับของนายหน้า'
       const message = `${agent.fullname} เพิ่มชื่อของคุณเข้าในรายชื่อคนขับของภายใต้บริษัท`
-      await NotificationModel.sendNotification({
-        userId: driverId,
-        varient: ENotificationVarient.INFO,
-        title: title,
-        message: [message],
-      }, session, true, { navigation: ENavigationType.INDEX })
+      await NotificationModel.sendNotification(
+        {
+          userId: driverId,
+          varient: ENotificationVarient.INFO,
+          title: title,
+          message: [message],
+        },
+        session,
+        true,
+        { navigation: ENavigationType.INDEX },
+      )
 
       return true
     } catch (error) {
@@ -488,15 +494,19 @@ export default class DriverResolver {
       // 4. User
       const profileImage = detail.profileImage ? new FileModel({ ...detail.profileImage }) : null
       profileImage && (await profileImage.save({ session }))
-      await UserModel.findByIdAndUpdate(driver._id, {
-        // admin
-        status: status.status,
-        validationStatus: status.validationStatus,
-        drivingStatus: status.drivingStatus,
-        // detail
-        username: detail.phoneNumber,
-        ...(profileImage ? { profileImage } : {}),
-      })
+      const updatedUser = await UserModel.findByIdAndUpdate(
+        driver._id,
+        {
+          // admin
+          status: status.status,
+          validationStatus: status.validationStatus,
+          drivingStatus: status.drivingStatus,
+          // detail
+          username: detail.phoneNumber,
+          ...(profileImage ? { profileImage } : {}),
+        },
+        { new: true },
+      )
 
       // Notification
       await NotificationModel.sendNotification({
@@ -505,6 +515,8 @@ export default class DriverResolver {
         title: 'มีการเปลี่ยนแปลงข้อมูลส่วนตัว',
         message: [`ผู้ดูแลระบบเปลี่ยนแปลงข้อมูลส่วนตัวของท่าน`],
       })
+
+      await pubsub.publish(USERS.STATUS, updatedUser._id, updatedUser.status)
 
       return true
     } catch (error) {

@@ -48,6 +48,7 @@ Aigle.mixin(lodash, {})
 
 export async function shipmentNotify(shipmentId: string, requestedDriverId?: string) {
   const shipment = await ShipmentModel.findById(shipmentId).lean()
+  console.log('Start shipment notify: ', shipmentId, shipment)
   if (!shipment) return
 
   // ตรวจสอบสถานะเบื้องต้น
