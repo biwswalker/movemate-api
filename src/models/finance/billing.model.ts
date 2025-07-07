@@ -106,21 +106,39 @@ export class Billing extends TimeStamps {
 
   @Field(() => PaymentAmounts, { nullable: true })
   get amount(): PaymentAmounts {
-    const _payments = get(this, '_doc.payments', this.payments || [])
-    const latestPayment = last(sortBy(_payments, ['createdAt'])) as Payment | undefined
+    // --- สำหรับลูกค้าเครดิต ---
+    const _paymentMethod = get(this, '_doc.paymentMethod', this.paymentMethod)
+    if (_paymentMethod === EPaymentMethod.CREDIT) {
+      const adjustmentNotes = get(this, '_doc.adjustmentNotes', this.adjustmentNotes || []) as BillingAdjustmentNote[]
+      const lastAdjustmentNote = last(sortBy(adjustmentNotes, 'issueDate'))
 
-    if (latestPayment) {
-      return {
-        total: latestPayment.total,
-        subTotal: latestPayment.subTotal,
-        tax: latestPayment.tax,
+      if (lastAdjustmentNote) {
+        // ถ้ามีใบปรับปรุง ให้ใช้ยอดจากใบปรับปรุงล่าสุด
+        return {
+          total: lastAdjustmentNote.totalAmount,
+          subTotal: lastAdjustmentNote.newSubTotal,
+          tax: lastAdjustmentNote.taxAmount,
+        }
+      }
+
+      const invoice = get(this, '_doc.invoice', this.invoice) as Invoice | undefined
+      if (invoice) {
+        return { total: invoice.total ?? 0, subTotal: invoice.subTotal ?? 0, tax: invoice.tax ?? 0 }
       }
     }
-    return {
-      total: 0,
-      subTotal: 0,
-      tax: 0,
+
+    // --- สำหรับลูกค้าเงินสด (ใช้ Logic เดิม) ---
+    const payments = get(this, '_doc.payments', this.payments || []) as Payment[]
+    const latestPayment = last(sortBy(payments, 'createdAt'))
+    if (latestPayment) {
+      return {
+        total: latestPayment.total ?? 0,
+        subTotal: latestPayment.subTotal ?? 0,
+        tax: latestPayment.tax ?? 0,
+      }
     }
+
+    return { total: 0, subTotal: 0, tax: 0 }
   }
 
   @Field(() => Quotation, { nullable: true })

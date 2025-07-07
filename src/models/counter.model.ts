@@ -37,6 +37,12 @@ export class Couter {
     @Property({ required: true, default: 0 })
     wht: number
 
+    @Property({ required: true, default: 0 })
+    debitnote: number
+
+    @Property({ required: true, default: 0 })
+    creditnote: number
+
     static async getNextCouter(type: TGenerateIDType): Promise<number> {
         const query_option = { upsert: true, new: true }
         if (type === 'individual') {
@@ -75,6 +81,12 @@ export class Couter {
         } else if (type === 'wht') {
             const counter = await CouterModel.findOneAndUpdate({}, { $inc: { wht: 1 } }, query_option)
             return counter.wht
+        } else if (type === 'debitnote') {
+            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { debitnote: 1 } }, query_option)
+            return counter.debitnote
+        } else if (type === 'creditnote') {
+            const counter = await CouterModel.findOneAndUpdate({}, { $inc: { creditnote: 1 } }, query_option)
+            return counter.creditnote
         }
         return 0
     }

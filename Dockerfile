@@ -18,6 +18,7 @@ RUN mkdir generated
 RUN mkdir generated/invoice
 RUN mkdir generated/receipt
 RUN mkdir generated/whtcert
+RUN mkdir generated/adjustmentnote
 RUN mkdir generated/report
 RUN mkdir generated/report/admin
 RUN mkdir generated/report/customer

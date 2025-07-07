@@ -7,7 +7,7 @@ import {
   EUserValidationStatus,
 } from '@enums/users'
 import { GetUserArgs } from '@inputs/user.input'
-import { format } from 'date-fns'
+import { addDays, format } from 'date-fns'
 import { isEmpty, toNumber } from 'lodash'
 import { PipelineStage, Types } from 'mongoose'
 import { filePipelineStage } from './file.pipline'
@@ -559,7 +559,7 @@ export const GET_CUSTOMER_BY_EMAIL = (email: string) => [
 ]
 
 export const GET_CUSTOMER_WITH_TODAY_BILLED_DATE = () => {
-  const today = new Date()
+  const today = addDays(new Date(), 1)
   const currentMonth = format(today, 'MMM').toLowerCase()
   const currentDay = toNumber(format(today, 'dd'))
 

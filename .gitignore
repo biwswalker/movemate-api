@@ -6,6 +6,7 @@ uploads/*
 generated/invoice/*.pdf
 generated/receipt/*.pdf
 generated/whtcert/*.pdf
+generated/adjustmentnote/*.pdf
 generated/report/*
 dist
 firebase-services.json

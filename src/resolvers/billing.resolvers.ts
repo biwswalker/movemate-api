@@ -1,12 +1,12 @@
 import { GraphQLContext } from '@configs/graphQL.config'
 import { markBillingAsPaid, markBillingAsRefunded, markBillingAsRejected } from '@controllers/billingPayment'
-import { EBillingCriteriaStatus, EBillingState, EBillingStatus } from '@enums/billing'
+import { EAdjustmentNoteType, EBillingCriteriaStatus, EBillingState, EBillingStatus } from '@enums/billing'
 import { EPaymentMethod } from '@enums/payments'
 import { EUserRole, EUserType } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
 import { GetBillingInput, ProcessBillingRefundInput } from '@inputs/billingCycle.input'
 import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
-import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
+import RetryTransactionMiddleware, { WithTransaction } from '@middlewares/RetryTransaction'
 import FileModel from '@models/file.model'
 import BillingModel, { Billing } from '@models/finance/billing.model'
 import { BillingListPayload, TotalBillingRecordPayload } from '@payloads/billingCycle.payloads'
@@ -18,8 +18,8 @@ import { PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import pubsub, { NOTFICATIONS, SHIPMENTS } from '@configs/pubsub'
-import BillingDocumentModel from '@models/finance/documents.model'
-import UserModel from '@models/user.model'
+import BillingDocumentModel, { BillingDocument } from '@models/finance/documents.model'
+import UserModel, { User } from '@models/user.model'
 import { addDays, endOfMonth, format, parse, startOfMonth } from 'date-fns'
 import { th } from 'date-fns/locale'
 import path from 'path'
@@ -38,6 +38,11 @@ import { shipmentNotify } from '@controllers/shipmentNotification'
 import { getNewAllAvailableShipmentForDriver } from '@controllers/shipmentGet'
 import { generateBillingReceipt } from '@controllers/billingReceipt'
 import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
+import { CreateAdjustmentNoteInput } from '@inputs/billingAdjustmentNote.input'
+import { createAdjustmentNote } from '@controllers/billingAdjustment'
+import NotificationModel, { ENotificationVarient, Notification } from '@models/notification.model'
+import { Invoice } from '@models/finance/invoice.model'
+import BillingAdjustmentNoteModel from '@models/finance/billingAdjustmentNote.model'
 
 @Resolver()
 export default class BillingResolver {
@@ -428,5 +433,83 @@ export default class BillingResolver {
     // Update count admin
     await getAdminMenuNotificationCount(session)
     return false
+  }
+
+  @Mutation(() => Boolean)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async createBillingAdjustmentNote(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('data') data: CreateAdjustmentNoteInput,
+  ): Promise<boolean> {
+    const session = ctx.session
+    const adminId = ctx.req.user_id
+
+    const { adjustmentNote, fileName, filePath } = await createAdjustmentNote(data, adminId, session)
+    // const _adjustmentNote = await BillingAdjustmentNoteModel.findById(adjustmentNote._id).session(session)
+    const _billingPre = adjustmentNote?.billing
+    if (!_billingPre) {
+      console.error('No billing found for adjustment note')
+      return
+    }
+    const _billing = await BillingModel.findById(_billingPre).session(session)
+    const _user = _billing?.user as User | undefined
+    if (_user) {
+      const _invoice = _billing.invoice as Invoice | undefined
+      const typeText = adjustmentNote.adjustmentType === EAdjustmentNoteType.CREDIT_NOTE ? 'ใบเพิ่มหนี้' : 'ใบลดหนี้'
+
+      if (_invoice) {
+        await NotificationModel.sendNotification(
+          {
+            userId: _user._id,
+            varient: ENotificationVarient.INFO,
+            title: 'มีการสร้างใบปรับปรุงหนี้',
+            message: [
+              `สร้าง ${typeText} (${adjustmentNote.adjustmentNumber}) สำหรับใบแจ้งหนี้หมายเลข: ${_invoice.invoiceNumber} สำเร็จ`,
+            ],
+            infoLink: `/main/billing?billing_number=${_billing.billingNumber}`,
+            infoText: 'คลิกเพื่อดูรายละเอียด',
+          },
+          session,
+        )
+      }
+
+      const _document = adjustmentNote.document as BillingDocument | undefined
+
+      if (!_document) {
+        console.error('No document found for adjustment note')
+        return
+      }
+
+      const subject = `[Auto Email] Movemate Thailand เอกสาร${typeText} เลขที่ ${adjustmentNote.adjustmentNumber}`
+      const financialEmails = get(_user, 'businessDetail.creditPayment.financialContactEmails', [])
+      const emails = uniq([_user.email, ...financialEmails]).filter(Boolean)
+      if (emails.length === 0) {
+        console.error(`No email address for customer ${_user.userNumber} to send adjustment note.`)
+        return
+      }
+
+      // 4. เพิ่มเข้าคิวส่งอีเมล
+      await addEmailQueue({
+        from: process.env.MAILGUN_SMTP_EMAIL,
+        to: emails,
+        subject: subject,
+        template: 'notify_adjustment_note', // ชื่อ template ใหม่
+        context: {
+          customer_name: _user.fullname,
+          document_title: typeText,
+          adjustment_number: adjustmentNote.adjustmentNumber,
+          contact_number: '02-xxx-xxxx', // ควรมาจาก config
+          movemate_link: 'https://www.movematethailand.com',
+        },
+        attachments: [
+          {
+            filename: fileName,
+            path: filePath,
+          },
+        ],
+      })
+    }
+    return true
   }
 }

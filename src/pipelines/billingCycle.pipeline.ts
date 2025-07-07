@@ -163,7 +163,7 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
     },
     {
       $lookup: {
-        from: 'invoice',
+        from: 'invoices',
         localField: 'invoice',
         foreignField: '_id',
         as: 'invoice',
@@ -190,6 +190,22 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
         localField: 'adjustmentNotes',
         foreignField: '_id',
         as: 'adjustmentNotes',
+        pipeline: [
+          {
+            $lookup: {
+              from: 'billingdocuments',
+              localField: 'document',
+              foreignField: '_id',
+              as: 'document',
+            },
+          },
+          {
+            $unwind: {
+              path: '$document',
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+        ],
       },
     },
     ...query,

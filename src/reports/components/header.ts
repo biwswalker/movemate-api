@@ -1,21 +1,55 @@
 import PDFDocument from 'pdfkit-table'
 import { ASSETS, FONTS } from './constants'
 import { fDate } from '@utils/formatTime'
-import { get, last, sortBy, toNumber } from 'lodash'
+import { find, get, last, sortBy, toNumber } from 'lodash'
 import { User } from '@models/user.model'
 import { EPaymentMethod } from '@enums/payments'
 import { EUserType } from '@enums/users'
 import { Billing } from '@models/finance/billing.model'
 import { Receipt } from '@models/finance/receipt.model'
 import { Invoice } from '@models/finance/invoice.model'
+import { BillingAdjustmentNote } from '@models/finance/billingAdjustmentNote.model'
+
+type ReportType = 'invoice' | 'receipt' | 'debitnote' | 'creditnote'
+
+function getTypeText(type: ReportType) {
+  switch (type) {
+    case 'invoice':
+      return {
+        uppercase: 'INVOICE',
+        thai: 'ใบแจ้งหนี้',
+      }
+    case 'receipt':
+      return {
+        uppercase: 'RECEIPT',
+        thai: 'ใบเสร็จรับเงิน',
+      }
+    case 'debitnote':
+      return {
+        uppercase: 'DEBIT NOTE',
+        thai: 'ใบเพิ่มหนี้',
+      }
+    case 'creditnote':
+      return {
+        uppercase: 'CREDIT NOTE',
+        thai: 'ใบลดหนี้',
+      }
+    default:
+      return {
+        uppercase: '',
+        thai: '',
+      }
+  }
+}
 
 export function HeaderComponent(
   doc: PDFDocument,
   billing: Billing,
-  type: 'invoice' | 'receipt',
+  type: ReportType,
   page: number,
   totalPage: number,
   isOriginal: boolean = true,
+  targetId?: string,
 ) {
   const marginLeft = doc.page.margins.left
   const marginRight = doc.page.margins.right
@@ -40,24 +74,17 @@ export function HeaderComponent(
   // Receipt number detail
   const docNumberReactX = 420
   const docNumberRectWidth = maxWidth - docNumberReactX
-  doc
-    .font(FONTS.SARABUN_REGULAR)
-    .fontSize(13)
-    .text(type === 'receipt' ? 'RECEIPT' : 'INVOICE', docNumberReactX, 55, {
-      align: 'center',
-      width: docNumberRectWidth,
-    })
+
+  doc.font(FONTS.SARABUN_REGULAR).fontSize(13).text(getTypeText(type).uppercase, docNumberReactX, 55, {
+    align: 'center',
+    width: docNumberRectWidth,
+  })
   doc.moveDown(0.3)
   doc.font(FONTS.SARABUN_LIGHT).fontSize(9)
-  doc.text(
-    `${type === 'receipt' ? 'ใบเสร็จรับเงิน' : 'ใบแจ้งหนี้'} ${isOriginal ? '(ต้นฉบับ)' : '(สำเนา)'}`,
-    docNumberReactX,
-    doc.y,
-    {
-      align: 'center',
-      width: docNumberRectWidth,
-    },
-  )
+  doc.text(`${getTypeText(type).thai} ${isOriginal ? '(ต้นฉบับ)' : '(สำเนา)'}`, docNumberReactX, doc.y, {
+    align: 'center',
+    width: docNumberRectWidth,
+  })
   doc
     .lineCap('butt')
     .lineWidth(1)
@@ -94,7 +121,7 @@ export function HeaderComponent(
       doc
         .font(FONTS.SARABUN_LIGHT)
         .text(`${duedateInBEDateMonth}/${duedateInBEYear}`, 499, doc.y - 10, { align: 'left' })
-    } else {
+    } else if (type === 'receipt') {
       // ---
       const _receipts = billing.receipts as Receipt[]
       const _latestReceipt = last(sortBy(_receipts, 'createdAt')) as Receipt | undefined
@@ -124,6 +151,44 @@ export function HeaderComponent(
         .font(FONTS.SARABUN_LIGHT)
         .text(`${receiptInBEDateMonth}/${receiptInBEYear}`, 499, doc.y - 10, { align: 'left' })
       // Doc Number React
+    } else if (type === 'creditnote' || type === 'debitnote') {
+      // ---
+      const _adjistmentNotes = billing.adjustmentNotes as BillingAdjustmentNote[]
+      const _adjistmentNote = (
+        targetId
+          ? find(_adjistmentNotes, (item) => item._id.toString() === targetId.toString())
+          : last(sortBy(_adjistmentNotes, 'issueDate'))
+      ) as BillingAdjustmentNote | undefined
+
+      doc.fontSize(8)
+      doc
+        .font(FONTS.SARABUN_MEDIUM)
+        .text(type === 'creditnote' ? 'Credit note No.:' : 'Debit note No.:', docNumberReactX, doc.y, {
+          align: 'right',
+          width: docNumberRectWidth / 2 - 4,
+        }) // 81
+      doc.font(FONTS.SARABUN_LIGHT).text(_adjistmentNote?.adjustmentNumber, 499, doc.y - 10, { align: 'left' })
+
+      // ---
+      const receiptInBEDateMonth = fDate(_adjistmentNote?.issueDate, 'dd/MM')
+      const receiptInBEYear = toNumber(fDate(_adjistmentNote?.issueDate, 'yyyy')) + 543
+      doc.moveDown(0.3)
+      doc
+        .font(FONTS.SARABUN_MEDIUM)
+        .text('Date :', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
+      doc
+        .font(FONTS.SARABUN_LIGHT)
+        .text(`${receiptInBEDateMonth}/${receiptInBEYear}`, 499, doc.y - 10, { align: 'left' })
+
+      // ---
+      doc.moveDown(0.3)
+      doc
+        .font(FONTS.SARABUN_MEDIUM)
+        .text('Ref invoice No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
+      doc
+        .font(FONTS.SARABUN_LIGHT)
+        .text(_adjistmentNote?.previousDocumentRef.documentNumber, 499, doc.y - 10, { align: 'left' })
+      // Doc Number React
     }
     doc.rect(docNumberReactX, 54, docNumberRectWidth, 84).lineWidth(2).stroke()
     doc
@@ -133,35 +198,6 @@ export function HeaderComponent(
       .lineTo(maxWidth, doc.y + 14)
       .stroke()
     doc.moveDown(2.2)
-  } else {
-    const _receipts = billing.receipts as Receipt[]
-    const _latestReceipt = last(sortBy(_receipts, 'createdAt')) as Receipt | undefined
-
-    // Receipt No
-    doc.fontSize(8)
-    doc
-      .font(FONTS.SARABUN_MEDIUM)
-      .text('Receipt No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-    doc.font(FONTS.SARABUN_LIGHT).text(_latestReceipt.receiptNumber, 499, doc.y - 10, { align: 'left' })
-
-    const receiptInBEDateMonth = fDate(_latestReceipt.receiptDate, 'dd/MM')
-    const receiptInBEYear = toNumber(fDate(_latestReceipt.receiptDate, 'yyyy')) + 543
-    // Date
-    doc.moveDown(0.3)
-    doc
-      .font(FONTS.SARABUN_MEDIUM)
-      .text('Date :', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-    doc.font(FONTS.SARABUN_LIGHT).text(`${receiptInBEDateMonth}/${receiptInBEYear}`, 499, doc.y - 10, { align: 'left' })
-    // Doc Number React
-
-    doc.rect(docNumberReactX, 54, docNumberRectWidth, 72).lineWidth(2).stroke()
-    doc
-      .lineCap('butt')
-      .lineWidth(1.5)
-      .moveTo(marginLeft, doc.y + 24)
-      .lineTo(maxWidth, doc.y + 24)
-      .stroke()
-    doc.moveDown(3)
   }
 
   // Seperate line

@@ -1,9 +1,40 @@
 import { Field, Float, ID, ObjectType } from 'type-graphql'
 import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
-import { EAdjustmentNoteType, EBillingStatus } from '@enums/billing'
-import { IsEnum } from 'class-validator'
-import { Payment } from './payment.model'
+import { EAdjustmentNoteType } from '@enums/billing'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
+import { Billing } from './billing.model'
+import { User } from '@models/user.model'
+import { BillingDocument } from './documents.model'
+
+@ObjectType()
+export class AdjustmentItem {
+  @Field()
+  @Property({ required: true })
+  description: string
+
+  @Field(() => Float)
+  @Property({ required: true })
+  amount: number
+
+  @Field({ nullable: true })
+  @Property()
+  serviceDate?: Date
+
+  @Field({ nullable: true })
+  @Property()
+  shipmentNumber?: string
+}
+
+@ObjectType()
+export class PreviousDocumentReference {
+  @Field()
+  @Property({ required: true })
+  documentNumber: string
+
+  @Field()
+  @Property({ required: true })
+  documentType: string
+}
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()
@@ -12,46 +43,61 @@ export class BillingAdjustmentNote {
   readonly _id: string
 
   @Field()
-  @Property({ required: true })
+  @Property({ required: true, unique: true })
   adjustmentNumber: string
 
-  @Field(() => EBillingStatus)
-  @IsEnum(EBillingStatus)
-  @Property({ enum: EBillingStatus, default: EBillingStatus.PENDING })
-  status: EBillingStatus
-
-  @Field()
-  @Property({ required: true })
-  billingId: string
+  @Field(() => Billing)
+  @Property({ ref: 'Billing', required: true })
+  billing: Ref<Billing>
 
   @Field(() => EAdjustmentNoteType)
-  @IsEnum(EAdjustmentNoteType)
   @Property({ enum: EAdjustmentNoteType, required: true })
   adjustmentType: EAdjustmentNoteType
 
+  @Field(() => [AdjustmentItem])
+  @Property({ type: () => [AdjustmentItem], required: true })
+  items: AdjustmentItem[]
+
+  @Field(() => PreviousDocumentReference)
+  @Property({ type: () => PreviousDocumentReference, required: true })
+  previousDocumentRef: PreviousDocumentReference
+
+  // --- ฟิลด์สรุปทางการเงิน ---
   @Field(() => Float)
   @Property({ required: true, default: 0 })
-  adjustmentAmount: number // จำนวนเงินรวมที่มีการปรับปรุง
+  originalSubTotal: number // มูลค่าตามใบแจ้งหนี้เดิม
+
+  @Field(() => Float)
+  @Property({ required: true, default: 0 })
+  adjustmentSubTotal: number // ผลต่าง (ยอดรวมของ items)
+
+  @Field(() => Float)
+  @Property({ required: true, default: 0 })
+  newSubTotal: number // มูลค่าที่ถูกต้อง
+
+  @Field(() => Float)
+  @Property({ required: true, default: 0 })
+  taxAmount: number // ภาษีหัก ณ ที่จ่าย 1% (ของยอดใหม่)
+
+  @Field(() => Float)
+  @Property({ required: true, default: 0 })
+  totalAmount: number // รวมที่ต้องชำระทั้งสิ้น (ยอดใหม่)
+
+  @Field()
+  @Property({ required: true })
+  issueDate: Date
+
+  @Field(() => User)
+  @Property({ ref: () => User, required: true })
+  createdBy: Ref<User>
 
   @Field({ nullable: true })
   @Property()
-  adjustmentReason?: string // เหตุผลในการแก้ไข
+  remarks?: string
 
-  @Field(() => Date)
-  @Property({ required: true })
-  issueDate: Date // วันที่ออกเอกสาร
-
-  @Field(() => Payment, { nullable: true })
-  @Property({ ref: () => Payment, required: false, autopopulate: true })
-  payment?: Ref<Payment> // การชำระเงินที่เกี่ยวข้อง
-
-  @Field()
-  @Property({ default: Date.now })
-  createdAt: Date
-
-  @Field()
-  @Property({ default: Date.now })
-  updatedAt: Date
+  @Field(() => BillingDocument, { nullable: true })
+  @Property({ ref: () => BillingDocument, autopopulate: true })
+  document: Ref<BillingDocument>
 }
 
 const BillingAdjustmentNoteModel = getModelForClass(BillingAdjustmentNote)
