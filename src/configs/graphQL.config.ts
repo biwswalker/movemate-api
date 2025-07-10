@@ -1,13 +1,15 @@
+import http from 'http'
+import WebSocket from 'ws'
+import get from 'lodash/get'
+import pubSub from './pubsub'
 import { buildSchema } from 'type-graphql'
 import { ApolloServer } from '@apollo/server'
 import { ApolloServerPluginDrainHttpServer } from '@apollo/server/plugin/drainHttpServer'
 import { ApolloServerPluginLandingPageDisabled } from '@apollo/server/plugin/disabled'
 import { Request, Response } from 'express'
-import { get } from 'lodash'
-import http from 'http'
-import WebSocket from 'ws'
 import { useServer } from 'graphql-ws/lib/use/ws'
-import pubSub from './pubsub'
+import { verifyAccessToken } from '@utils/auth.utils'
+import { ClientSession } from 'mongoose'
 
 import AuthResolver from '@resolvers/auth.resolvers'
 import UserResolver from '@resolvers/user.resolvers'
@@ -30,20 +32,20 @@ import DriverResolver from '@resolvers/driver.resolvers'
 import MatchingResolver from '@resolvers/matching.resolvers'
 import TransactionResolver from '@resolvers/transaction.resolvers'
 import CancellationResolver from '@resolvers/cancellation.resolvers'
-import { verifyAccessToken } from '@utils/auth.utils'
 import FavoriteDriverResolver from '@resolvers/favoritedrivers.resolvers'
 import EventResolver from '@resolvers/event.resolvers'
 import SearchHistoryResolver from '@resolvers/search.resolvers'
 import DriverPaymentResolver from '@resolvers/driverpayment.resolvers'
 import UserPendingResolver from '@resolvers/userPending.resolvers'
-import { ClientSession } from 'mongoose'
 import BillingResolver from '@resolvers/billing.resolvers'
 import PaymentResolver from '@resolvers/payment.resolvers'
 import ContactResolver from '@resolvers/contact.resolvers'
 import DashboardResolver from '@resolvers/dashboard.resolvers'
 import ReportResolver from '@resolvers/report.resolvers'
 import AuditLogResolver from '@resolvers/auditLog.resolvers'
-import { ControllSubscriptionResolver } from '@resolvers/controll.resolvers'
+import ControllResolver from '@resolvers/controll.resolvers'
+import ControllSubscription from '@subscriptions/controll.subscriptions'
+import ShipmentSubscription from '@subscriptions/shipment.subscriptions'
 
 export interface GraphQLContext {
   req: Request
@@ -63,6 +65,9 @@ export async function createGraphQLServer(httpServer: http.Server) {
   const isProd = process.env.NODE_ENV === 'production'
   const schema = await buildSchema({
     resolvers: [
+      /**
+       * Resolvers
+       */
       AuthResolver,
       UserResolver,
       ShipmentResolver,
@@ -95,7 +100,12 @@ export async function createGraphQLServer(httpServer: http.Server) {
       DashboardResolver,
       ReportResolver,
       AuditLogResolver,
-      ControllSubscriptionResolver,
+      ControllResolver,
+      /**
+       * Subscriptions
+       */
+      ControllSubscription,
+      ShipmentSubscription,
     ],
     pubSub: pubSub,
     authChecker: ({ context }: { context: GraphQLContext }) => {

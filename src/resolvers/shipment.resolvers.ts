@@ -1,25 +1,18 @@
-import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
+import { GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import { GetShipmentInput, ShipmentInput } from '@inputs/shipment.input'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
-import { FilterQuery, PaginateOptions } from 'mongoose'
-import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, Root, Subscription, UseMiddleware } from 'type-graphql'
-import lodash, { find, get, isEmpty, map, omitBy, sum } from 'lodash'
-import {
-  ShipmentListPayload,
-  ShipmentPaginationAggregatePayload,
-  ShipmentPaginationPayload,
-  TotalRecordPayload,
-} from '@payloads/shipment.payloads'
-import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
+import { PaginateOptions } from 'mongoose'
+import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
+import lodash, { find, get, map, omit, sum } from 'lodash'
+import { ShipmentListPayload, TotalRecordPayload } from '@payloads/shipment.payloads'
+import { LoadmoreArgs } from '@inputs/query.input'
 import { reformPaginate } from '@utils/pagination.utils'
-import { GET_SHIPMENT_LIST, SHIPMENT_LIST } from '@pipelines/shipment.pipeline'
+import { GET_SHIPMENT_LIST } from '@pipelines/shipment.pipeline'
 import { clearLimiter, ELimiterType } from '@configs/rateLimit'
-import { REPONSE_NAME } from 'constants/status'
 import { shipmentNotifyQueue } from '@configs/jobQueue'
-import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { EPaymentMethod } from '@enums/payments'
 import {
   EAdminAcceptanceStatus,
@@ -42,28 +35,11 @@ import { EServiceStatus } from '@enums/additionalService'
 import { PricingCalculationMethodPayload } from '@payloads/pricing.payloads'
 import { AuditLogDecorator } from 'decorators/AuditLog.decorator'
 import { EAuditActions } from '@enums/audit'
-import { Repeater } from '@graphql-yoga/subscription'
 
 Aigle.mixin(lodash, {})
 
 @Resolver(Shipment)
 export default class ShipmentResolver {
-  @Query(() => Shipment)
-  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
-  async shipment(@Arg('id') id: string): Promise<Shipment> {
-    try {
-      const shipment = await ShipmentModel.findById(id)
-      if (!shipment) {
-        const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
-        throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
-      }
-      return shipment
-    } catch (error) {
-      console.log(error)
-      throw error
-    }
-  }
-
   @Query(() => Shipment)
   @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
   async getShipmentByTracking(
@@ -86,250 +62,6 @@ export default class ShipmentResolver {
       console.log(error)
       throw error
     }
-  }
-
-  shipmentQuery(
-    {
-      dateRangeStart,
-      dateRangeEnd,
-      trackingNumber,
-      vehicleTypeId,
-      status,
-      startWorkingDate,
-      endWorkingDate,
-    }: GetShipmentInput,
-    user_role: string | undefined,
-    user_id: string | undefined,
-  ): FilterQuery<typeof Shipment> {
-    // Status
-    const statusFilterOr =
-      status === EShipmentStatusCriteria.ALL
-        ? [
-            EShipmentStatus.IDLE,
-            EShipmentStatus.PROGRESSING,
-            EShipmentStatus.DELIVERED,
-            EShipmentStatus.CANCELLED,
-            EShipmentStatus.REFUND,
-          ]
-        : status === EShipmentStatusCriteria.PAYMENT_VERIFY || status === EShipmentStatusCriteria.WAITING_DRIVER
-        ? [EShipmentStatus.IDLE]
-        : [status]
-
-    // Create at
-    const startOfCreated = dateRangeStart ? new Date(new Date(dateRangeStart).setHours(0, 0, 0, 0)) : null
-    const endOfCreated = dateRangeEnd ? new Date(new Date(dateRangeEnd).setHours(23, 59, 59, 999)) : null
-    // Working
-    const startOfWorking = startWorkingDate ? new Date(new Date(startWorkingDate).setHours(0, 0, 0, 0)) : null
-    const endOfWorking = endWorkingDate ? new Date(new Date(endWorkingDate).setHours(23, 59, 59, 999)) : null
-
-    // Query
-    const regex = new RegExp(trackingNumber, 'i')
-    const orQuery = [
-      ...(trackingNumber
-        ? [
-            {
-              trackingNumber: { $regex: regex },
-              $or: !isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [],
-            },
-            { refId: { $regex: regex }, $or: !isEmpty(statusFilterOr) ? [{ status: { $in: statusFilterOr } }] : [] },
-          ]
-        : !isEmpty(statusFilterOr)
-        ? [{ status: { $in: statusFilterOr } }]
-        : []),
-    ]
-    const filterQuery: FilterQuery<typeof Shipment> = {
-      ...(vehicleTypeId ? { vehicleId: vehicleTypeId } : {}),
-      ...(startOfCreated || endOfCreated
-        ? {
-            createdAt: {
-              ...(startOfCreated ? { $gte: startOfCreated } : {}),
-              ...(endOfCreated ? { $lte: endOfCreated } : {}),
-            },
-          }
-        : {}),
-      ...(startOfWorking && endOfWorking
-        ? {
-            bookingDateTime: {
-              ...(startOfWorking ? { $gte: startOfWorking } : {}),
-              ...(endOfWorking ? { $lte: endOfWorking } : {}),
-            },
-          }
-        : {}),
-      ...(!isEmpty(orQuery) ? { $or: orQuery } : {}),
-      ...(status === EShipmentStatusCriteria.PAYMENT_VERIFY
-        ? { adminAcceptanceStatus: EAdminAcceptanceStatus.PENDING }
-        : {}),
-      ...(status === EShipmentStatusCriteria.WAITING_DRIVER
-        ? { driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING }
-        : {}),
-      ...(user_role === EUserRole.CUSTOMER && user_id ? { customer: user_id } : {}),
-    }
-    return filterQuery
-  }
-
-  @Query(() => ShipmentPaginationPayload)
-  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
-  async shipmentList(
-    @Ctx() ctx: GraphQLContext,
-    @Arg('data')
-    { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...query }: GetShipmentInput,
-    @Args() paginate: PaginationArgs,
-  ): Promise<ShipmentPaginationPayload> {
-    const user_id = ctx.req.user_id
-    const user_role = ctx.req.user_role
-    try {
-      const { sort = {}, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
-      // const filterQuery = omitBy(query, isEmpty)
-      const aggregate = ShipmentModel.aggregate(SHIPMENT_LIST(query, user_role, user_id, sort))
-      const shipments = (await ShipmentModel.aggregatePaginate(
-        aggregate,
-        reformSorts,
-      )) as ShipmentPaginationAggregatePayload
-
-      if (!shipments) {
-        const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
-        throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
-      }
-      return shipments
-    } catch (error) {
-      console.log(error)
-      throw error
-    }
-  }
-
-  @Query(() => [String])
-  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
-  async allshipmentIds(
-    @Ctx() ctx: GraphQLContext,
-    @Arg('data') { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...query }: GetShipmentInput,
-  ): Promise<string[]> {
-    const user_id = ctx.req.user_id
-    const user_role = ctx.req.user_role
-    try {
-      const filterQuery = omitBy(query, isEmpty)
-      const shipments = await ShipmentModel.aggregate(
-        SHIPMENT_LIST(
-          { startWorkingDate, endWorkingDate, dateRangeStart, dateRangeEnd, ...filterQuery },
-          user_role,
-          user_id,
-        ),
-      )
-      const ids = map(shipments, ({ _id }) => _id)
-
-      return ids
-    } catch (error) {
-      console.log(error)
-      throw new GraphQLError('ไม่สามารถเรียกข้อมูลงานขนส่งได้ โปรดลองอีกครั้ง')
-    }
-  }
-
-  @Query(() => [Shipment])
-  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
-  async shipments(
-    @Ctx() ctx: GraphQLContext,
-    @Arg('data') filter: GetShipmentInput,
-    @Args() { skip, limit, sortAscending, sortField }: LoadmoreArgs,
-  ): Promise<Shipment[]> {
-    const user_id = ctx.req.user_id
-    const user_role = ctx.req.user_role
-    try {
-      const { sort = {} }: PaginateOptions = reformPaginate({ sortField, sortAscending })
-      const shipments = await ShipmentModel.aggregate(
-        SHIPMENT_LIST(filter, user_role, user_id, sort, skip || 0, limit || 10),
-      )
-
-      if (!shipments) {
-        const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
-        throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
-      }
-      return shipments
-    } catch (error) {
-      console.log(error)
-      throw error
-    }
-  }
-
-  @Query(() => Int)
-  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
-  async totalShipment(@Ctx() ctx: GraphQLContext, @Arg('data') data: GetShipmentInput): Promise<number> {
-    const user_role = ctx.req.user_role
-    const user_id = ctx.req.user_id
-    if (user_id) {
-      // Query
-      const filterQuery = this.shipmentQuery(data, user_role, user_id)
-      const numberOfShipments = await ShipmentModel.countDocuments(filterQuery)
-      return numberOfShipments
-    }
-    return 0
-  }
-
-  @Query(() => [TotalRecordPayload])
-  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
-  async statusCount(@Ctx() ctx: GraphQLContext, @Arg('data') data: GetShipmentInput): Promise<TotalRecordPayload[]> {
-    const user_role = ctx.req.user_role
-    const user_id = ctx.req.user_id
-    if (user_id) {
-      if (user_role === EUserRole.ADMIN) {
-        const customerFilter = {
-          ...(data.customerId ? { customer: data.customerId } : {}),
-          ...(data.driverId ? { driver: data.driverId } : {}),
-        }
-        const all = await ShipmentModel.countDocuments({ ...customerFilter })
-        const paymentVerify = await ShipmentModel.countDocuments({
-          status: EShipmentStatus.IDLE,
-          adminAcceptanceStatus: EAdminAcceptanceStatus.PENDING,
-          ...customerFilter,
-        })
-        const waitingDriver = await ShipmentModel.countDocuments({
-          status: EShipmentStatus.IDLE,
-          driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
-          ...customerFilter,
-        })
-        const progressing = await ShipmentModel.countDocuments({
-          status: EShipmentStatus.PROGRESSING,
-          ...customerFilter,
-        })
-        const delivered = await ShipmentModel.countDocuments({
-          status: EShipmentStatus.DELIVERED,
-          ...customerFilter,
-        })
-        const cancelled = await ShipmentModel.countDocuments({
-          status: EShipmentStatus.CANCELLED,
-          ...customerFilter,
-        })
-        const refund = await ShipmentModel.countDocuments({ status: EShipmentStatusCriteria.REFUND, ...customerFilter })
-
-        return [
-          { label: 'ทั้งหมด', key: EShipmentStatusCriteria.ALL, count: all },
-          { label: 'รอตรวจสอบการชำระ', key: EShipmentStatusCriteria.PAYMENT_VERIFY, count: paymentVerify },
-          { label: 'รอคนขับตอบรับ', key: EShipmentStatusCriteria.WAITING_DRIVER, count: waitingDriver },
-          { label: 'คืนเงิน', key: EShipmentStatusCriteria.REFUND, count: refund },
-          { label: 'กำลังดำเนินการขนส่ง', key: EShipmentStatusCriteria.PROGRESSING, count: progressing },
-          { label: 'เสร็จสิ้น', key: EShipmentStatusCriteria.DELIVERED, count: delivered },
-          { label: 'ยกเลิก', key: EShipmentStatusCriteria.CANCELLED, count: cancelled },
-        ]
-      } else {
-        const filterQuery = (status: EShipmentStatusCriteria) =>
-          this.shipmentQuery({ ...data, status }, user_role, user_id)
-
-        const allCount = await ShipmentModel.countDocuments(filterQuery(EShipmentStatusCriteria.ALL))
-        const verifyCount = await ShipmentModel.countDocuments(filterQuery(EShipmentStatusCriteria.PAYMENT_VERIFY))
-        const progressingCount = await ShipmentModel.countDocuments(filterQuery(EShipmentStatusCriteria.PROGRESSING))
-        const refundCount = await ShipmentModel.countDocuments(filterQuery(EShipmentStatusCriteria.REFUND))
-        const cancelledCount = await ShipmentModel.countDocuments(filterQuery(EShipmentStatusCriteria.CANCELLED))
-        const finishCount = await ShipmentModel.countDocuments(filterQuery(EShipmentStatusCriteria.DELIVERED))
-
-        return [
-          { label: 'ทั้งหมด', key: EShipmentStatusCriteria.ALL, count: allCount },
-          { label: 'รอตรวจสอบการชำระ', key: EShipmentStatusCriteria.IDLE, count: verifyCount },
-          { label: 'ดำเนินการ', key: EShipmentStatusCriteria.PROGRESSING, count: progressingCount },
-          { label: 'คืนเงิน', key: EShipmentStatusCriteria.REFUND, count: refundCount },
-          { label: 'ยกเลิก', key: EShipmentStatusCriteria.CANCELLED, count: cancelledCount },
-          { label: 'เสร็จสิ้น', key: EShipmentStatusCriteria.DELIVERED, count: finishCount },
-        ]
-      }
-    }
-    return []
   }
 
   @Mutation(() => Boolean)
@@ -523,80 +255,159 @@ export default class ShipmentResolver {
     }
   }
 
-  @Subscription(() => [Shipment], {
-    subscribe: async ({ context, args }) => {
-      const { user_id, user_role } = context as AuthContext
-      const { limit, sortField, sortAscending, skip } = args as LoadmoreArgs
-      const filters = args?.filters || ({} as GetShipmentInput)
+  /**
+   * GET SHIPMENT LIST SECTION
+   * @param ctx
+   * @param filter
+   * @param param2
+   * @returns
+   */
+  @Query(() => [ShipmentListPayload])
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
+  async getShipmentList(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('data') filters: GetShipmentInput,
+    @Args() { skip, limit, sortAscending, sortField }: LoadmoreArgs,
+  ): Promise<ShipmentListPayload[]> {
+    const user_id = ctx.req.user_id
+    const user_role = ctx.req.user_role
+    try {
+      const { sort = undefined }: PaginateOptions = reformPaginate({ sortField, sortAscending })
+      const shipments = await ShipmentModel.aggregate(
+        GET_SHIPMENT_LIST(filters, user_role, user_id, sort, skip || 0, limit || 10),
+      )
 
-      if (!user_id) {
-        throw new Error('Authentication required')
+      if (!shipments) {
+        const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
+        throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
       }
-      return new Repeater(async (push, stop) => {
-        // 1. ส่งข้อมูลเริ่มต้น (Initial Data)
-        // ดึงข้อมูล Shipment ล่าสุดที่เกี่ยวข้องกับ user คนนี้
-        const { sort = {} }: PaginateOptions = reformPaginate({ sortField, sortAscending })
-        const _initialShipments = await ShipmentModel.aggregate(
-          SHIPMENT_LIST(filters, user_role, user_id, sort, skip || 0, limit || 10),
-        )
-        await push(_initialShipments)
-
-        // 2. Subscribe รอรับข้อมูลอัปเดตสำหรับ user คนนี้โดยเฉพาะ
-        const subscription = pubsub.subscribe(SHIPMENTS.UPDATE, user_id)
-
-        // 3. วนลูปเพื่อรอรับข้อมูลใหม่ๆ ที่ถูก publish เข้ามา
-        for await (const updatedShipment of subscription) {
-          // เมื่อมีข้อมูลใหม่เข้ามา ให้ส่งไปที่ client
-          // เราส่งเป็น Array เพราะ Type ของ Subscription คือ [Shipment]
-          await push([updatedShipment])
-        }
-
-        await stop
-      })
-    },
-  })
-  // @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
-  realtimeShipments(
-    @Root() payload: Shipment[],
-    @Arg('filters') filters: GetShipmentInput,
-    @Args() loadMores: LoadmoreArgs,
-    @Ctx() ctx: AuthContext,
-  ): Shipment[] {
-    // ส่งข้อมูลที่ได้รับ (ทั้ง initial และ update) ไปยัง client
-    return payload
+      return shipments
+    } catch (error) {
+      console.log(error)
+      throw error
+    }
   }
 
-  @Subscription(() => [ShipmentListPayload], {
-    subscribe: async ({ context, args }) => {
-      const { user_id, user_role } = context as AuthContext
-      const { limit, sortField, sortAscending, skip } = args as LoadmoreArgs
-      const filters = args?.filters || ({} as GetShipmentInput)
-      if (!user_id) {
-        throw new Error('Authentication required')
-      }
-      return new Repeater(async (push, stop) => {
-        const { sort = undefined }: PaginateOptions = reformPaginate({ sortField, sortAscending })
-        const _initialShipments = await ShipmentModel.aggregate(
-          GET_SHIPMENT_LIST(filters, user_role, user_id, sort, skip || 0, limit || 10),
-        )
-        console.log('_initialShipments: ', _initialShipments?.[0])
-        await push(_initialShipments)
-
-        const subscription = pubsub.subscribe(SHIPMENTS.UPDATE, user_id)
-        for await (const updatedShipment of subscription) {
-          await push([updatedShipment])
-        }
-
-        await stop
+  /**
+   * GET SHIPMENT LIST SECTION
+   * @param ctx
+   * @param param1
+   * @returns
+   */
+  @Query(() => [String])
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async allshipmentIds(@Ctx() ctx: GraphQLContext, @Arg('data') filters: GetShipmentInput): Promise<string[]> {
+    const user_id = ctx.req.user_id
+    const user_role = ctx.req.user_role
+    try {
+      const shipments = await ShipmentModel.aggregate(GET_SHIPMENT_LIST(filters, user_role, user_id)).project({
+        _id: 1,
       })
-    },
-  })
-  getRealtimeShipmentList(
-    @Root() payload: ShipmentListPayload[],
-    @Arg('filters') _filters: GetShipmentInput,
-    @Args() _loadMores: LoadmoreArgs,
-    @Ctx() _ctx: AuthContext,
-  ): ShipmentListPayload[] {
-    return payload
+      const ids = map(shipments, ({ _id }) => _id)
+
+      return ids
+    } catch (error) {
+      console.log(error)
+      throw new GraphQLError('ไม่สามารถเรียกข้อมูลงานขนส่งได้ โปรดลองอีกครั้ง')
+    }
+  }
+
+  /**
+   * GET SHIPMENT LIST SECTION
+   * GET TOTAL SHIPMENT FOR LIMIT CHECK
+   * @param ctx
+   * @param data
+   * @returns
+   */
+  @Query(() => Int)
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
+  async totalShipment(@Ctx() ctx: GraphQLContext, @Arg('data') filters: GetShipmentInput): Promise<number> {
+    const user_role = ctx.req.user_role
+    const user_id = ctx.req.user_id
+    const shipments = await ShipmentModel.aggregate(GET_SHIPMENT_LIST(filters, user_role, user_id)).project({ _id: 1 })
+    return shipments.length
+  }
+
+  /**
+   * GET SHIPMENT LIST SECTION
+   * @param ctx
+   * @param data
+   * @returns
+   */
+  @Query(() => [TotalRecordPayload])
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
+  async countShipmentStatus(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('data') data: GetShipmentInput,
+  ): Promise<TotalRecordPayload[]> {
+    const user_role = ctx.req.user_role
+    const user_id = ctx.req.user_id
+    if (user_id) {
+      if (user_role === EUserRole.ADMIN) {
+        const customerFilter = {
+          ...(data.customerId ? { customer: data.customerId } : {}),
+          ...(data.driverId ? { driver: data.driverId } : {}),
+        }
+        const all = await ShipmentModel.countDocuments({ ...customerFilter })
+        const paymentVerify = await ShipmentModel.countDocuments({
+          status: EShipmentStatus.IDLE,
+          adminAcceptanceStatus: EAdminAcceptanceStatus.PENDING,
+          ...customerFilter,
+        })
+        const waitingDriver = await ShipmentModel.countDocuments({
+          status: EShipmentStatus.IDLE,
+          driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
+          ...customerFilter,
+        })
+        const progressing = await ShipmentModel.countDocuments({
+          status: EShipmentStatus.PROGRESSING,
+          ...customerFilter,
+        })
+        const delivered = await ShipmentModel.countDocuments({
+          status: EShipmentStatus.DELIVERED,
+          ...customerFilter,
+        })
+        const cancelled = await ShipmentModel.countDocuments({
+          status: EShipmentStatus.CANCELLED,
+          ...customerFilter,
+        })
+        const refund = await ShipmentModel.countDocuments({ status: EShipmentStatusCriteria.REFUND, ...customerFilter })
+
+        return [
+          { label: 'ทั้งหมด', key: EShipmentStatusCriteria.ALL, count: all },
+          { label: 'รอตรวจสอบการชำระ', key: EShipmentStatusCriteria.PAYMENT_VERIFY, count: paymentVerify },
+          { label: 'รอคนขับตอบรับ', key: EShipmentStatusCriteria.WAITING_DRIVER, count: waitingDriver },
+          { label: 'คืนเงิน', key: EShipmentStatusCriteria.REFUND, count: refund },
+          { label: 'กำลังดำเนินการขนส่ง', key: EShipmentStatusCriteria.PROGRESSING, count: progressing },
+          { label: 'เสร็จสิ้น', key: EShipmentStatusCriteria.DELIVERED, count: delivered },
+          { label: 'ยกเลิก', key: EShipmentStatusCriteria.CANCELLED, count: cancelled },
+        ]
+      } else {
+        const filters = { ...omit(data, 'status'), status: EShipmentStatusCriteria.ALL }
+        const shipments =
+          (await ShipmentModel.aggregate(GET_SHIPMENT_LIST(filters, user_role, user_id)).project({
+            _id: 1,
+            status: 1,
+          })) || []
+        console.log('countShipmentStatus: ', shipments)
+
+        const allCount = shipments.length
+        const verifyCount = shipments.filter((item) => item.status === EShipmentStatus.IDLE).length
+        const progressingCount = shipments.filter((item) => item.status === EShipmentStatus.PROGRESSING).length
+        const refundCount = shipments.filter((item) => item.status === EShipmentStatus.REFUND).length
+        const cancelledCount = shipments.filter((item) => item.status === EShipmentStatus.CANCELLED).length
+        const finishCount = shipments.filter((item) => item.status === EShipmentStatus.DELIVERED).length
+
+        return [
+          { label: 'ทั้งหมด', key: EShipmentStatusCriteria.ALL, count: allCount },
+          { label: 'รอตรวจสอบการชำระ', key: EShipmentStatusCriteria.IDLE, count: verifyCount },
+          { label: 'ดำเนินการ', key: EShipmentStatusCriteria.PROGRESSING, count: progressingCount },
+          { label: 'คืนเงิน', key: EShipmentStatusCriteria.REFUND, count: refundCount },
+          { label: 'ยกเลิก', key: EShipmentStatusCriteria.CANCELLED, count: cancelledCount },
+          { label: 'เสร็จสิ้น', key: EShipmentStatusCriteria.DELIVERED, count: finishCount },
+        ]
+      }
+    }
+    return []
   }
 }

@@ -1,26 +1,17 @@
-import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
-import { USERS } from '@configs/pubsub'
+import { GraphQLContext } from '@configs/graphQL.config'
 import { EUserRole } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
 import UserModel from '@models/user.model'
 import { generateRandomNumberPattern } from '@utils/string.utils'
 import { GraphQLError } from 'graphql'
-import { Arg, Ctx, Mutation, Resolver, Root, SubscribeResolverData, Subscription, UseMiddleware } from 'type-graphql'
+import { Arg, Ctx, Mutation, Resolver, UseMiddleware } from 'type-graphql'
 import bcrypt from 'bcrypt'
 import addEmailQueue from '@utils/email.utils'
 import { AuditLog } from '@models/auditLog.model'
 import { EAuditActions } from '@enums/audit'
 
 @Resolver()
-export class ControllSubscriptionResolver {
-  @Subscription({
-    topics: USERS.FORCE_LOGOUT,
-    topicId: ({ context }: SubscribeResolverData<number, any, AuthContext>) => context.user_id,
-  })
-  forceLogout(@Root() payload: string, @Ctx() _: AuthContext): string {
-    return payload
-  }
-
+export default class ControllResolver {
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async adminResetPassword(@Arg('userId') userId: string, @Ctx() ctx: GraphQLContext): Promise<boolean> {

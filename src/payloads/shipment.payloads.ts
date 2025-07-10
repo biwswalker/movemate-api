@@ -11,6 +11,7 @@ import {
 import { EPaymentMethod } from '@enums/payments'
 import { EBillingState, EBillingStatus } from '@enums/billing'
 import { Destination } from '@models/shipment/objects'
+import { StepDefinition } from '@models/shipmentStepDefinition.model'
 
 @ObjectType()
 export class ShipmentPaginationPayload extends PaginationPayload implements PaginateResult<Shipment> {
@@ -69,6 +70,9 @@ export class ShipmentListPayload {
   vehicleName: string
 
   @Field()
+  vehicleImage: string
+
+  @Field()
   customerTitle: string
 
   @Field()
@@ -81,6 +85,12 @@ export class ShipmentListPayload {
   driverName: string
 
   @Field({ nullable: true })
+  driverProfileImage?: string
+
+  @Field({ nullable: true })
+  driverNumber?: string
+
+  @Field({ nullable: true })
   agentDriverTitle: string
 
   @Field({ nullable: true })
@@ -91,4 +101,10 @@ export class ShipmentListPayload {
 
   @Field()
   createdAt: Date
+
+  @Field({ nullable: true })
+  refId: string
+
+  @Field(() => StepDefinition, { nullable: true })
+  step: StepDefinition
 }

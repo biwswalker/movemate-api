@@ -14,6 +14,7 @@
       "@guards/*": ["guards/*"],
       "@utils/*": ["utils/*"],
       "@services/*": ["services/*"],
+      "@subscriptions/*": ["subscriptions/*"],
       "@apis/*": ["apis/*"],
       "@validations/*": ["validations/*"],
       "@pipelines/*": ["pipelines/*"],
