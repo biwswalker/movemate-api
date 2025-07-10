@@ -324,7 +324,7 @@ export const pauseShipmentNotify = async (shipmentId: string, customerMessage: s
 
 export const checkShipmentStatus = async (shipmentId: string): Promise<boolean> => {
   const shipment = await ShipmentModel.findById(shipmentId)
-  return shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING
+  return shipment?.driverAcceptanceStatus === EDriverAcceptanceStatus.PENDING
 }
 
 export const sendNewShipmentNotification = async (shipmentId: string, requestDriverId?: string): Promise<void> => {
