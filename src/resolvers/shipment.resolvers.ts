@@ -8,13 +8,14 @@ import { FilterQuery, PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, Root, Subscription, UseMiddleware } from 'type-graphql'
 import lodash, { find, get, isEmpty, map, omitBy, sum } from 'lodash'
 import {
+  ShipmentListPayload,
   ShipmentPaginationAggregatePayload,
   ShipmentPaginationPayload,
   TotalRecordPayload,
 } from '@payloads/shipment.payloads'
 import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
 import { reformPaginate } from '@utils/pagination.utils'
-import { SHIPMENT_LIST } from '@pipelines/shipment.pipeline'
+import { GET_SHIPMENT_LIST, SHIPMENT_LIST } from '@pipelines/shipment.pipeline'
 import { clearLimiter, ELimiterType } from '@configs/rateLimit'
 import { REPONSE_NAME } from 'constants/status'
 import { shipmentNotifyQueue } from '@configs/jobQueue'
@@ -565,5 +566,37 @@ export default class ShipmentResolver {
     return payload
   }
 
-  // await pubsub.publish(NOTFICATIONS.SHIPMENT_UPDATES, updatedShipment.customerId.toString(), updatedShipment)
+  @Subscription(() => [ShipmentListPayload], {
+    subscribe: async ({ context, args }) => {
+      const { user_id, user_role } = context as AuthContext
+      const { limit, sortField, sortAscending, skip } = args as LoadmoreArgs
+      const filters = args?.filters || ({} as GetShipmentInput)
+      if (!user_id) {
+        throw new Error('Authentication required')
+      }
+      return new Repeater(async (push, stop) => {
+        const { sort = undefined }: PaginateOptions = reformPaginate({ sortField, sortAscending })
+        const _initialShipments = await ShipmentModel.aggregate(
+          GET_SHIPMENT_LIST(filters, user_role, user_id, sort, skip || 0, limit || 10),
+        )
+        console.log('_initialShipments: ', _initialShipments?.[0])
+        await push(_initialShipments)
+
+        const subscription = pubsub.subscribe(SHIPMENTS.UPDATE, user_id)
+        for await (const updatedShipment of subscription) {
+          await push([updatedShipment])
+        }
+
+        await stop
+      })
+    },
+  })
+  getRealtimeShipmentList(
+    @Root() payload: ShipmentListPayload[],
+    @Arg('filters') _filters: GetShipmentInput,
+    @Args() _loadMores: LoadmoreArgs,
+    @Ctx() _ctx: AuthContext,
+  ): ShipmentListPayload[] {
+    return payload
+  }
 }

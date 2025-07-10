@@ -118,31 +118,33 @@ export default class DriverResolver {
   }
 
   @Mutation(() => Boolean)
+  @WithTransaction()
   @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async acceptationEmployee(
     @Arg('result') result: 'accept' | 'reject',
     @Arg('agentId') agentId: string,
     @Ctx() ctx: GraphQLContext,
   ): Promise<boolean> {
+    const session = ctx.session
     try {
       const userId = ctx.req.user_id
-      const driver = await UserModel.findById(userId)
-      const agent = await UserModel.findById(agentId)
+      const driver = await UserModel.findById(userId).session(session)
+      const agent = await UserModel.findById(agentId).session(session)
       if (!agent) {
         const message = 'ไม่พบคนขับ'
         throw new GraphQLError(message)
       }
 
-      const existingParent = await UserModel.findOne({ _id: userId, parents: { $in: [agentId] } })
+      const existingParent = await UserModel.findOne({ _id: userId, parents: { $in: [agentId] } }).session(session)
       if (existingParent) {
         const message = `คุณเป็นคนขับของ ${agent.fullname} อยู่แล้ว`
         throw new GraphQLError(message)
       }
 
       if (result === 'accept') {
-        await driver.updateOne({ $pull: { requestedParents: agentId }, $push: { parents: agentId } })
+        await driver.updateOne({ $pull: { requestedParents: agentId }, $push: { parents: agentId } }).session(session)
       } else if (result === 'reject') {
-        await driver.updateOne({ $pull: { requestedParents: agentId } })
+        await driver.updateOne({ $pull: { requestedParents: agentId } }).session(session)
       } else {
         const message = 'ไม่มีสถานะการยืนยันนี้'
         throw new GraphQLError(message)
@@ -156,20 +158,17 @@ export default class DriverResolver {
         result === 'accept'
           ? `${driver.fullname} ได้ตอบรับการเป็นคนขับภายใต้สังกัดบริษัทของคุณแล้ว`
           : `${driver.fullname} ปฏิเสธการเป็นคนขับภายใต้สังกัดบริษัทของคุณ`
-      await NotificationModel.sendNotification({
-        userId: agentId,
-        varient: result === 'accept' ? ENotificationVarient.MASTER : ENotificationVarient.WRANING,
-        title: title,
-        message: [message],
-      })
-      if (agent.fcmToken) {
-        const token = decryption(agent.fcmToken)
-        await NotificationModel.sendFCMNotification({
-          token,
-          data: { navigation: ENavigationType.EMPLOYEE, driverId: result === 'accept' ? driver._id : '' },
-          notification: { title: NOTIFICATION_TITLE, body: title },
-        })
-      }
+      await NotificationModel.sendNotification(
+        {
+          userId: agentId,
+          varient: result === 'accept' ? ENotificationVarient.MASTER : ENotificationVarient.WRANING,
+          title: title,
+          message: [message],
+        },
+        session,
+        true,
+        { navigation: ENavigationType.EMPLOYEE, driverId: result === 'accept' ? driver._id : '' },
+      )
 
       return result === 'accept'
     } catch (error) {
@@ -214,7 +213,9 @@ export default class DriverResolver {
   }
 
   @Mutation(() => RegisterPayload)
+  @WithTransaction()
   async driverRegister(@Arg('data') data: DriverRegisterInput, @Ctx() ctx: GraphQLContext): Promise<RegisterPayload> {
+    const session = ctx.session
     const { detail, documents, otp } = data
     try {
       // Check if the user already exists
@@ -232,7 +233,7 @@ export default class DriverResolver {
       }
 
       // 1. OTP Driver checker
-      await verifyOTP(otp.phoneNumber, otp.otp, otp.ref)
+      await verifyOTP(otp.phoneNumber, otp.otp, otp.ref, session)
 
       // 2. Document
       const frontOfVehicle = documents.frontOfVehicle ? new FileModel({ ...documents.frontOfVehicle }) : null
@@ -260,19 +261,19 @@ export default class DriverResolver {
       const certificateValueAddedTaxRegistration = documents.certificateValueAddedTaxRegistration
         ? new FileModel({ ...documents.certificateValueAddedTaxRegistration })
         : null
-      frontOfVehicle && (await frontOfVehicle.save())
-      backOfVehicle && (await backOfVehicle.save())
-      leftOfVehicle && (await leftOfVehicle.save())
-      rigthOfVehicle && (await rigthOfVehicle.save())
-      copyVehicleRegistration && (await copyVehicleRegistration.save())
-      copyIDCard && (await copyIDCard.save())
-      copyDrivingLicense && (await copyDrivingLicense.save())
-      copyBookBank && (await copyBookBank.save())
-      copyHouseRegistration && (await copyHouseRegistration.save())
-      insurancePolicy && (await insurancePolicy.save())
-      criminalRecordCheckCert && (await criminalRecordCheckCert.save())
-      businessRegistrationCertificate && (await businessRegistrationCertificate.save())
-      certificateValueAddedTaxRegistration && (await certificateValueAddedTaxRegistration.save())
+      frontOfVehicle && (await frontOfVehicle.save({ session }))
+      backOfVehicle && (await backOfVehicle.save({ session }))
+      leftOfVehicle && (await leftOfVehicle.save({ session }))
+      rigthOfVehicle && (await rigthOfVehicle.save({ session }))
+      copyVehicleRegistration && (await copyVehicleRegistration.save({ session }))
+      copyIDCard && (await copyIDCard.save({ session }))
+      copyDrivingLicense && (await copyDrivingLicense.save({ session }))
+      copyBookBank && (await copyBookBank.save({ session }))
+      copyHouseRegistration && (await copyHouseRegistration.save({ session }))
+      insurancePolicy && (await insurancePolicy.save({ session }))
+      criminalRecordCheckCert && (await criminalRecordCheckCert.save({ session }))
+      businessRegistrationCertificate && (await businessRegistrationCertificate.save({ session }))
+      certificateValueAddedTaxRegistration && (await certificateValueAddedTaxRegistration.save({ session }))
       const driverDocument = new DriverDocumentModel({
         frontOfVehicle,
         backOfVehicle,
@@ -288,7 +289,7 @@ export default class DriverResolver {
         businessRegistrationCertificate,
         certificateValueAddedTaxRegistration,
       })
-      await driverDocument.save()
+      await driverDocument.save({ session })
 
       // 3. Detail
       const driverDetailModel = new DriverDetailModel({
@@ -314,7 +315,7 @@ export default class DriverResolver {
         serviceVehicleTypes: detail.serviceVehicleTypes,
         documents: driverDocument,
       })
-      await driverDetailModel.save()
+      await driverDetailModel.save({ session })
 
       // 4. User
       const password_decryption = decryption(detail.password)
@@ -341,25 +342,31 @@ export default class DriverResolver {
         isChangePasswordRequire: false,
         drivingStatus: EDriverStatus.IDLE,
       })
-      await user.save()
+      await user.save({ session })
 
       // Notification
-      await NotificationModel.sendNotification({
-        userId: user._id,
-        varient: ENotificationVarient.MASTER,
-        title: 'ยินดีต้อนรับเข้าสู่คนขับ Movemate',
-        message: [
-          `ยินดีต้อนรับ คุณ ${driverDetailModel.fullname} เข้าสู่ทีมขับรถของเรา โปรดรอเจ้าหน้าที่ตรวจสอบบัญชีของท่าน`,
-        ],
-      })
+      await NotificationModel.sendNotification(
+        {
+          userId: user._id,
+          varient: ENotificationVarient.MASTER,
+          title: 'ยินดีต้อนรับเข้าสู่คนขับ Movemate',
+          message: [
+            `ยินดีต้อนรับ คุณ ${driverDetailModel.fullname} เข้าสู่ทีมขับรถของเรา โปรดรอเจ้าหน้าที่ตรวจสอบบัญชีของท่าน`,
+          ],
+        },
+        session,
+      )
 
-      await NotificationModel.sendNotificationToAdmins({
-        varient: ENotificationVarient.INFO,
-        title: 'คนขับใหม่รอการอนุมัติ',
-        message: [`คุณ '${driverDetailModel.fullname}' ได้ลงทะเบียนเป็นคนขับใหม่ กรุณาตรวจสอบและอนุมัติบัญชี`],
-        infoText: 'ตรวจสอบข้อมูล',
-        infoLink: `/management/driver/detail/${user._id}`,
-      })
+      await NotificationModel.sendNotificationToAdmins(
+        {
+          varient: ENotificationVarient.INFO,
+          title: 'คนขับใหม่รอการอนุมัติ',
+          message: [`คุณ '${driverDetailModel.fullname}' ได้ลงทะเบียนเป็นคนขับใหม่ กรุณาตรวจสอบและอนุมัติบัญชี`],
+          infoText: 'ตรวจสอบข้อมูล',
+          infoLink: `/management/driver/detail/${user._id}`,
+        },
+        session,
+      )
 
       return {
         phoneNumber: detail.phoneNumber,
@@ -375,6 +382,7 @@ export default class DriverResolver {
   }
 
   @Mutation(() => Boolean)
+  @WithTransaction()
   @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.DRIVER]))
   async driverUpdate(
     @Arg('data') data: DriverUpdateInput,
@@ -489,7 +497,7 @@ export default class DriverResolver {
         bankName: detail.bankName,
         bankNumber: detail.bankNumber,
         serviceVehicleTypes: detail.serviceVehicleTypes,
-      })
+      }, { session })
 
       // 4. User
       const profileImage = detail.profileImage ? new FileModel({ ...detail.profileImage }) : null
@@ -505,7 +513,7 @@ export default class DriverResolver {
           username: detail.phoneNumber,
           ...(profileImage ? { profileImage } : {}),
         },
-        { new: true },
+        { new: true, session },
       )
 
       // Notification
@@ -514,7 +522,7 @@ export default class DriverResolver {
         varient: ENotificationVarient.MASTER,
         title: 'มีการเปลี่ยนแปลงข้อมูลส่วนตัว',
         message: [`ผู้ดูแลระบบเปลี่ยนแปลงข้อมูลส่วนตัวของท่าน`],
-      })
+      }, session, true)
 
       await pubsub.publish(USERS.STATUS, updatedUser._id, updatedUser.status)
 
@@ -529,32 +537,34 @@ export default class DriverResolver {
   }
 
   @Mutation(() => Boolean)
+  @WithTransaction()
   @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async driverReRegister(
     @Arg('data') data: DriverReRegisterInput,
     @Arg('driverId', { nullable: true }) driverId: string,
     @Ctx() ctx: GraphQLContext,
   ): Promise<boolean> {
+    const session = ctx.session
     const userId = ctx.req.user_id
     const { detail, documents } = data
     try {
       if (driverId) {
-        const isEmployee = await UserModel.findOne({ _id: new Types.ObjectId(driverId), parents: { $in: [userId] } })
+        const isEmployee = await UserModel.findOne({ _id: new Types.ObjectId(driverId), parents: { $in: [userId] } }).session(session)
         if (!isEmployee) {
           throw new GraphQLError('คุณไม่มีสิทธิ์เปลี่ยนแปลงข้่อมูลคนขับคนนี้')
         }
       }
-      const driver = await UserModel.findById(driverId || userId).lean()
+      const driver = await UserModel.findById(driverId || userId).session(session).lean()
       if (!driver) {
         throw new GraphQLError('ไม่พบข้อมูลของท่าน')
       }
 
-      const driverDetail = await DriverDetailModel.findById(driver.driverDetail).lean()
+      const driverDetail = await DriverDetailModel.findById(driver.driverDetail).session(session).lean()
       if (!driverDetail) {
         throw new GraphQLError('ไม่พบข้อมูลของท่าน')
       }
 
-      const driverDocuments = await DriverDocumentModel.findById(driverDetail.documents)
+      const driverDocuments = await DriverDocumentModel.findById(driverDetail.documents).session(session)
       if (!driverDetail) {
         throw new GraphQLError('ไม่พบข้อมูลของท่าน')
       }
@@ -585,19 +595,19 @@ export default class DriverResolver {
       const certificateValueAddedTaxRegistration = documents.certificateValueAddedTaxRegistration
         ? new FileModel({ ...documents.certificateValueAddedTaxRegistration })
         : null
-      frontOfVehicle && (await frontOfVehicle.save())
-      backOfVehicle && (await backOfVehicle.save())
-      leftOfVehicle && (await leftOfVehicle.save())
-      rigthOfVehicle && (await rigthOfVehicle.save())
-      copyVehicleRegistration && (await copyVehicleRegistration.save())
-      copyIDCard && (await copyIDCard.save())
-      copyDrivingLicense && (await copyDrivingLicense.save())
-      copyBookBank && (await copyBookBank.save())
-      copyHouseRegistration && (await copyHouseRegistration.save())
-      insurancePolicy && (await insurancePolicy.save())
-      criminalRecordCheckCert && (await criminalRecordCheckCert.save())
-      businessRegistrationCertificate && (await businessRegistrationCertificate.save())
-      certificateValueAddedTaxRegistration && (await certificateValueAddedTaxRegistration.save())
+      frontOfVehicle && (await frontOfVehicle.save({ session }))
+      backOfVehicle && (await backOfVehicle.save({ session }))
+      leftOfVehicle && (await leftOfVehicle.save({ session }))
+      rigthOfVehicle && (await rigthOfVehicle.save({ session }))
+      copyVehicleRegistration && (await copyVehicleRegistration.save({ session }))
+      copyIDCard && (await copyIDCard.save({ session }))
+      copyDrivingLicense && (await copyDrivingLicense.save({ session }))
+      copyBookBank && (await copyBookBank.save({ session }))
+      copyHouseRegistration && (await copyHouseRegistration.save({ session }))
+      insurancePolicy && (await insurancePolicy.save({ session }))
+      criminalRecordCheckCert && (await criminalRecordCheckCert.save({ session }))
+      businessRegistrationCertificate && (await businessRegistrationCertificate.save({ session }))
+      certificateValueAddedTaxRegistration && (await certificateValueAddedTaxRegistration.save({ session }))
       await DriverDocumentModel.findByIdAndUpdate(driverDocuments._id, {
         ...(frontOfVehicle ? { frontOfVehicle } : {}),
         ...(backOfVehicle ? { backOfVehicle } : {}),
@@ -612,7 +622,7 @@ export default class DriverResolver {
         ...(criminalRecordCheckCert ? { criminalRecordCheckCert } : {}),
         ...(businessRegistrationCertificate ? { businessRegistrationCertificate } : {}),
         ...(certificateValueAddedTaxRegistration ? { certificateValueAddedTaxRegistration } : {}),
-      })
+      }).session(session)
 
       // 3. Detail
       await DriverDetailModel.findByIdAndUpdate(driverDetail._id, {
@@ -634,14 +644,14 @@ export default class DriverResolver {
         bankName: detail.bankName,
         bankNumber: detail.bankNumber,
         serviceVehicleTypes: detail.serviceVehicleTypes,
-      })
+      }).session(session)
 
       // 4. User
       await UserModel.findByIdAndUpdate(driver._id, {
         status: EUserStatus.PENDING,
         validationStatus: EUserValidationStatus.PENDING,
         drivingStatus: EDriverStatus.IDLE,
-      })
+      }).session(session)
 
       // Notification
       await NotificationModel.sendNotification({
@@ -649,7 +659,7 @@ export default class DriverResolver {
         varient: ENotificationVarient.INFO,
         title: 'ขอบคุณที่ส่งข้อมูล',
         message: [`คุณได้ส่งข้อมูลเพื่อสมัคคนขับ Movemate อีกครั้ง โปรดรอเจ้าหน้าที่ตรวจสอบบัญชีของท่าน`],
-      })
+      }, session)
 
       return true
     } catch (error) {
@@ -684,10 +694,12 @@ export default class DriverResolver {
   }
 
   @Mutation(() => RegisterPayload)
+  @WithTransaction()
   async employeeRegister(
     @Arg('data') data: EmployeeRegisterInput,
     @Ctx() ctx: GraphQLContext,
   ): Promise<RegisterPayload> {
+    const session = ctx.session
     const { detail, documents } = data
     try {
       const userId = ctx.req.user_id
@@ -725,19 +737,19 @@ export default class DriverResolver {
       const certificateValueAddedTaxRegistration = documents.certificateValueAddedTaxRegistration
         ? new FileModel({ ...documents.certificateValueAddedTaxRegistration })
         : null
-      frontOfVehicle && (await frontOfVehicle.save())
-      backOfVehicle && (await backOfVehicle.save())
-      leftOfVehicle && (await leftOfVehicle.save())
-      rigthOfVehicle && (await rigthOfVehicle.save())
-      copyVehicleRegistration && (await copyVehicleRegistration.save())
-      copyIDCard && (await copyIDCard.save())
-      copyDrivingLicense && (await copyDrivingLicense.save())
-      copyBookBank && (await copyBookBank.save())
-      copyHouseRegistration && (await copyHouseRegistration.save())
-      insurancePolicy && (await insurancePolicy.save())
-      criminalRecordCheckCert && (await criminalRecordCheckCert.save())
-      businessRegistrationCertificate && (await businessRegistrationCertificate.save())
-      certificateValueAddedTaxRegistration && (await certificateValueAddedTaxRegistration.save())
+      frontOfVehicle && (await frontOfVehicle.save({ session }))
+      backOfVehicle && (await backOfVehicle.save({ session }))
+      leftOfVehicle && (await leftOfVehicle.save({ session }))
+      rigthOfVehicle && (await rigthOfVehicle.save({ session }))
+      copyVehicleRegistration && (await copyVehicleRegistration.save({ session }))
+      copyIDCard && (await copyIDCard.save({ session }))
+      copyDrivingLicense && (await copyDrivingLicense.save({ session }))
+      copyBookBank && (await copyBookBank.save({ session }))
+      copyHouseRegistration && (await copyHouseRegistration.save({ session }))
+      insurancePolicy && (await insurancePolicy.save({ session }))
+      criminalRecordCheckCert && (await criminalRecordCheckCert.save({ session }))
+      businessRegistrationCertificate && (await businessRegistrationCertificate.save({ session }))
+      certificateValueAddedTaxRegistration && (await certificateValueAddedTaxRegistration.save({ session }))
       const driverDocument = new DriverDocumentModel({
         frontOfVehicle,
         backOfVehicle,
@@ -753,7 +765,7 @@ export default class DriverResolver {
         businessRegistrationCertificate,
         certificateValueAddedTaxRegistration,
       })
-      await driverDocument.save()
+      await driverDocument.save({ session })
 
       // 3. Detail
       const driverDetailModel = new DriverDetailModel({
@@ -772,7 +784,7 @@ export default class DriverResolver {
         postcode: detail.postcode,
         documents: driverDocument,
       })
-      await driverDetailModel.save()
+      await driverDetailModel.save({ session })
 
       // 4. User
       const password_decryption = generateRef(10).toLowerCase()
@@ -795,7 +807,7 @@ export default class DriverResolver {
         drivingStatus: EDriverStatus.IDLE,
         parents: [userId],
       })
-      await user.save()
+      await user.save({ session })
 
       // Notification
       await NotificationModel.sendNotification({
@@ -852,12 +864,14 @@ export default class DriverResolver {
   }
 
   @Mutation(() => Boolean)
+  @WithTransaction()
   @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async removeEmployee(@Ctx() ctx: GraphQLContext, @Arg('driverId') driverId: string): Promise<boolean> {
+    const session = ctx.session
     try {
       const userId = ctx.req.user_id
       if (userId) {
-        const agent = await UserModel.findById(userId)
+        const agent = await UserModel.findById(userId).session(session)
         if (!driverId) {
           const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
           throw new GraphQLError(message, {
@@ -867,7 +881,7 @@ export default class DriverResolver {
             },
           })
         }
-        const driver = await UserModel.findOne({ _id: new Types.ObjectId(driverId), parents: { $in: [userId] } }).lean()
+        const driver = await UserModel.findOne({ _id: new Types.ObjectId(driverId), parents: { $in: [userId] } }).session(session).lean()
         if (!driver) {
           const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน'
           throw new GraphQLError(message, {
@@ -877,7 +891,7 @@ export default class DriverResolver {
             },
           })
         }
-        const driverDetail = await DriverDetailModel.findById(driver.driverDetail).lean()
+        const driverDetail = await DriverDetailModel.findById(driver.driverDetail).session(session).lean()
         if (driverDetail) {
           const isSingleDriverType = driverDetail.driverType.length < 2
           if (
@@ -889,11 +903,11 @@ export default class DriverResolver {
              * Condition:
              * If driver is only business driver type -> Remove data
              */
-            await DriverDocumentModel.deleteOne({ _id: driverDetail.documents })
-            await DriverDetailModel.deleteOne({ _id: driverDetail._id })
-            await UserModel.deleteOne({ _id: driver._id })
+            await DriverDocumentModel.deleteOne({ _id: driverDetail.documents }).session(session)
+            await DriverDetailModel.deleteOne({ _id: driverDetail._id }).session(session)
+            await UserModel.deleteOne({ _id: driver._id }).session(session)
           } else {
-            await UserModel.findByIdAndUpdate(driverId, { $pull: { parents: userId } })
+            await UserModel.findByIdAndUpdate(driverId, { $pull: { parents: userId } }).session(session)
             /**
              * Notification
              */
@@ -904,15 +918,7 @@ export default class DriverResolver {
               varient: ENotificationVarient.INFO,
               title: title,
               message: [message],
-            })
-            if (driver.fcmToken) {
-              const token = decryption(driver.fcmToken)
-              await NotificationModel.sendFCMNotification({
-                token,
-                data: { navigation: ENavigationType.INDEX },
-                notification: { title: NOTIFICATION_TITLE, body: message },
-              })
-            }
+            }, session, true, { navigation: ENavigationType.INDEX })
           }
         } else {
           const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'

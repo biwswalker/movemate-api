@@ -4,6 +4,7 @@ import { LocationInput } from './location.input'
 import { PODAddressInput } from './booking.input'
 import { EPaymentMethod } from '@enums/payments'
 import { EShipmentStatus, EShipmentStatusCriteria } from '@enums/shipments'
+import { EBillingStatus } from '@enums/billing'
 
 @InputType()
 export class DestinationInput {
@@ -143,12 +144,8 @@ export class GetShipmentInput {
   @Field(() => Date, { nullable: true })
   endWorkingDate?: Date
 
-  // Recheck
-  // @Field(() => EPaymentStatus, { nullable: true })
-  // paymentStatus?: EPaymentStatus
-
-  // @Field({ nullable: true })
-  // paymentNumber?: string
+  @Field(() => EBillingStatus, { nullable: true })
+  billingStatus?: EBillingStatus
 
   @Field({ nullable: true })
   customerName?: string

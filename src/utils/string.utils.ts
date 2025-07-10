@@ -1,9 +1,6 @@
 import { GraphQLContext } from "@configs/graphQL.config";
 import CouterModel from "@models/counter.model";
-// import { format } from "date-fns";
-// import { toZonedTime } from "date-fns-tz";
 import padStart from "lodash/padStart";
-import get from "lodash/get";
 
 export function generateRandomNumberPattern(pattern = 'MM##########'): string {
     let trackingNumber: string = '';
@@ -46,11 +43,12 @@ export async function generateId(prefix: string, type: TGenerateIDType) {
     return `${prefix}${running_id}`
 }
 
-export async function generateTrackingNumber(prefix: string, type: TGenerateIDType, len = 6) {
+export async function generateTrackingNumber(prefix: string, type: TGenerateIDType, len = 6, random = false) {
     const counter = await CouterModel.getNextCouter(type)
     const counterNumberStr = `${counter}`
-    const running_id = counterNumberStr.length > len ? counterNumberStr : padStart(counterNumberStr, len, '0')
-    return `${prefix}${running_id}`
+    const running_id = counterNumberStr.length > len ? counterNumberStr : padStart(counterNumberStr, len, random ? '#' : '0')
+    const replace_text = random ? generateRandomNumberPattern(running_id) : running_id
+    return `${prefix}${replace_text}`
 }
 
 export function getCurrentHost(ctx: GraphQLContext) {

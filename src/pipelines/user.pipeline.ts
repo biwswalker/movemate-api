@@ -12,7 +12,7 @@ import { isEmpty, toNumber } from 'lodash'
 import { PipelineStage, Types } from 'mongoose'
 import { filePipelineStage } from './file.pipline'
 
-export function GET_USER_LOOKUPS(lightweight = false) {
+export function GET_USER_LOOKUPS(lean = false) {
   const businessDetailLookup: PipelineStage.Lookup = {
     $lookup: {
       from: 'businesscustomers',
@@ -26,7 +26,7 @@ export function GET_USER_LOOKUPS(lightweight = false) {
             localField: 'creditPayment',
             foreignField: '_id',
             as: 'creditPayment',
-            ...(!lightweight && {
+            ...(!lean && {
               pipeline: [
                 ...filePipelineStage('businessRegistrationCertificateFile'),
                 ...filePipelineStage('copyIDAuthorizedSignatoryFile'),
@@ -95,7 +95,7 @@ export function GET_USER_LOOKUPS(lightweight = false) {
             localField: 'serviceVehicleTypes',
             foreignField: '_id',
             as: 'serviceVehicleTypes',
-            ...(!lightweight && {
+            ...(!lean && {
               pipeline: [
                 {
                   $lookup: {
@@ -258,23 +258,23 @@ export function GET_USER_LOOKUPS(lightweight = false) {
   ]
 }
 
-export function userLookup(fieldName: string): PipelineStage.Lookup {
+export function userLookup(fieldName: string, lean = false): PipelineStage.Lookup {
   const lookup: PipelineStage.Lookup = {
     $lookup: {
       from: 'users',
       localField: fieldName,
       foreignField: '_id',
       as: fieldName,
-      pipeline: GET_USER_LOOKUPS(),
+      pipeline: GET_USER_LOOKUPS(lean),
     },
   }
   return lookup
 }
 
-export function userPipelineStage(fieldName: string) {
+export function userPipelineStage(fieldName: string, lean = false) {
   const path = `$${fieldName}`
 
-  const lookup = userLookup(fieldName)
+  const lookup = userLookup(fieldName, lean)
   const unwind: PipelineStage.Unwind = {
     $unwind: {
       path,

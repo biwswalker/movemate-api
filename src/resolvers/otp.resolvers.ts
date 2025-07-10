@@ -7,7 +7,7 @@ import { generateOTP, generateRef } from '@utils/string.utils'
 import { PaginationArgs } from '@inputs/query.input'
 import { GetOTPArgs } from '@inputs/otp.input'
 import { OTPPaginationPayload } from '@payloads/otp.payloads'
-import { FilterQuery, PaginateOptions } from 'mongoose'
+import { ClientSession, FilterQuery, PaginateOptions } from 'mongoose'
 import { reformPaginate } from '@utils/pagination.utils'
 import { credit, sendSMS } from '@services/sms/thaibulk'
 import { EUserRole } from '@enums/users'
@@ -91,7 +91,7 @@ export async function requestOTP(phoneNumber: string, action: string) {
   }
 }
 
-export async function verifyOTP(phoneNumber: string, otp: string, ref: string) {
+export async function verifyOTP(phoneNumber: string, otp: string, ref: string, session?: ClientSession) {
   try {
     const VERIFY_PHONE = /^(0[689]{1})+([0-9]{8})+$/
     if (!VERIFY_PHONE.test(phoneNumber)) {
@@ -103,7 +103,7 @@ export async function verifyOTP(phoneNumber: string, otp: string, ref: string) {
         },
       })
     }
-    const phoneNumberData = await OTPRequstModel.findOne({ phoneNumber, ref }).sort({ createdAt: -1 }).lean()
+    const phoneNumberData = await OTPRequstModel.findOne({ phoneNumber, ref }).session(session).sort({ createdAt: -1 }).lean()
     if (!phoneNumberData) {
       const message = 'ไม่สามารถตรวจสอบ OTP ได้เนื่องจากไม่พบข้อมูล'
       throw new GraphQLError(message, {

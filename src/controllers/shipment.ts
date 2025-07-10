@@ -208,7 +208,8 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
    * Generate: Tracking Number and Shipment ID
    */
   const _shipmentId = new Types.ObjectId()
-  const _trackingNumber = await generateTrackingNumber('MMTH', 'tracking')
+  const _trackingNumber = await generateTrackingNumber('MMTH', 'tracking', 6, true)
+  // MMTH 000 034
 
   const isCreditPaymentMethod = data.paymentMethod === EPaymentMethod.CREDIT
 
