@@ -31,7 +31,7 @@ export const IndividualCustomerSchema = (userId?: string) =>
       }),
     title: Yup.string().required('กรุณาเลือกคำนำหน้าชื่อ'),
     otherTitle: Yup.string().when('title', ([title], schema) =>
-      isEqual(title, 'other') ? schema.required('ระบุคำนำหน้าชื่อ') : schema.notRequired(),
+      isEqual(title, 'อื่นๆ') ? schema.required('ระบุคำนำหน้าชื่อ') : schema.notRequired(),
     ),
     firstname: Yup.string().required('ระบุชื่อ'),
     lastname: Yup.string().required('ระบุนามสกุล'),

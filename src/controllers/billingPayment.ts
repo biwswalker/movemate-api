@@ -11,7 +11,6 @@ import lodash, { get, includes } from 'lodash'
 import { ClientSession, Types } from 'mongoose'
 import { markShipmentAsNoRefund, markShipmentAsRefunded, markShipmentVerified } from './shipmentVerify'
 import { addCustomerCreditUsage, updateCustomerCreditUsageBalance } from './customer'
-import { getAdminMenuNotificationCount } from '@resolvers/notification.resolvers'
 import TransactionModel, {
   ERefType,
   ETransactionOwner,
@@ -346,7 +345,7 @@ export async function markBillingAsRefunded(input: MarkBillingAsRefundInput, adm
     ? `/main/billing?billing_number=${_billingNumber}`
     : `/main/tracking?tracking_number=${_billingNumber}`
   await NotificationModel.sendNotification({
-    userId: get(_billing, 'user._id', '') as string,
+    userId: _billing.user.toString() as string,
     varient: ENotificationVarient.SUCCESS,
     title: 'การจองของท่านดำเนินคืนยอดชำระแล้ว',
     message,

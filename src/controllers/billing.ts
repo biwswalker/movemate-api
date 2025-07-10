@@ -227,7 +227,7 @@ export async function notifyNearbyDuedate(beforeDuedateDay: number) {
   const { title, message } = getMessage(beforeDuedateDay)
   await Aigle.forEach(billings, async (billing) => {
     await NotificationModel.sendNotification({
-      userId: billing.user as string,
+      userId: billing.user.toString() as string, // Lean get
       varient: ENotificationVarient.WRANING,
       title,
       message: [message],
@@ -247,7 +247,7 @@ export async function notifyOverdueBilling() {
     const today = new Date()
     const overdate = differenceInDays(today.setHours(0, 0, 0, 0), new Date(billing.paymentDueDate).setHours(0, 0, 0, 0))
     await NotificationModel.sendNotification({
-      userId: billing.user as string,
+      userId: billing.user.toString() as string,
       varient: ENotificationVarient.ERROR,
       title: `บัญชีของท่านค้างชำระ`,
       message: [`ขณะนี้บัญชีของท่านค้างชำระ และเลยกำหนดชำระมา ${overdate} วัน`],
@@ -270,11 +270,11 @@ export async function notifyIssueBillingToCustomer() {
     state: EBillingState.CURRENT,
     createdAt: { $gte: startRange, $lt: endRange },
     paymentMethod: EPaymentMethod.CREDIT,
-  })
+  }).lean()
 
   await Aigle.forEach(_billings, async (billing) => {
     await NotificationModel.sendNotification({
-      userId: billing.user as string,
+      userId: billing.user.toString() as string,
       varient: ENotificationVarient.MASTER,
       title: 'ออกใบแจ้งหนี้แล้ว',
       message: [`ระบบได้ออกใบแจ้งหนี้หมายเลข ${billing.billingNumber} แล้ว`],
@@ -377,7 +377,7 @@ export async function checkBillingStatus() {
     status: EBillingStatus.PENDING,
     state: EBillingState.OVERDUE,
     paymentDueDate: { $lt: addDays(today, -16).setHours(0, 0, 0, 0) },
-  })
+  }).lean()
 
   let _bannedCustomer = []
   await Aigle.forEach(_suspendedBillings, async (suspendedBill) => {

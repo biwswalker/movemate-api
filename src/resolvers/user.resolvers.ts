@@ -16,7 +16,7 @@ import UserModel, { User } from '@models/user.model'
 import { GetUserArgs } from '@inputs/user.input'
 import { AuthGuard } from '@guards/auth.guards'
 import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
-import { find, get, includes, isArray, isEmpty, isEqual, map, omit, omitBy, pick, reduce } from 'lodash'
+import { get, includes, isArray, isEmpty, isEqual, map, omit, omitBy, pick, reduce } from 'lodash'
 import { RequireDataBeforePayload, UpdateAdminInput, UserPaginationAggregatePayload } from '@payloads/user.payloads'
 import { PaginateOptions } from 'mongoose'
 import { PaginationArgs } from '@inputs/query.input'
@@ -573,14 +573,6 @@ export default class UserResolver {
         }
 
         const status = result === EUserValidationStatus.APPROVE ? EUserStatus.ACTIVE : EUserStatus.DENIED
-        // Title name
-        const BUSINESS_TITLE_NAME_OPTIONS = [
-          { value: 'Co', label: 'บจก.' },
-          { value: 'Part', label: 'หจก.' },
-          { value: 'Pub', label: 'บมจ.' },
-        ]
-
-        const businessTitleName = find(BUSINESS_TITLE_NAME_OPTIONS, ['value', businesData.businessTitle])
 
         if (result === EUserValidationStatus.APPROVE) {
           const rawPassword = generateRandomNumberPattern('MMPWD########').toLowerCase()
@@ -614,7 +606,7 @@ export default class UserResolver {
               subject: 'บัญชี Movemate ของท่านได้รับการอนุมัติ',
               template: 'register_business_upgrade',
               context: {
-                business_title: get(businessTitleName, 'label', ''),
+                business_title: businesData.businessTitle,
                 business_name: businesData.businessName,
                 username: userNumber,
                 password: rawPassword,
@@ -647,7 +639,7 @@ export default class UserResolver {
               subject: 'บัญชี Movemate ของท่านได้รับการอนุมัติ',
               template: 'register_business',
               context: {
-                business_title: get(businessTitleName, 'label', ''),
+                business_title: businesData.businessTitle,
                 business_name: businesData.businessName,
                 username: user.username,
                 password: rawPassword,
@@ -685,7 +677,7 @@ export default class UserResolver {
             subject: 'บัญชี Movemate ของท่านไม่ได้รับการอนุมัติ',
             template: 'register_rejected_account',
             context: {
-              business_title: get(businessTitleName, 'label', ''),
+              business_title: businesData.businessTitle,
               business_name: businesData.businessName,
               movemate_link: `https://www.movematethailand.com`,
             },

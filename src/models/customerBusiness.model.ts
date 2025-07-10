@@ -19,7 +19,7 @@ export class BusinessCustomer {
   userNumber: string;
 
   @Field()
-  @Property({ enum: ["Co", "Part", "Pub", "other"], required: true })
+  @Property({ required: true })
   businessTitle: string;
 
   @Field()

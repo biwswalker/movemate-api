@@ -651,12 +651,7 @@ export const GET_SHIPMENT_LIST = (
               case: { $eq: ['$customer.userType', 'INDIVIDUAL'] },
               then: {
                 $cond: {
-                  if: {
-                    $or: [
-                      { $eq: ['$customer.individualDetail.title', 'other'] },
-                      { $eq: ['$customer.individualDetail.title', 'อื่นๆ'] },
-                    ],
-                  },
+                  if: { $eq: ['$customer.individualDetail.title', 'อื่นๆ'] },
                   then: '$customer.individualDetail.otherTitle',
                   else: '$customer.individualDetail.title',
                 },
@@ -679,9 +674,7 @@ export const GET_SHIPMENT_LIST = (
       },
       driverTitle: {
         $cond: {
-          if: {
-            $or: [{ $eq: ['$driver.driverDetail.title', 'other'] }, { $eq: ['$driver.driverDetail.title', 'อื่นๆ'] }],
-          },
+          if: { $eq: ['$driver.driverDetail.title', 'อื่นๆ'] },
           then: '$driver.driverDetail.otherTitle',
           else: '$driver.driverDetail.title',
         },
@@ -689,12 +682,7 @@ export const GET_SHIPMENT_LIST = (
       driverName: { $concat: ['$driver.driverDetail.firstname', ' ', '$driver.driverDetail.lastname'] },
       agentDriverTitle: {
         $cond: {
-          if: {
-            $or: [
-              { $eq: ['$agentDriver.driverDetail.title', 'other'] },
-              { $eq: ['$agentDriver.driverDetail.title', 'อื่นๆ'] },
-            ],
-          },
+          if: { $eq: ['$agentDriver.driverDetail.title', 'อื่นๆ'] },
           then: '$agentDriver.driverDetail.otherTitle',
           else: '$agentDriver.driverDetail.title',
         },

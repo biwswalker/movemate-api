@@ -160,7 +160,9 @@ export function WithTransaction(options?: mongoose.mongo.TransactionOptions) {
         console.log('Transaction failed:', error.message)
         throw error
       } finally {
-        await session.endSession()
+        if(session){
+          await session.endSession()
+        }
       }
     }
 

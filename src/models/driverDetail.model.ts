@@ -137,26 +137,6 @@ export class DriverDetail {
       const lastname = get(this, '_doc.lastname', '') || this.lastname
       return `${title === 'อื่นๆ' ? otherTitle : title}${firstname} ${lastname}`
     }
-
-    // const driverDetail: DriverDetail | undefined =
-    //   get(this, '_doc.driverDetail', undefined) || this.driverDetail || undefined
-    // if (driverDetail) {
-    //   if (!driverDetail.fullname) {
-    //     const driverTypes = driverDetail.driverType
-    //     const title = driverDetail.title
-    //     const otherTitle = driverDetail.otherTitle
-    //     const titleName = `${title === 'อื่นๆ' ? otherTitle : title}`
-    //     if (includes(driverTypes, EDriverType.BUSINESS)) {
-    //       const businessName = driverDetail.businessName
-    //       return `${titleName}${businessName}`
-    //     } else {
-    //       const firstname = driverDetail.firstname
-    //       const lastname = driverDetail.lastname
-    //       return `${titleName}${firstname} ${lastname}`
-    //     }
-    //   }
-    //   return driverDetail.fullname
-    // }
   }
 
   async updateBalance(session?: ClientSession) {

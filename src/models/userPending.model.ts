@@ -14,7 +14,7 @@ import BusinessCustomerModel, { BusinessCustomer } from './customerBusiness.mode
 import DriverDetailModel, { DriverDetail } from './driverDetail.model'
 import { ECreditDataStatus, EDriverType, EUpdateUserStatus, EUserRole, EUserType } from '@enums/users'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
-import { find, get, includes } from 'lodash'
+import { get, includes } from 'lodash'
 import { ClientSession } from 'mongoose'
 
 @plugin(autopopulate)
@@ -86,28 +86,14 @@ export class UserPending extends TimeStamps {
           const otherTitle = get(individualDetail, 'otherTitle', '')
           const firstname = get(individualDetail, 'firstname', '')
           const lastname = get(individualDetail, 'lastname', '')
-
-          const INDIVIDUAL_TITLE_NAME_OPTIONS = [
-            { value: 'Miss', label: 'นางสาว' },
-            { value: 'Mrs.', label: 'นาง' },
-            { value: 'Mr.', label: 'นาย' },
-            { value: 'other', label: 'อื่นๆ' },
-          ]
-          const titleName = title !== 'other' ? find(INDIVIDUAL_TITLE_NAME_OPTIONS, ['value', title]).label : otherTitle
-
+          const titleName = title !== 'อื่นๆ' ? title : otherTitle
           return `${titleName}${firstname} ${lastname}`
         }
         return ''
       } else if (userType === EUserType.BUSINESS) {
         const businessDetail: BusinessCustomer | undefined = get(_user, 'businessDetail', undefined)
         if (businessDetail) {
-          const BUSINESS_TITLE_NAME_OPTIONS = [
-            { value: 'Co', label: 'บจก.' },
-            { value: 'Part', label: 'หจก.' },
-            { value: 'Pub', label: 'บมจ.' },
-          ]
-          const title = find(BUSINESS_TITLE_NAME_OPTIONS, ['value', businessDetail.businessTitle]).label
-          return `${title} ${businessDetail.businessName}`
+          return `${businessDetail.businessTitle} ${businessDetail.businessName}`
         }
         return ''
       }

@@ -29,12 +29,11 @@ import {
 } from '@enums/shipments'
 import { EUserRole } from '@enums/users'
 import { CalculationInput, UpdateShipmentInput } from '@inputs/booking.input'
-import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
+import RetryTransactionMiddleware, { WithTransaction } from '@middlewares/RetryTransaction'
 import { createShipment, updateShipment } from '@controllers/shipment'
 import { calculateQuotation, calculateStep } from '@controllers/quotation'
 import { CalculateQuotationResultPayload } from '@payloads/quotation.payloads'
 import { shipmentNotify } from '@controllers/shipmentNotification'
-import { getNewAllAvailableShipmentForDriver } from '@controllers/shipmentGet'
 import { VALUES } from 'constants/values'
 import { ShipmentAdditionalServicePrice } from '@models/shipmentAdditionalServicePrice.model'
 import AdditionalServiceCostPricingModel from '@models/additionalServiceCostPricing.model'
@@ -379,7 +378,8 @@ export default class ShipmentResolver {
   }
 
   @Mutation(() => Shipment)
-  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]), RetryTransactionMiddleware)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   @UseMiddleware(
     AuditLogDecorator({
       action: EAuditActions.CREATE_SHIPMENT,
@@ -407,12 +407,12 @@ export default class ShipmentResolver {
 
     const shipmentResponse = await createShipment(data, customerId, session)
     if (shipmentResponse) {
+      if (session) {
+        await session.commitTransaction()
+      }
       const shipment = await ShipmentModel.findById(shipmentResponse._id).session(session).lean()
       if (shipment.paymentMethod === EPaymentMethod.CREDIT) {
-        const newShipments = await getNewAllAvailableShipmentForDriver()
-        await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
-        const requestedDriver = get(shipment, 'requestedDriver._id', '')
-        shipmentNotify(shipment._id, requestedDriver)
+        await shipmentNotify(shipment._id)
       }
       await clearLimiter(ctx.ip, ELimiterType.LOCATION, customerId)
     }

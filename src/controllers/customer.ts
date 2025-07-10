@@ -45,8 +45,6 @@ export async function addCustomerCreditUsage(customerId: string, amount: number,
     | BusinessCustomerCreditPayment
     | undefined
 
-  console.log('addCustomerCreditUsage: ', customerId, _customer)
-
   if (!_customer || !creditPaymentDetail) {
     const message = 'ไม่สามารถทำธุระกรรมได้'
     throw new GraphQLError(message, {

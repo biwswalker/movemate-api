@@ -17,7 +17,6 @@ import { get, head, map, toNumber, toString, uniq } from 'lodash'
 import { PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
-import pubsub, { NOTFICATIONS, SHIPMENTS } from '@configs/pubsub'
 import BillingDocumentModel, { BillingDocument } from '@models/finance/documents.model'
 import UserModel, { User } from '@models/user.model'
 import { addDays, endOfMonth, format, parse, startOfMonth } from 'date-fns'
@@ -35,14 +34,12 @@ import TransactionModel, {
 } from '@models/transaction.model'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import { shipmentNotify } from '@controllers/shipmentNotification'
-import { getNewAllAvailableShipmentForDriver } from '@controllers/shipmentGet'
 import { generateBillingReceipt } from '@controllers/billingReceipt'
 import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
 import { CreateAdjustmentNoteInput } from '@inputs/billingAdjustmentNote.input'
 import { createAdjustmentNote } from '@controllers/billingAdjustment'
 import NotificationModel, { ENotificationVarient, Notification } from '@models/notification.model'
 import { Invoice } from '@models/finance/invoice.model'
-import BillingAdjustmentNoteModel from '@models/finance/billingAdjustmentNote.model'
 
 @Resolver()
 export default class BillingResolver {
@@ -409,9 +406,7 @@ export default class BillingResolver {
             },
             { session },
           )
-          shipmentNotify(_shipment._id, get(_shipment, 'requestedDriver._id', ''))
-          const newShipments = await getNewAllAvailableShipmentForDriver('', {}, session)
-          await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
+          await shipmentNotify(_shipment._id)
         }
       }
 

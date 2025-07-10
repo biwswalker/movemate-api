@@ -1,10 +1,4 @@
-import {
-  cancelShipmentQueue,
-  ShipmentPayload,
-  shipmentNotifyQueue,
-  ShipmentNotifyPayload,
-  DeleteShipmentPayload,
-} from '@configs/jobQueue'
+import { cancelShipmentQueue, shipmentNotifyQueue } from '@configs/jobQueue'
 import { EBillingReason, EBillingState, EBillingStatus } from '@enums/billing'
 import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
 import { EDriverAcceptanceStatus, EShipmentCancellationReason, EShipmentStatus } from '@enums/shipments'
@@ -35,7 +29,7 @@ import Aigle from 'aigle'
 import { REPONSE_NAME } from 'constants/status'
 import { format } from 'date-fns'
 import { GraphQLError } from 'graphql'
-import lodash, { filter, find, get, head, includes, isEmpty, isEqual, last, map, sortBy, sum, tail } from 'lodash'
+import lodash, { filter, find, get, head, includes, isEmpty, isEqual, last, sortBy, sum, tail } from 'lodash'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { decryption } from '@utils/encryption'
 import { th } from 'date-fns/locale'
@@ -46,7 +40,7 @@ import { isDriverAvailableForShipment } from './driver'
 
 Aigle.mixin(lodash, {})
 
-export async function shipmentNotify(shipmentId: string, requestedDriverId?: string) {
+export async function shipmentNotify(shipmentId: string) {
   const shipment = await ShipmentModel.findById(shipmentId).lean()
   console.log('Start shipment notify: ', shipmentId, shipment)
   if (!shipment) return
@@ -58,18 +52,26 @@ export async function shipmentNotify(shipmentId: string, requestedDriverId?: str
     return
   }
 
-  if (requestedDriverId) {
+  const requestedDriverStringId = shipment.requestedDriver ? shipment.requestedDriver.toString() : ''
+
+  // Sent Socket to driver
+  console.log(`[Subscription] Trigger get shipment: (${shipmentId}) to driver: (${requestedDriverStringId})`)
+  const newShipments = await getNewAllAvailableShipmentForDriver(requestedDriverStringId)
+  await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
+
+  // If Requested driver
+  if (requestedDriverStringId) {
     // กรณีที่ 2: เลือกคนขับคนโปรด
-    const favoriteDriver = await UserModel.findById(requestedDriverId).lean()
+    const favoriteDriver = await UserModel.findById(requestedDriverStringId).lean()
 
     // ตรวจสอบว่าคนขับว่างหรือไม่
-    const isAvailable = await isDriverAvailableForShipment(requestedDriverId, shipment)
+    const isAvailable = await isDriverAvailableForShipment(requestedDriverStringId, shipment)
 
     if (favoriteDriver && isAvailable) {
       console.log(`[Notify] Starting FAVORITE_DRIVER stage for shipment ${shipmentId}`)
       await shipmentNotifyQueue.add({
         shipmentId,
-        driverId: requestedDriverId,
+        driverId: requestedDriverStringId,
         stage: 'FAVORITE_DRIVER',
         iteration: 1,
       })

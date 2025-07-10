@@ -12,8 +12,14 @@ import { BusinessCustomer } from './customerBusiness.model'
 import { File } from './file.model'
 import { TimeStamps } from '@typegoose/typegoose/lib/defaultClasses'
 import { decryption } from '@utils/encryption'
-import { find, get, includes, isEmpty } from 'lodash'
-import { EXISTING_BUSINESS_NAME, EXISTING_PHONENUMBER, EXISTING_TAXID, EXISTING_USERS, GET_CUSTOMER_BY_EMAIL } from '@pipelines/user.pipeline'
+import { get, includes, isEmpty } from 'lodash'
+import {
+  EXISTING_BUSINESS_NAME,
+  EXISTING_PHONENUMBER,
+  EXISTING_TAXID,
+  EXISTING_USERS,
+  GET_CUSTOMER_BY_EMAIL,
+} from '@pipelines/user.pipeline'
 import { Notification } from './notification.model'
 import { DriverDetail } from './driverDetail.model'
 import {
@@ -207,14 +213,7 @@ export class User extends TimeStamps {
           const otherTitle = get(individualDetail, 'otherTitle', '')
           const firstname = get(individualDetail, 'firstname', '')
           const lastname = get(individualDetail, 'lastname', '')
-
-          const INDIVIDUAL_TITLE_NAME_OPTIONS = [
-            { value: 'Miss', label: 'นางสาว' },
-            { value: 'Mrs.', label: 'นาง' },
-            { value: 'Mr.', label: 'นาย' },
-            { value: 'other', label: 'อื่นๆ' },
-          ]
-          const titleName = title !== 'other' ? find(INDIVIDUAL_TITLE_NAME_OPTIONS, ['value', title]).label : otherTitle
+          const titleName = title !== 'อื่นๆ' ? title : otherTitle
 
           return `${titleName}${firstname} ${lastname}`
         }
@@ -223,13 +222,7 @@ export class User extends TimeStamps {
         const businessDetail: BusinessCustomer | undefined =
           get(this, '_doc.businessDetail', undefined) || this.businessDetail || undefined
         if (businessDetail) {
-          const BUSINESS_TITLE_NAME_OPTIONS = [
-            { value: 'Co', label: 'บจก.' },
-            { value: 'Part', label: 'หจก.' },
-            { value: 'Pub', label: 'บมจ.' },
-          ]
-          const title = find(BUSINESS_TITLE_NAME_OPTIONS, ['value', businessDetail.businessTitle]).label
-          return `${title} ${businessDetail.businessName}`
+          return `${businessDetail.businessTitle} ${businessDetail.businessName}`
         }
         return ''
       }
@@ -323,8 +316,7 @@ export class User extends TimeStamps {
         return businessDetail ? businessDetail.businessEmail : ''
       }
     } else if (userRole === EUserRole.ADMIN) {
-      const adminDetail: Admin | undefined =
-        get(this, '_doc.adminDetail', undefined) || this.adminDetail || undefined
+      const adminDetail: Admin | undefined = get(this, '_doc.adminDetail', undefined) || this.adminDetail || undefined
       return adminDetail ? adminDetail.email : ''
     }
     return ''

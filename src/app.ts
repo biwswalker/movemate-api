@@ -13,7 +13,7 @@ import morgan from 'morgan'
 import cors from 'cors'
 import http from 'http'
 import 'reflect-metadata'
-import { get } from 'lodash'
+import { get, omitBy } from 'lodash'
 import configureCronjob from '@configs/cronjob'
 import { initializeFirebase } from '@configs/firebase'
 import { verifyAccessToken } from '@utils/auth.utils'
@@ -22,7 +22,8 @@ import pubsub from '@configs/pubsub'
 morgan.token('graphql-query', (req: Request) => {
   const operationName = get(req, 'body.operationName', '')
   const variables = get(req, 'body.variables', {})
-  return `${operationName} ${JSON.stringify(variables)}`
+  const omitted = omitBy(variables, ['directionRoutes']) // Ignore
+  return `${operationName} ${JSON.stringify(omitted, undefined, 2)}`
 })
 
 dotenv.config()
@@ -44,7 +45,7 @@ async function server() {
       ...(process.env.NODE_ENV === 'development' ? ['http://localhost:3000', 'http://localhost:3001'] : []),
     ],
   })
-  
+
   app.use(alllowedCors)
   app.use(express.json({ limit: '10mb' }))
   app.use(morgan(':method :url :graphql-query'))

@@ -315,7 +315,7 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
     : `หมายเลขการจองขนส่ง ${_trackingNumber} เราได้รับการจองรถของท่านเรียบร้อยแล้ว ขณะนี้การจองของท่านอยู่ระหว่างการตอบรับจากคนขับ`
 
   await NotificationModel.sendNotification({
-    userId: customer._id,
+    userId: customerId,
     varient: ENotificationVarient.INFO,
     title: notiTitle,
     message: [notiMsg],
