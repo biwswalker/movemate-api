@@ -12,7 +12,8 @@
     "docker:build": "sudo docker build -t movemate-api .",
     "copy-file": "copyfiles *.handlebars -u 2 src/templates/*.handlebars dist/templates/ && copyfiles -u 2 src/assets/fonts/** src/assets/images/** src/assets/images/secures/** dist/assets/",
     "postinstall": "patch-package",
-    "migrate:credit-payment": "ts-node src/migrations/businessCustomerCreditPayment.ts"
+    "migrate:credit-payment": "ts-node src/migrations/businessCustomerCreditPayment.ts",
+    "migrate:titlename": "ts-node src/migrations/titlename.ts"
   },
   "keywords": [],
   "author": "biwswalker",
