@@ -10,7 +10,10 @@ export function reformPaginate({ sortField, sortAscending, ...paginate }: Pagina
           sort: reduce(
             sortField,
             function (result, value) {
-              return { ...result, [value]: sortAscending ? 1 : -1 }
+              if (value) {
+                return { ...result, [value]: sortAscending ? 1 : -1 }
+              }
+              return result
             },
             {},
           ),

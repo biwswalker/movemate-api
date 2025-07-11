@@ -112,7 +112,7 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
       $sort: {
         statusWeight: 1,
         stateWeight: 1,
-        ...sort,
+        ...(!isEmpty(sort) ? sort : {}),
       },
     },
   ]

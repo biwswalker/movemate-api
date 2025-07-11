@@ -55,7 +55,7 @@ export default class BillingResolver {
     @Args() paginate: PaginationArgs,
   ): Promise<BillingListPayload> {
     try {
-      const { sort, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
+      const { sort = undefined, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
       // Aggregrated
       const aggregate = BillingModel.aggregate(BILLING_CYCLE_LIST(data, sort))
       const _billings = (await BillingModel.aggregatePaginate(aggregate, reformSorts)) as BillingListPayload
