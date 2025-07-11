@@ -1,5 +1,10 @@
 import { GraphQLContext } from '@configs/graphQL.config'
-import { markBillingAsPaid, markBillingAsRefunded, markBillingAsRejected } from '@controllers/billingPayment'
+import {
+  markBillingAsPaid,
+  markBillingAsRefunded,
+  markBillingAsRejected,
+  revertPaymentRejection,
+} from '@controllers/billingPayment'
 import { EAdjustmentNoteType, EBillingCriteriaStatus, EBillingState, EBillingStatus } from '@enums/billing'
 import { EPaymentMethod } from '@enums/payments'
 import { EUserRole, EUserType } from '@enums/users'
@@ -505,6 +510,25 @@ export default class BillingResolver {
         ],
       })
     }
+    return true
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
+  async revertRejectedPayment(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('billingId') billingId: string,
+    @Arg('paymentId') paymentId: string,
+  ): Promise<boolean> {
+    const session = ctx.session
+    const adminId = ctx.req.user_id
+
+    // เราจะเรียกใช้ฟังก์ชันหลักจาก Controller ที่จะสร้างในขั้นตอนถัดไป
+    await revertPaymentRejection(billingId, paymentId, adminId, session)
+
+    // ส่ง Notification แจ้งเตือน Admin ว่าสถานะได้ถูกย้อนกลับแล้ว
+    await getAdminMenuNotificationCount()
+
     return true
   }
 }

@@ -1,7 +1,7 @@
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { EBillingReason, EBillingState, EBillingStatus } from '@enums/billing'
 import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
-import { EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
+import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
 import { FileInput } from '@inputs/file.input'
 import DriverDetailModel from '@models/driverDetail.model'
 import FileModel from '@models/file.model'
@@ -30,7 +30,22 @@ import Aigle from 'aigle'
 import { REPONSE_NAME } from 'constants/status'
 import { differenceInMinutes, format } from 'date-fns'
 import { GraphQLError } from 'graphql'
-import lodash, { filter, find, get, head, isArray, isEmpty, isEqual, last, reduce, sortBy, sum, tail } from 'lodash'
+import lodash, {
+  filter,
+  find,
+  get,
+  head,
+  includes,
+  isArray,
+  isEmpty,
+  isEqual,
+  last,
+  map,
+  reduce,
+  sortBy,
+  sum,
+  tail,
+} from 'lodash'
 import { ClientSession } from 'mongoose'
 import { getNewAllAvailableShipmentForDriver } from './shipmentGet'
 import { initialStepDefinition } from './steps'
@@ -537,9 +552,9 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
 
 /**
  * Pricing calcuation
- * @param _shipment 
- * @param isCompletePayment 
- * @returns 
+ * @param _shipment
+ * @param isCompletePayment
+ * @returns
  */
 function calculateCancelledRefundPrice(_shipment: Shipment, isCompletePayment: boolean) {
   const today = new Date()
@@ -656,4 +671,80 @@ export async function driverCancelledShipment(input: CancelledShipmentInput, ses
   /**
    * Add Transaction for driver for history
    */
+}
+
+/**
+ * Revert Rejected Shipment
+ * @param shipmentId
+ * @param adminId
+ * @param session
+ * @returns
+ */
+export async function revertShipmentRejection(
+  shipmentId: string,
+  adminId: string,
+  session?: ClientSession,
+): Promise<void> {
+  const _shipment = await ShipmentModel.findById(shipmentId).session(session)
+  if (!_shipment || _shipment.status !== EShipmentStatus.REFUND) {
+    // ไม่ต้องทำอะไรถ้า Shipment ไม่ได้อยู่ในสถานะคืนเงิน
+    return
+  }
+
+  const originalSteps = _shipment.steps as StepDefinition[]
+
+  // 1. ค้นหาและลบ Step ที่เกิดขึ้นหลังจากการปฏิเสธ (REJECTED_PAYMENT, REFUND)
+  const stepsToRemove = filter(originalSteps, (step) => includes([EStepDefinition.REFUND], step.step))
+  const stepIdsToRemove = map(stepsToRemove, '_id')
+
+  // 2. ค้นหา Step การตรวจสอบการชำระเงิน (REJECTED_PAYMENT) เพื่อเปลี่ยนสถานะ
+  const rejectedPaymentStep = find(originalSteps, { step: EStepDefinition.REJECTED_PAYMENT })
+
+  if (!rejectedPaymentStep) {
+    // กรณีที่ไม่เจอ step cash_verify ซึ่งไม่น่าเกิดขึ้น
+    throw new GraphQLError('ไม่พบขั้นตอนการยืนยันการชำระเงินในงานนี้')
+  }
+
+  // 3. อัปเดตสถานะของ Step "CASH_VERIFY" ให้กลับมาเป็น "กำลังดำเนินการ"
+  await StepDefinitionModel.findByIdAndUpdate(
+    rejectedPaymentStep._id,
+    {
+      step: EStepDefinition.CASH_VERIFY,
+      stepStatus: EStepStatus.PROGRESSING,
+      stepName: EStepDefinitionName.CASH_VERIFY,
+      customerMessage: 'ยืนยันการชำระเงิน',
+      driverMessage: '',
+    },
+    { session },
+  )
+
+  // 4. สร้าง Array ของ Steps ใหม่โดยไม่มี Step ที่ถูกลบ idToRemove.equals(step._id)
+  const newSteps = filter(originalSteps, (step) => !stepIdsToRemove.some((idToRemove) => isEqual(idToRemove, step._id)))
+  const stepsIds = map(newSteps, '_id')
+
+  // 5. อัปเดต Shipment ให้กลับไปสู่สถานะ "รอเริ่มงาน" และสถานะย่อยเป็น "รอตรวจสอบการชำระ"
+  await ShipmentModel.findByIdAndUpdate(
+    shipmentId,
+    {
+      status: EShipmentStatus.IDLE,
+      adminAcceptanceStatus: EAdminAcceptanceStatus.PENDING, // สำคัญมาก: ต้องกลับมารอ Admin approve ใหม่
+      driverAcceptanceStatus: EDriverAcceptanceStatus.IDLE,
+      currentStepSeq: rejectedPaymentStep.seq, // ตั้งค่าให้ Step ปัจจุบันกลับมาที่การตรวจสอบสลิป
+      steps: map(newSteps, '_id'), // อัปเดต Array ของ Step IDs
+      cancellationReason: undefined,
+      cancellationDetail: undefined,
+      cancelledDate: undefined,
+    },
+    { session },
+  )
+
+  // 7. เปลี่ยน สถานะ step CANCELLED เป็น IDLE
+  await StepDefinitionModel.updateMany(
+    { _id: { $in: stepsIds }, stepStatus: EStepStatus.CANCELLED },
+    { stepStatus: EStepStatus.IDLE },
+    { session },
+  )
+
+  // 6. ลบ step ที่ไม่ต้องการออกจาก collection
+  await StepDefinitionModel.deleteMany({ _id: { $in: stepIdsToRemove } }, { session })
 }

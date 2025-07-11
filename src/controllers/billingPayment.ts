@@ -26,6 +26,7 @@ import ReceiptModel from '@models/finance/receipt.model'
 import { generateBillingReceipt } from './billingReceipt'
 import { MakePayBillingInput } from '@inputs/payment.input'
 import FileModel from '@models/file.model'
+import { revertShipmentRejection } from './shipmentOperation'
 
 Aigle.mixin(lodash, {})
 
@@ -397,4 +398,70 @@ export async function makePayBilling(
   }).session(session)
 
   return true
+}
+
+/**
+ * Revert Rejected Payment
+ * @param billingId
+ * @param paymentId
+ * @param adminId
+ * @param session
+ */
+export async function revertPaymentRejection(
+  billingId: string,
+  paymentId: string,
+  adminId: string,
+  session?: ClientSession,
+) {
+  const _billing = await BillingModel.findById(billingId).session(session)
+  const _payment = await PaymentModel.findById(paymentId).session(session)
+
+  // 1. ตรวจสอบว่า Billing และ Payment อยู่ในสถานะที่สามารถย้อนกลับได้หรือไม่
+  if (!_billing || !_payment) {
+    throw new GraphQLError('ไม่พบข้อมูลใบแจ้งหนี้หรือการชำระเงิน')
+  }
+
+  if (_billing.state !== EBillingState.REFUND || _payment.type !== EPaymentType.REFUND) {
+    throw new GraphQLError('สถานะปัจจุบันของรายการนี้ไม่สามารถย้อนกลับได้')
+  }
+
+  // 2. อัปเดตสถานะ Payment กลับไปเป็น "รอตรวจสอบ"
+  await PaymentModel.findByIdAndUpdate(
+    paymentId,
+    {
+      status: EPaymentStatus.VERIFY, // กลับไปเป็นสถานะรอตรวจสอบ
+      type: EPaymentType.PAY, // กลับไปเป็นประเภท "จ่าย"
+    },
+    { session },
+  )
+
+  // 3. อัปเดตสถานะ Billing และจัดการ array 'reasons'
+  const billingDoc = await BillingModel.findById(billingId).session(session)
+  if (!billingDoc) {
+    throw new GraphQLError('ไม่พบข้อมูลใบแจ้งหนี้ที่จะอัปเดต')
+  }
+
+  // กรองเอาเหตุผลที่ไม่ใช่ REJECTED_PAYMENT ออก
+  const otherReasons = billingDoc.reasons.filter((r) => r.type !== EBillingReason.REJECTED_PAYMENT)
+
+  // สร้างเหตุผลใหม่สำหรับการย้อนสถานะ
+  const newReason: BillingReason = {
+    detail: 'ย้อนกลับสถานะโดยผู้ดูแลระบบ',
+    type: EBillingReason.REJECTED_PAYMENT, // หรืออาจจะใช้ Type ใหม่ถ้าต้องการแยกแยะ
+  }
+
+  await BillingModel.findByIdAndUpdate(
+    billingId,
+    {
+      status: EBillingStatus.VERIFY,
+      state: EBillingState.CURRENT,
+      reasons: [...otherReasons, newReason],
+    },
+    { session },
+  )
+
+  // 4. ย้อนสถานะของ Shipment ทั้งหมดที่เกี่ยวข้อง
+  await Aigle.forEach(_billing.shipments as Shipment[], async (shipment) => {
+    await revertShipmentRejection(shipment._id, adminId, session)
+  })
 }
