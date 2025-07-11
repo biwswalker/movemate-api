@@ -1,4 +1,4 @@
-import { Field, ID, Int, ObjectType } from 'type-graphql'
+import { Field, Float, ID, Int, ObjectType } from 'type-graphql'
 import {
   EAdminAcceptanceStatus,
   EDriverAcceptanceStatus,
@@ -89,9 +89,12 @@ export class ShipmentListPayload {
 
   @Field({ nullable: true })
   refId: string
-
+  
   @Field(() => StepDefinition, { nullable: true })
   step: StepDefinition
+  
+  @Field(() => Float, { nullable: true, defaultValue: 0 })
+  cancellationFee: number
 }
 
 @ObjectType()

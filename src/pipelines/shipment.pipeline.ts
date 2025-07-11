@@ -334,6 +334,7 @@ export const GET_SHIPMENT_LIST = (
       step: 1,
       driverProfileImage: 1,
       driverNumber: 1,
+      cancellationFee: 1,
     },
   }
 

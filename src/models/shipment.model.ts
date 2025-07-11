@@ -193,6 +193,14 @@ export class Shipment extends TimeStamps {
   @Property({ required: false })
   cancelledDate?: Date
 
+  @Field(() => Float, { nullable: true })
+  @Property({ required: true, default: 0 })
+  cancellationFee: number // ค่าปรับจากการยกเลิกที่ลูกค้าต้องจ่าย
+
+  @Field(() => User, { nullable: true })
+  @Property({ ref: () => User, required: false, autopopulate: true })
+  cancellationBy: Ref<User>
+
   @Field({ defaultValue: 0 })
   @Property({ required: false, default: 0 })
   notificationCount?: number

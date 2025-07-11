@@ -1,3 +1,4 @@
+import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { EDriverAcceptanceStatus, EShipmentMatchingCriteria, EShipmentStatus } from '@enums/shipments'
 import { EDriverStatus, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 import DriverDetailModel from '@models/driverDetail.model'
@@ -77,7 +78,9 @@ export async function getNewAllAvailableShipmentForDriverQuery(session: ClientSe
         ...(isBusinessDriver ? { agentDriver: user._id } : { driver: user._id }),
         status: EShipmentStatus.PROGRESSING,
         driverAcceptanceStatus: EDriverAcceptanceStatus.ACCEPTED,
-      }).lean().session(session)
+      })
+        .lean()
+        .session(session)
       ignoreShipments = isBusinessDriver
         ? []
         : map(existingShipments, (shipment) => {
@@ -103,7 +106,11 @@ export async function getNewAllAvailableShipmentForDriverQuery(session: ClientSe
   return query
 }
 
-export async function getNewAllAvailableShipmentForDriver(driverId?: string, options: any = {}, session: ClientSession = undefined) {
+export async function getNewAllAvailableShipmentForDriver(
+  driverId?: string,
+  options: any = {},
+  session: ClientSession = undefined,
+) {
   const generatedQuery = await getNewAllAvailableShipmentForDriverQuery(session, driverId)
   const queryOptions = Object.assign(options, { sort: { bookingDateTime: 1 }, session })
   const query = isEmpty(generatedQuery) ? {} : generatedQuery
@@ -112,4 +119,13 @@ export async function getNewAllAvailableShipmentForDriver(driverId?: string, opt
     return []
   }
   return shipments
+}
+
+export async function publishDriverMatchingShipment(
+  driverId?: string,
+  options: any = {},
+  session: ClientSession = undefined,
+) {
+  const newShipments = await getNewAllAvailableShipmentForDriver(driverId, options, session)
+  await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
 }

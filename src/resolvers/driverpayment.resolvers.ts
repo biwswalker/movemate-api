@@ -103,7 +103,7 @@ export default class DriverPaymentResolver {
     await driverTransaction.save({ session })
 
     // Add transaction For Admin
-    const descriptionForAdmin = `ชำระค่าขนส่งคนขับหมายเลข ${driver.userNumber}`
+    const descriptionForAdmin = `ชำระค่าขนส่งคนขับหมายเลข ${driver.userNumber} (ใบสำคัญจ่าย #${_paymentNumber})`;
     const movemateTransaction = new TransactionModel({
       amountBeforeTax: data.subtotal,
       amountTax: data.tax,

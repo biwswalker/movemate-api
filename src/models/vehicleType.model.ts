@@ -9,7 +9,7 @@ import mongooseAutoPopulate from "mongoose-autopopulate";
 import { TimeStamps } from "@typegoose/typegoose/lib/defaultClasses";
 import { File } from "./file.model";
 
-enum EVehicleType {
+export enum EVehicleType {
   FOUR_WHEELER = "4W",
   SIX_WHEELER = "6W",
   TEN_WHEELER = "10W",

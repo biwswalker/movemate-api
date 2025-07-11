@@ -26,6 +26,7 @@ import { ClientSession, Types } from 'mongoose'
 import { generateInvoice } from 'reports/invoice'
 import path from 'path'
 import BillingDocumentModel from '@models/finance/documents.model'
+import { calculateCancellationFee } from './shipmentCancellation'
 
 Aigle.mixin(lodash, {})
 
@@ -74,15 +75,24 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
        * Get Complete Shipment
        * Complete period: (Previous Month - Previous Day)
        */
-      const _shipments = await ShipmentModel.find({
+      const shipmentsInPeriod = await ShipmentModel.find({
         customer: customerId,
-        status: EShipmentStatus.DELIVERED,
         paymentMethod: EPaymentMethod.CREDIT,
-        deliveredDate: { $gte: prevIssueBillingCycleDate, $lte: currentIssueBillingCycleDate },
-      })
+        $or: [
+          {
+            status: EShipmentStatus.DELIVERED,
+            deliveredDate: { $gte: prevIssueBillingCycleDate, $lte: currentIssueBillingCycleDate },
+          },
+          {
+            status: EShipmentStatus.CANCELLED,
+            cancellationFee: { $gt: 0 },
+            cancelledDate: { $gte: prevIssueBillingCycleDate, $lte: currentIssueBillingCycleDate },
+          },
+        ],
+      }).session(session)
 
       console.log(
-        `🧾 [Billing] - Create Billing for ${_shipments.length} shipments for customer ${
+        `🧾 [Billing] - Create Billing for ${shipmentsInPeriod.length} shipments for customer ${
           _customer.fullname
         } period: ${format(prevIssueBillingCycleDate, 'dd MMM yyyy HH:mm:ss')} - ${format(
           currentIssueBillingCycleDate,
@@ -90,29 +100,45 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
         )}`,
       )
 
-      if (!_shipments || isEmpty(_shipments)) {
+      if (isEmpty(shipmentsInPeriod)) {
         return
       }
       /**
        * Calculate all shipment prices
        */
+      let subTotalAmount = 0
       let quotationIds = []
-      const prices = reduce<Shipment, PaymentAmounts>(
-        _shipments,
-        (prev, curr) => {
-          const latestQuotation = last(sortBy(curr.quotations, ['createdAt'])) as Quotation | undefined
-          if (latestQuotation) {
-            quotationIds.push(latestQuotation._id)
-            const { subTotal: _subTotal, tax: _tax, total: _total } = latestQuotation.price
-            const subTotal = sum([prev.subTotal, _subTotal])
-            const tax = sum([prev.tax, _tax])
-            const total = sum([prev.total, _total])
-            return { subTotal, tax, total }
-          }
-          return prev
-        },
-        { tax: 0, subTotal: 0, total: 0 },
-      )
+
+      for (const shipment of shipmentsInPeriod) {
+        const latestQuotation = last(sortBy(shipment.quotations, ['createdAt'])) as Quotation | undefined
+        if (!latestQuotation) continue
+
+        quotationIds.push(latestQuotation._id)
+
+        if (shipment.status === EShipmentStatus.DELIVERED) {
+          subTotalAmount += latestQuotation.price.subTotal
+        } else if (shipment.status === EShipmentStatus.CANCELLED) {
+          subTotalAmount += shipment.cancellationFee;
+        }
+      }
+
+      let whtAmount = 0
+      // หักภาษี ณ ที่จ่าย 1% สำหรับลูกค้าธุรกิจที่มียอดเกิน 1,000 บาท
+      if (_customer.userType === EUserType.BUSINESS && subTotalAmount > 1000) {
+        whtAmount = subTotalAmount * 0.01
+      }
+      const finalTotalAmount = subTotalAmount - whtAmount
+      const prices: PaymentAmounts = {
+        subTotal: subTotalAmount,
+        tax: whtAmount,
+        total: finalTotalAmount,
+      }
+
+      if (prices.total <= 0) {
+        console.log(`[Billing] - No amount to bill for customer ${_customer.fullname}. Skipping.`)
+        return
+      }
+
       /**
        * Create Invoice data
        */
@@ -166,7 +192,7 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
         state: EBillingState.CURRENT,
         paymentMethod: EPaymentMethod.CREDIT,
         user: customerId,
-        shipments: _shipments,
+        shipments: shipmentsInPeriod.map((s) => s._id),
         payments: [_payment],
         issueDate: issueDate,
         billingStartDate: prevIssueBillingCycleDate,

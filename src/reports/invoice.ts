@@ -15,6 +15,7 @@ import { ClientSession } from 'mongoose'
 import { GraphQLError } from 'graphql'
 import { Invoice } from '@models/finance/invoice.model'
 import { InvoiceFooterComponent } from './components/footer'
+import { EShipmentStatus } from '@enums/shipments'
 
 interface GenerateInvoiceResponse {
   fileName: string
@@ -63,27 +64,42 @@ export async function generateInvoice(
 
   const _shipments = _billingShipments.map((shipment, index) => {
     const pickup = head(shipment.destinations)
-    const dropoffs = tail(shipment.destinations)
-    const venicle = get(shipment, 'vehicleId', undefined) as VehicleType | undefined
-    const details = `ค่าขนส่ง${venicle.name} ${pickup.name} ไปยัง ${reduce(
-      dropoffs,
-      (prev, curr) => (prev ? `${prev}, ${curr.name}` : curr.name),
-      '',
-    )}`
+    const vehicle = get(shipment, 'vehicleId', undefined) as VehicleType | undefined
     const no = index + 1
-    const latestQuotation = last(sortBy(shipment.quotations, 'createdAt')) as Quotation | undefined
     const options: DataOptions = {
       fontFamily: FONTS.SARABUN_LIGHT,
       fontSize: 8,
       separation: false,
     }
+
+    let details = ''
+    let amount = 0
+    if (shipment.status === EShipmentStatus.DELIVERED) {
+      // กรณีงานสำเร็จ: แสดงเป็นค่าขนส่งปกติ
+      const dropoffs = tail(shipment.destinations)
+      const latestQuotation = last(sortBy(shipment.quotations, 'createdAt')) as Quotation | undefined
+      details = `ค่าขนส่ง${vehicle.name} ${pickup.name} ไปยัง ${reduce(
+        dropoffs,
+        (prev, curr) => (prev ? `${prev}, ${curr.name}` : curr.name),
+        '',
+      )}`
+      amount = latestQuotation?.price?.total || 0
+    } else if (shipment.status === EShipmentStatus.CANCELLED && shipment.cancellationFee > 0) {
+      // กรณีงานยกเลิกและมีค่าปรับ: แสดงเป็นค่าปรับ
+      details = `ค่าปรับจากการยกเลิกงาน #${shipment.trackingNumber}`
+      amount = shipment.cancellationFee
+    } else {
+      // กรณีอื่นๆ (เช่น งานยกเลิกแต่ไม่มีค่าปรับ) จะไม่แสดงในรายการ
+      return null
+    }
+
     return {
       no: { label: String(no), options },
       bookingDateTime: { label: fDate(shipment.bookingDateTime, 'dd/MM/yyyy'), options },
       trackingNumber: { label: shipment.trackingNumber, options },
       details: { label: details, options: { ...options, align: 'left' } },
-      subtotal: { label: fCurrency(latestQuotation.price.total || 0), options },
-      total: { label: fCurrency(latestQuotation.price.total || 0), options },
+      subtotal: { label: fCurrency(amount), options },
+      total: { label: fCurrency(amount), options },
     }
   })
 
