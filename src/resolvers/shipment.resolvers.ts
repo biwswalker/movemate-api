@@ -7,7 +7,7 @@ import { GraphQLError } from 'graphql'
 import { PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import lodash, { find, get, map, omit, sum } from 'lodash'
-import { ShipmentListPayload, TotalRecordPayload } from '@payloads/shipment.payloads'
+import { ShipmentListPayload, ShipmentTimeCheckPayload, TotalRecordPayload } from '@payloads/shipment.payloads'
 import { LoadmoreArgs } from '@inputs/query.input'
 import { reformPaginate } from '@utils/pagination.utils'
 import { GET_SHIPMENT_LIST } from '@pipelines/shipment.pipeline'
@@ -35,6 +35,7 @@ import { EServiceStatus } from '@enums/additionalService'
 import { PricingCalculationMethodPayload } from '@payloads/pricing.payloads'
 import { AuditLogDecorator } from 'decorators/AuditLog.decorator'
 import { EAuditActions } from '@enums/audit'
+import { differenceInMinutes } from 'date-fns'
 
 Aigle.mixin(lodash, {})
 
@@ -409,5 +410,42 @@ export default class ShipmentResolver {
       }
     }
     return []
+  }
+
+  @Query(() => ShipmentTimeCheckPayload)
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async checkShipmentTime(
+    @Arg('shipmentId') shipmentId: string,
+    @Arg('newDateTime', () => Date, { nullable: true }) newDateTime: Date,
+  ): Promise<ShipmentTimeCheckPayload> {
+    try {
+      const shipment = await ShipmentModel.findById(shipmentId).lean()
+      if (!shipment || !shipment.bookingDateTime) {
+        throw new GraphQLError('ไม่พบข้อมูลงานขนส่งหรือไม่ได้กำหนดเวลาเข้ารับ', {
+          extensions: { code: 'NOT_FOUND' },
+        })
+      }
+
+      const now = new Date()
+      const bookingTime = newDateTime ? newDateTime : shipment.bookingDateTime
+
+      // คำนวณส่วนต่างเป็นนาที
+      const timeDifference = differenceInMinutes(bookingTime, now)
+
+      // ตรวจสอบเงื่อนไข
+      // น้อยกว่า 120 นาที (2 ชั่วโมง)
+      const isCriticalTime = timeDifference < 120
+      // น้อยกว่า 180 นาที (3 ชั่วโมง) แต่ไม่ถึงขั้น Critical
+      const isWarningTime = timeDifference < 180 && !isCriticalTime
+
+      return {
+        isCriticalTime,
+        isWarningTime,
+        timeDifferenceInMinutes: timeDifference,
+      }
+    } catch (error) {
+      console.log(error)
+      throw new GraphQLError('เกิดข้อผิดพลาดในการตรวจสอบเวลาขนส่ง')
+    }
   }
 }

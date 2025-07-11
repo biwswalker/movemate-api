@@ -1,7 +1,4 @@
 import { Field, ID, Int, ObjectType } from 'type-graphql'
-import { PaginationPayload } from './pagination.payloads'
-import { AggregatePaginateResult, PaginateResult } from 'mongoose'
-import { Shipment } from '@models/shipment.model'
 import {
   EAdminAcceptanceStatus,
   EDriverAcceptanceStatus,
@@ -12,18 +9,6 @@ import { EPaymentMethod } from '@enums/payments'
 import { EBillingState, EBillingStatus } from '@enums/billing'
 import { Destination } from '@models/shipment/objects'
 import { StepDefinition } from '@models/shipmentStepDefinition.model'
-
-@ObjectType()
-export class ShipmentPaginationPayload extends PaginationPayload implements PaginateResult<Shipment> {
-  @Field(() => [Shipment])
-  docs: Shipment[]
-}
-
-@ObjectType()
-export class ShipmentPaginationAggregatePayload extends PaginationPayload implements AggregatePaginateResult<Shipment> {
-  @Field(() => [Shipment])
-  docs: Shipment[]
-}
 
 @ObjectType()
 export class TotalRecordPayload {
@@ -107,4 +92,16 @@ export class ShipmentListPayload {
 
   @Field(() => StepDefinition, { nullable: true })
   step: StepDefinition
+}
+
+@ObjectType()
+export class ShipmentTimeCheckPayload {
+  @Field(() => Boolean)
+  isCriticalTime: boolean // น้อยกว่า 120 นาที
+
+  @Field(() => Boolean)
+  isWarningTime: boolean // น้อยกว่า 180 นาที แต่ไม่ถึงขั้น Critical
+
+  @Field(() => Int)
+  timeDifferenceInMinutes: number
 }

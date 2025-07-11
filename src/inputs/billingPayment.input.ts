@@ -24,4 +24,7 @@ export class ApprovalBillingPaymentInput {
 
   @Field({ nullable: true })
   paymentTime?: Date
+
+  @Field({ nullable: true })
+  newBookingDateTime?: Date
 }

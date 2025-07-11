@@ -408,6 +408,7 @@ export default class BillingResolver {
             {
               driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
               adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,
+              ...(data.newBookingDateTime ? { bookingDateTime: data.newBookingDateTime } : {}),
             },
             { session },
           )
