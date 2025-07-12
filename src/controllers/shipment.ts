@@ -39,8 +39,8 @@ import DirectionsResultModel from '@models/directionResult.model'
 import { generateTrackingNumber } from '@utils/string.utils'
 import { format } from 'date-fns'
 import PaymentModel, { Payment } from '@models/finance/payment.model'
-import { BillingReason, Price } from '@models/finance/objects'
-import QuotationModel from '@models/finance/quotation.model'
+import { BillingReason } from '@models/finance/objects'
+import QuotationModel, { Quotation } from '@models/finance/quotation.model'
 import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
 import BillingModel from '@models/finance/billing.model'
 import { EBillingReason, EBillingState, EBillingStatus } from '@enums/billing'
@@ -384,15 +384,127 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
 export async function updateShipment(data: UpdateShipmentInput, adminId: string, session?: ClientSession) {
   const { isRounded, locations, vehicleTypeId, serviceIds, discountId, shipmentId, podDetail, quotation } = data
 
-  const _shipment = await ShipmentModel.findById(shipmentId).session(session)
+  const _shipment = await ShipmentModel.findById(shipmentId).populate('customer').session(session)
+  if (!_shipment) throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
+
   const _customer = _shipment.customer as User | undefined
+  if (!_customer) throw new GraphQLError('ไม่พบข้อมูลลูกค้าในงานขนส่ง')
 
-  const _isRoundedChanged = _shipment.isRoundedReturn === isRounded
+  const _oldQuotation = last(sortBy(_shipment.quotations, 'createdAt')) as Quotation
+  if (!_oldQuotation) throw new GraphQLError('ไม่พบข้อมูลใบเสนอราคาเดิม')
 
-  const _oldDropoffLocationsPlaceID = map(tail(_shipment.destinations), (location) => location.placeId)
-  const _newDropoffLocationsPlaceID = map(tail(locations), (location) => location.placeId)
+  // --- 1. คำนวณราคาและเส้นทางใหม่ ---
+  const _calculated = await calculateExistingQuotation(data, session)
+  const _newQuotationData = _calculated.quotation
+
+  // --- 2. สร้างใบเสนอราคา (Quotation) ใหม่เสมอ ---
+  const today = new Date()
+  const generateMonth = format(today, 'yyMM')
+  const _quotationNumber = await generateTrackingNumber(`QU${generateMonth}`, 'quotation', 5)
+  const _newQuotation = new QuotationModel({
+    quotationNumber: _quotationNumber,
+    quotationDate: today,
+    price: _newQuotationData.price,
+    cost: _newQuotationData.cost,
+    detail: _newQuotationData.detail,
+    subTotal: _newQuotationData.subTotal,
+    tax: _newQuotationData.tax,
+    total: _newQuotationData.total,
+    updatedBy: adminId,
+  })
+  await _newQuotation.save({ session })
+
+  // ====================================================================
+  // --- 3. จัดการ Logic การเงินตามประเภทการชำระเงิน (สำคัญที่สุด) ---
+  // ====================================================================
+  const priceDifference = _newQuotationData.price.acturePrice
+
+  if (_shipment.paymentMethod === EPaymentMethod.CREDIT) {
+    // ** LOGIC สำหรับงานเครดิต: ปรับปรุง Credit Usage **
+    // ไม่ว่างานจะกำลังทำหรือจบแล้ว (แต่ยังไม่ถึงรอบบิล) ให้ปรับที่ยอด Credit Usage โดยตรง
+    if (priceDifference !== 0) {
+      await addCustomerCreditUsage(_customer._id.toString(), priceDifference, session)
+    }
+  } else {
+    // ** LOGIC สำหรับงานเงินสด **
+    const _cashBilling = await BillingModel.findOne({ billingNumber: _shipment.trackingNumber }).populate('payments')
+    const _lastPayment = last(sortBy(_cashBilling.payments as Payment[], 'createdAt'))
+
+    if (_lastPayment && _lastPayment.status === EPaymentStatus.COMPLETE) {
+      // ** กรณีจ่ายเงินแล้ว: สร้าง Payment ใหม่ "เฉพาะส่วนต่าง" **
+      if (priceDifference !== 0) {
+        const isRefund = priceDifference < 0
+        const paymentType = isRefund ? EPaymentType.REFUND : EPaymentType.PAY
+        const trackingText = isRefund ? 'PAYRFU' : 'PAYCAS' // Refund vs Cash
+
+        const _paymentNumber = await generateTrackingNumber(`${trackingText}${generateMonth}`, 'payment', 3)
+        const _newPayment = new PaymentModel({
+          quotations: [_newQuotation._id],
+          paymentMethod: EPaymentMethod.CASH,
+          paymentNumber: _paymentNumber,
+          status: priceDifference === 0 ? EPaymentStatus.COMPLETE : EPaymentStatus.PENDING,
+          type: paymentType,
+          total: Math.abs(priceDifference), // ยอดเงินเป็นบวกเสมอ
+          subTotal: Math.abs(priceDifference),
+          updatedBy: adminId,
+        })
+        await _newPayment.save({ session })
+
+        const refundReason: BillingReason | undefined = isRefund
+          ? {
+              detail: `ยอดชำระเกิน ${fCurrency(Math.abs(priceDifference))} บาท`,
+              type: EBillingReason.REFUND_PAYMENT,
+            }
+          : undefined
+
+        // เพิ่ม Payment ใหม่เข้าไปใน Billing เดิม
+        await BillingModel.findByIdAndUpdate(
+          _cashBilling._id,
+          {
+            status: EBillingStatus.VERIFY,
+            updatedBy: adminId,
+            $push: { payments: _newPayment._id, ...(refundReason ? { reasons: refundReason } : {}) },
+          },
+          { session },
+        )
+      }
+    } else {
+      // ** กรณีที่ยังไม่ได้จ่าย หรือจ่ายแล้วแต่ไม่สำเร็จ: ยกเลิกของเก่า สร้างใหม่เต็มจำนวน **
+      if (_lastPayment) {
+        await PaymentModel.findByIdAndUpdate(
+          _lastPayment._id,
+          { status: EPaymentStatus.CANCELLED, updatedBy: adminId },
+          { session },
+        )
+      }
+
+      const _paymentNumber = await generateTrackingNumber(`PAYCAS${generateMonth}`, 'payment', 3)
+      const _newFullPayment = new PaymentModel({
+        quotations: [_newQuotation._id],
+        paymentMethod: EPaymentMethod.CASH,
+        paymentNumber: _paymentNumber,
+        status: EPaymentStatus.PENDING,
+        type: EPaymentType.PAY,
+        total: _newQuotation.total, // ใช้ยอดใหม่เต็มจำนวน
+        subTotal: _newQuotation.subTotal,
+        updatedBy: adminId,
+      })
+      await _newFullPayment.save({ session })
+
+      // อัปเดต Billing เดิมให้ใช้ Payment ใหม่นี้ (แทนที่ของเก่าที่ถูกยกเลิก)
+      await BillingModel.findByIdAndUpdate(_cashBilling._id, { $push: { payments: _newFullPayment._id } }, { session })
+    }
+  }
+
+  // --- 4. อัปเดตข้อมูลอื่นๆ ของ Shipment (Logic เดิม) ---
+  const _isRoundedChanged = _shipment.isRoundedReturn !== isRounded
+  const _oldDropoffLocationsPlaceID = map(tail(_shipment.destinations), 'placeId')
+  const _newDropoffLocationsPlaceID = map(tail(locations), 'placeId')
   const _locationDropoffChanged = !isEqual(_oldDropoffLocationsPlaceID, _newDropoffLocationsPlaceID)
 
+  /**
+   * Destination
+   */
   const _destinations = await Aigle.map<DestinationInput, Destination>(locations, async (location) => {
     const { place } = await getPlaceDetail(location.placeId)
     const { province, district, subDistrict } = extractThaiAddress(place.addressComponents || [])
@@ -405,13 +517,12 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
     }
   })
 
-  const _calculated = await calculateExistingQuotation(data, session)
-
   /**
    * Additional Service Cost Pricng
    */
   const _isExistingPODService = find(_shipment.additionalServices, ['reference.additionalService.name', VALUES.POD])
   let _isPODServiceIncluded = false
+
   const _shipmentAdditionalServicesPricing = await Aigle.map(serviceIds, async (serviceId) => {
     const service = find(_shipment.additionalServices || [], ['reference._id', serviceId]) as
       | ShipmentAdditionalServicePrice
@@ -441,84 +552,6 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
     }
   })
 
-  const _calculateQuotation = _calculated.quotation
-  const today = new Date()
-  const generateMonth = format(today, 'yyMM')
-  const _quotationNumber = await generateTrackingNumber(`QU${generateMonth}`, 'quotation', 5)
-  const _quotation = new QuotationModel({
-    quotationNumber: _quotationNumber,
-    quotationDate: today,
-    price: _calculateQuotation.price,
-    cost: _calculateQuotation.cost,
-    detail: _calculateQuotation.detail,
-    subTotal: _calculateQuotation.subTotal,
-    tax: _calculateQuotation.tax,
-    total: _calculateQuotation.total,
-    updatedBy: adminId,
-  })
-  await _quotation.save({ session })
-
-  if (_shipment.paymentMethod === EPaymentMethod.CASH) {
-    /**
-     * Payment
-     */
-    const acturePrice = _calculateQuotation.price.acturePrice
-    const isRefundProcesss = acturePrice < 0
-    const trackingText = isRefundProcesss ? 'PAYRFU' : 'PAYCAS'
-    const generateMonth = format(new Date(), 'yyMM')
-    const _paymentNumber = await generateTrackingNumber(`${trackingText}${generateMonth}`, 'payment', 3)
-
-    const _newPayment = new PaymentModel({
-      quotations: [_quotation._id],
-      paymentMethod: EPaymentMethod.CASH,
-      paymentNumber: _paymentNumber,
-      status: acturePrice === 0 ? EPaymentStatus.COMPLETE : EPaymentStatus.PENDING,
-      type: isRefundProcesss ? EPaymentType.CHANGE : EPaymentType.PAY,
-      tax: 0,
-      total: acturePrice,
-      subTotal: acturePrice,
-      updatedBy: adminId,
-    })
-    await _newPayment.save({ session })
-
-    const refundReason: BillingReason | undefined = isRefundProcesss
-      ? {
-          detail: `ยอดชำระเกิน ${fCurrency(Math.abs(acturePrice))} บาท`,
-          type: EBillingReason.REFUND_PAYMENT,
-        }
-      : undefined
-    const _cashBilling = await BillingModel.findOne({ billingNumber: _shipment.trackingNumber })
-    const _lastPayment = last(sortBy(_cashBilling.payments, 'createdAt')) as Payment | undefined
-    await BillingModel.findOneAndUpdate(
-      { billingNumber: _shipment.trackingNumber },
-      {
-        status: acturePrice === 0 ? EBillingStatus.COMPLETE : EBillingStatus.VERIFY,
-        state: EBillingState.CURRENT,
-        updatedBy: adminId,
-        $push: {
-          payments: _newPayment._id,
-          ...(refundReason ? { reasons: refundReason } : {}),
-        },
-      },
-      { session },
-    )
-
-    /**
-     * Update if old exisiting is not complete
-     */
-    if (_lastPayment) {
-      if (includes([EPaymentStatus.PENDING, EPaymentStatus.VERIFY], _lastPayment.status)) {
-        await PaymentModel.findByIdAndUpdate(
-          _lastPayment._id,
-          { status: EPaymentStatus.CANCELLED, updatedBy: adminId },
-          { session },
-        )
-      }
-    }
-  } else {
-    await addCustomerCreditUsage(_customer?._id, _quotation.price.acturePrice)
-  }
-
   await DirectionsResultModel.findByIdAndUpdate(get(_shipment, 'route._id', ''), {
     rawData: JSON.stringify(_calculated.routes),
   })
@@ -536,9 +569,7 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
       vehicleId: vehicleTypeId,
       additionalServices: _shipmentAdditionalServicesPricing,
       ...(podDetail ? { podDetail } : {}),
-      $push: {
-        quotations: [_quotation],
-      },
+      $push: { quotations: [_newQuotation] },
     },
     { session, new: true },
   )
@@ -662,7 +693,9 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
             seq: newSeq,
             stepName: EStepDefinitionName.ARRIVAL_DROPOFF,
             customerMessage: isMultiple ? `ถึงจุดส่งสินค้าที่ ${newMeta}` : 'ถึงจุดส่งสินค้า',
-            driverMessage: isMultiple ? `ถึงจุดส่งสินค้าที่ ${newMeta}${isLast ? ' (จุดสุดท้าย)' : ''}` : 'ถึงจุดส่งสินค้า',
+            driverMessage: isMultiple
+              ? `ถึงจุดส่งสินค้าที่ ${newMeta}${isLast ? ' (จุดสุดท้าย)' : ''}`
+              : 'ถึงจุดส่งสินค้า',
             stepStatus: EStepStatus.IDLE,
             meta: newMeta,
           })
@@ -672,7 +705,9 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
             seq: newSeq + 1,
             stepName: EStepDefinitionName.DROPOFF,
             customerMessage: isMultiple ? `จัดส่งสินค้าจุดที่ ${newMeta}` : 'จัดส่งสินค้า',
-            driverMessage: isMultiple ? `ลงสินค้าจุดที่ ${newMeta}${isLast ? ' (จุดสุดท้าย)' : ''}` : 'ลงสินค้าที่จุดส่งสินค้า',
+            driverMessage: isMultiple
+              ? `ลงสินค้าจุดที่ ${newMeta}${isLast ? ' (จุดสุดท้าย)' : ''}`
+              : 'ลงสินค้าที่จุดส่งสินค้า',
             stepStatus: EStepStatus.IDLE,
             meta: newMeta,
           })

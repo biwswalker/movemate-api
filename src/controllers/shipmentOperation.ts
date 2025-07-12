@@ -4,8 +4,8 @@ import { FileInput } from '@inputs/file.input'
 import DriverDetailModel from '@models/driverDetail.model'
 import FileModel from '@models/file.model'
 import { Quotation } from '@models/finance/quotation.model'
-import NotificationModel, { ENotificationVarient } from '@models/notification.model'
-import ShipmentModel from '@models/shipment.model'
+import NotificationModel, { ENavigationType, ENotificationVarient } from '@models/notification.model'
+import ShipmentModel, { Shipment } from '@models/shipment.model'
 import StepDefinitionModel, {
   EStepDefinition,
   EStepDefinitionName,
@@ -18,7 +18,7 @@ import TransactionModel, {
   ETransactionStatus,
   ETransactionType,
 } from '@models/transaction.model'
-import UserModel from '@models/user.model'
+import UserModel, { User } from '@models/user.model'
 import { VehicleType } from '@models/vehicleType.model'
 import Aigle from 'aigle'
 import { REPONSE_NAME } from 'constants/status'
@@ -27,6 +27,9 @@ import { GraphQLError } from 'graphql'
 import lodash, { filter, find, get, head, includes, isEmpty, isEqual, last, map, reduce, sortBy, tail } from 'lodash'
 import { ClientSession } from 'mongoose'
 import { CancellationPolicyDetail, CancellationPreview } from '@payloads/cancellation.payload'
+import { fDateTime } from '@utils/formatTime'
+import { clearShipmentJobQueues } from './shipmentJobQueue'
+import { publishDriverMatchingShipment } from './shipmentGet'
 
 Aigle.mixin(lodash, {})
 
@@ -464,4 +467,94 @@ export async function getShipmentCancellationPreview(shipmentId: string): Promis
     isAllowed: true, // ในตัวอย่างนี้อนุญาตให้ยกเลิกได้เสมอ (สามารถเพิ่มเงื่อนไขตรวจสอบ Step ได้)
     reasonIfNotAllowed: null,
   }
+}
+
+/**
+ * Controller สำหรับจัดการการเปลี่ยนแปลงเวลาเริ่มงาน (bookingDateTime)
+ * @param shipmentId ID ของงานขนส่ง
+ * @param newBookingDateTime วันและเวลาเริ่มงานใหม่
+ * @param modifiedBy ID ของผู้ที่ทำการแก้ไข
+ * @param session Transaction Session
+ */
+export async function handleUpdateBookingTime(
+  shipmentId: string,
+  newBookingDateTime: Date,
+  modifiedBy: string,
+  session?: ClientSession,
+): Promise<Shipment> {
+  const shipment = await ShipmentModel.findById(shipmentId)
+  if (!shipment) {
+    throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
+  }
+
+  console.log('1.....')
+  const oldBookingDateTime = shipment.bookingDateTime
+
+  // --- อัปเดตเวลาในฐานข้อมูลก่อน ---
+  shipment.bookingDateTime = newBookingDateTime
+
+  // เพิ่มประวัติการแก้ไข
+  console.log('2.....')
+  shipment.modifieds.push({
+    modifiedBy,
+    createdAt: new Date(),
+    reason: `เปลี่ยนแปลงเวลาเริ่มงานจาก ${fDateTime(oldBookingDateTime)} เป็น ${fDateTime(newBookingDateTime)}`,
+  })
+
+  console.log('3.....')
+  await shipment.save({ session })
+
+  console.log('4.....')
+
+  // --- ตรวจสอบสถานะและจัดการ Logic การแจ้งเตือน ---
+  if (shipment.driver && shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.ACCEPTED) {
+    // ** กรณีที่ 1: มีคนขับรับงานแล้ว **
+    // แจ้งเตือนคนขับและลูกค้าโดยตรง
+    const driver = shipment.driver as User
+    const customer = shipment.customer as User
+    console.log('3.....')
+
+    // แจ้งเตือนคนขับที่รับงาน
+    await NotificationModel.sendNotification(
+      {
+        userId: driver._id,
+        varient: ENotificationVarient.INFO,
+        title: 'มีการเปลี่ยนแปลงเวลาเริ่มงาน',
+        message: [`งาน #${shipment.trackingNumber} ได้เปลี่ยนเวลาเริ่มงานเป็น ${fDateTime(newBookingDateTime)}`],
+      },
+      session,
+      true,
+      { navigation: ENavigationType.SHIPMENT, trackingNumber: shipment.trackingNumber },
+    )
+    console.log('4.....')
+
+    // แจ้งเตือนลูกค้า
+    await NotificationModel.sendNotification(
+      {
+        userId: customer._id,
+        varient: ENotificationVarient.INFO,
+        title: 'มีการเปลี่ยนแปลงเวลาเริ่มงาน',
+        message: [`งานของคุณ #${shipment.trackingNumber} ได้เปลี่ยนเวลาเริ่มงานเป็น ${fDateTime(newBookingDateTime)}`],
+        infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
+      },
+      session,
+    )
+    console.log('5.....')
+
+    console.log(`Booking time updated for accepted shipment ${shipmentId}. Notified driver and customer.`)
+  } else {
+    // ** กรณีที่ 2: ยังไม่มีคนขับรับงาน **
+    // 1. เคลียร์ Job เก่าใน Queue เพื่อป้องกันการแจ้งเตือนซ้ำซ้อน
+    await clearShipmentJobQueues(shipmentId)
+
+    // 2. ประกาศหางานใหม่ (เหมือนการสร้างงานใหม่)
+    await publishDriverMatchingShipment(undefined, session)
+
+    // (Optional) อาจจะเรียก shipmentNotify(shipmentId) โดยตรงก็ได้ หากต้องการให้งานนี้ถูก Notify ทันที
+    // await shipmentNotify(shipmentId);
+
+    console.log(`Booking time updated for pending shipment ${shipmentId}. Queues cleared and re-notified.`)
+  }
+
+  return shipment
 }

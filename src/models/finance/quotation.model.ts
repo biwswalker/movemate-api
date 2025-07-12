@@ -3,6 +3,7 @@ import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/type
 import mongooseAutoPopulate from 'mongoose-autopopulate'
 import { PaymentAmounts, Price, QuotationDetail } from './objects'
 import { User } from '@models/user.model'
+import { EQuotationStatus } from '@enums/shipments'
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()
@@ -29,6 +30,10 @@ export class Quotation extends PaymentAmounts {
   @Field(() => QuotationDetail)
   @Property()
   detail: QuotationDetail
+
+  @Field(() => EQuotationStatus, { defaultValue: EQuotationStatus.ACTIVE })
+  @Property({ default: EQuotationStatus.ACTIVE })
+  status: EQuotationStatus
 
   @Field()
   @Property({ default: Date.now })

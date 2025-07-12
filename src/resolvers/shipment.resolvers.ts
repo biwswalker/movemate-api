@@ -36,6 +36,7 @@ import { PricingCalculationMethodPayload } from '@payloads/pricing.payloads'
 import { AuditLogDecorator } from 'decorators/AuditLog.decorator'
 import { EAuditActions } from '@enums/audit'
 import { differenceInMinutes } from 'date-fns'
+import { handleUpdateBookingTime } from '@controllers/shipmentOperation'
 
 Aigle.mixin(lodash, {})
 
@@ -447,5 +448,35 @@ export default class ShipmentResolver {
       console.log(error)
       throw new GraphQLError('เกิดข้อผิดพลาดในการตรวจสอบเวลาขนส่ง')
     }
+  }
+
+  @Mutation(() => Boolean, { description: 'API สำหรับแก้ไขเวลาเริ่มงานขนส่ง' })
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN])) // อนุญาตทั้ง Admin และลูกค้า
+  async updateShipmentBookingTime(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('shipmentId') shipmentId: string,
+    @Arg('newBookingDateTime') newBookingDateTime: Date,
+  ): Promise<boolean> {
+    const { session, req } = ctx
+    const modifiedById = req.user_id
+    if (!shipmentId) {
+      throw new GraphQLError('กรุณาระบุเลขงานขนส่งที่ต้องการแก้ไข')
+    }
+
+    // ตรวจสอบว่าเวลาที่ส่งมาไม่ใช่อดีต
+    if (new Date(newBookingDateTime) < new Date()) {
+      throw new GraphQLError('ไม่สามารถตั้งเวลาเริ่มงานเป็นเวลาในอดีตได้')
+    }
+
+    const updatedShipment = await handleUpdateBookingTime(shipmentId, newBookingDateTime, modifiedById, session)
+
+    await session.commitTransaction()
+
+    if (updatedShipment.driverAcceptanceStatus !== EDriverAcceptanceStatus.ACCEPTED) {
+      await shipmentNotify(shipmentId)
+    }
+
+    return true
   }
 }

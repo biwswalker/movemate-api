@@ -72,7 +72,6 @@ registerEnumType(EShipmentStatusCriteria, {
   description: 'Shipment status criteria',
 })
 
-
 // Shipment Matching Criteria
 export enum EShipmentMatchingCriteria {
   // Other
@@ -86,11 +85,19 @@ registerEnumType(EShipmentMatchingCriteria, {
   description: 'Shipment matching status criteria',
 })
 
-
-
 enum EIssueType {
   DELAY = 'DELAY',
   DAMAGE = 'DAMAGE',
   MISSING = 'MISSING',
   OTHER = 'OTHER',
 }
+
+// Shipment Matching Criteria
+export enum EQuotationStatus {
+  ACTIVE = 'ACTIVE',
+  VOID = 'VOID',
+}
+registerEnumType(EQuotationStatus, {
+  name: 'EQuotationStatus',
+  description: 'Quotation status',
+})

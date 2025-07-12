@@ -1,4 +1,4 @@
-import { Field, Float, InputType } from 'type-graphql'
+import { Field, Float, InputType, Int } from 'type-graphql'
 import { FileInput } from './file.input'
 import { LocationInput } from './location.input'
 import { PODAddressInput } from './booking.input'
@@ -165,4 +165,28 @@ export class GetShipmentInput {
 
   @Field(() => [EShipmentStatus], { nullable: true })
   sortOrder?: EShipmentStatus[]
+}
+
+@InputType({ description: 'ข้อมูลรายรับและรายจ่ายสำหรับแต่ละรายการที่แก้ไข' })
+export class ModifiedShipmentItemInput {
+  @Field({ description: 'ชื่อรายการ' })
+  name: string
+
+  @Field(() => Int, { description: 'จำนวน' })
+  quantity: number
+
+  @Field(() => Float, { description: 'ราคาขายต่อหน่วย (สำหรับลูกค้า)' })
+  price: number
+
+  @Field(() => Float, { description: 'ต้นทุนต่อหน่วย (สำหรับภายใน)' })
+  cost: number
+}
+
+@InputType({ description: 'ข้อมูลทั้งหมดสำหรับการแก้ไขงานขนส่ง' })
+export class ModificationShipmentInput {
+  @Field(() => [ModifiedShipmentItemInput], { description: 'รายการทั้งหมดที่อัปเดตใหม่' })
+  items: ModifiedShipmentItemInput[]
+
+  @Field({ nullable: true, description: 'หมายเหตุเพิ่มเติมสำหรับการแก้ไข' })
+  modificationReason?: string
 }

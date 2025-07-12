@@ -25,6 +25,21 @@ import { DistanceCostPricing } from './distanceCostPricing.model'
 import { Destination, ShipmentPODAddress } from './shipment/objects'
 import { Quotation } from './finance/quotation.model'
 
+@ObjectType()
+export class Modified {
+  @Field()
+  @Property({ required: true })
+  reason: string
+
+  @Field(() => User)
+  @Property({ ref: 'User', required: true })
+  modifiedBy: Ref<User>
+
+  @Field()
+  @Property({ default: Date.now })
+  createdAt: Date
+}
+
 @plugin(mongooseAutoPopulate)
 @plugin(mongoosePagination)
 @plugin(mongooseAggregatePaginate)
@@ -178,7 +193,7 @@ export class Shipment extends TimeStamps {
 
   @Field(() => String, { nullable: true })
   @IsEnum(EShipmentCancellationReason)
-  @Property({ enum: EShipmentCancellationReason, required: false })
+  @Property({ required: false })
   cancellationReason: EShipmentCancellationReason
 
   @Field(() => String, { nullable: true })
@@ -216,6 +231,10 @@ export class Shipment extends TimeStamps {
   @Field(() => [Quotation], { defaultValue: [] })
   @Property({ ref: () => Quotation, autopopulate: true, default: [] })
   quotations: Ref<Quotation>[]
+
+  @Field(() => [Modified], { defaultValue: [], nullable: true })
+  @Property({ default: [], allowMixed: Severity.ALLOW })
+  modifieds: Modified[]
 
   static paginate: mongoose.PaginateModel<typeof Shipment>['paginate']
   static aggregatePaginate: mongoose.AggregatePaginateModel<typeof Shipment>['aggregatePaginate']
