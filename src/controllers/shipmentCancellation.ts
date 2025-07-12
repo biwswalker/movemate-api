@@ -1,10 +1,6 @@
-import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { EBillingReason, EBillingState, EBillingStatus } from '@enums/billing'
 import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
-import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
-import { FileInput } from '@inputs/file.input'
-import DriverDetailModel from '@models/driverDetail.model'
-import FileModel from '@models/file.model'
+import { EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
 import BillingModel from '@models/finance/billing.model'
 import { BillingReason } from '@models/finance/objects'
 import PaymentModel from '@models/finance/payment.model'
@@ -30,11 +26,14 @@ import Aigle from 'aigle'
 import { REPONSE_NAME } from 'constants/status'
 import { differenceInMinutes, format } from 'date-fns'
 import { GraphQLError } from 'graphql'
-import lodash from 'lodash'
+import lodash, { find, get } from 'lodash'
 import { ClientSession } from 'mongoose'
 import { publishDriverMatchingShipment } from './shipmentGet'
 import { EUserRole, EUserType } from '@enums/users'
 import { getAdminMenuNotificationCount } from '@resolvers/notification.resolvers'
+import { initialStepDefinition } from './steps'
+import { clearShipmentJobQueues } from './shipmentJobQueue'
+import { addCustomerCreditUsage } from './customer'
 
 Aigle.mixin(lodash, {})
 
@@ -216,11 +215,17 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
     if (!isCompletePayment && _latestPayment) {
       await PaymentModel.findByIdAndUpdate(_latestPayment._id, { status: EPaymentStatus.CANCELLED }, { session })
     }
+  } else {
+    // Credit logic
+    if (forCustomer > 0) {
+      
+      // ใช้ addCustomerCreditUsage โดยส่งค่าเป็นลบ เพื่อลด Credit Usage ลง
+      await addCustomerCreditUsage(lodash.get(_shipment, 'customer._id', ''), -forCustomer, session)
+    }
   }
-
   
-  const customerCancellationFee = latestQuotation.price.subTotal - forCustomer;
-
+  const customerCancellationFee = latestQuotation.price.subTotal - forCustomer
+  
   // Update Shipment final status
   await ShipmentModel.findByIdAndUpdate(
     _shipment._id,
@@ -235,7 +240,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
     },
     { session },
   )
-
+  
   const updatedBy = await UserModel.findById(userId)
   const isCancelledByAdmin = updatedBy.userRole === EUserRole.ADMIN
 
@@ -314,4 +319,81 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
   await publishDriverMatchingShipment(undefined, undefined, session)
 
   console.log(`Shipment ${shipmentId} is cancelled.`)
+}
+
+interface CancelledShipmentInput {
+  shipmentId: string
+  reason: string
+}
+
+export async function driverCancelledShipment(input: CancelledShipmentInput, session?: ClientSession) {
+  const { shipmentId, reason } = input
+  const cancellationTime = new Date()
+
+  const shipment = await ShipmentModel.findById(shipmentId).session(session)
+  if (!shipment) {
+    throw new GraphQLError('ไม่สามารถหาข้อมูลงานขนส่งได้', { extensions: { code: REPONSE_NAME.NOT_FOUND } })
+  }
+
+  // เงื่อนไขที่ 1: ตรวจสอบว่ายกเลิกก่อนเริ่มงานเกิน 180 นาทีหรือไม่
+  const minutesToBooking = differenceInMinutes(shipment.bookingDateTime, cancellationTime)
+  if (minutesToBooking <= 180) {
+    throw new GraphQLError('ไม่สามารถยกเลิกงานได้ เนื่องจากเหลือเวลาน้อยกว่า 180 นาทีก่อนเริ่มงาน', {
+      extensions: { code: REPONSE_NAME.BAD_REQUEST },
+    })
+  }
+
+  // เงื่อนไขที่ 2: ตรวจสอบว่างานยังไม่เริ่ม (ก่อนขั้นตอน CONFIRM_DATETIME)
+  const confirmDateTimeStep = find(shipment.steps, ['step', EStepDefinition.CONFIRM_DATETIME]) as
+    | StepDefinition
+    | undefined
+  if (confirmDateTimeStep && shipment.currentStepSeq > confirmDateTimeStep.seq) {
+    const currentStep = find(shipment.steps, ['seq', shipment.currentStepSeq]) as StepDefinition | undefined
+    throw new GraphQLError(`ไม่สามารถยกเลิกงานในขั้นตอนปัจจุบันได้ (${currentStep?.stepName})`, {
+      extensions: { code: REPONSE_NAME.BAD_REQUEST },
+    })
+  }
+
+  // Clear notification queue
+  await clearShipmentJobQueues(shipmentId)
+
+  // Update shipment
+  const _shipment = await ShipmentModel.findByIdAndUpdate(
+    shipmentId,
+    {
+      $unset: { driver: 1, agentDriver: 1 }, // ลบข้อมูลคนขับเดิมออก
+      status: EShipmentStatus.IDLE,
+      driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
+      cancellationReason: reason,
+      cancelledDate: cancellationTime,
+      currentStepSeq: 0,
+      steps: [],
+    },
+    { session },
+  )
+  await initialStepDefinition(shipmentId, true, session)
+
+  await NotificationModel.sendNotificationToAdmins(
+    {
+      varient: ENotificationVarient.WRANING,
+      title: 'คนขับยกเลิกงาน!',
+      message: [`คนขับได้ยกเลิกงานขนส่งหมายเลข '${_shipment.trackingNumber}' กรุณาจัดหาคนขับใหม่หรือดำเนินการแก้ไข`],
+      infoText: 'ดูรายละเอียดงาน',
+      infoLink: `/general/shipments/${_shipment.trackingNumber}`,
+    },
+    session,
+  )
+
+  const customerId = get(_shipment, 'customer._id', '')
+  await NotificationModel.sendNotification(
+    {
+      userId: customerId,
+      varient: ENotificationVarient.WRANING,
+      title: 'คนขับยกเลิกการจัดส่ง',
+      message: [`งานขนส่งหมายเลข ${_shipment.trackingNumber} ของคุณถูกยกเลิกโดยคนขับ`, `ระบบกำลังจัดหาคนขับใหม่ให้คุณ`],
+    },
+    session,
+  )
+
+  await publishDriverMatchingShipment(undefined, undefined, session)
 }

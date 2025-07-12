@@ -346,63 +346,6 @@ export async function finishJob(shipmentId: string, session?: ClientSession): Pr
   }
 }
 
-interface CancelledShipmentInput {
-  shipmentId: string
-  reason: string
-}
-
-export async function driverCancelledShipment(input: CancelledShipmentInput, session?: ClientSession) {
-  const { shipmentId, reason } = input
-  const today = new Date()
-
-  const _shipment = await ShipmentModel.findByIdAndUpdate(
-    shipmentId,
-    {
-      status: EShipmentStatus.IDLE,
-      driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
-      driver: undefined,
-      cancellationReason: reason,
-      cancelledDate: today,
-      currentStepSeq: 0,
-      steps: [],
-    },
-    { session },
-  )
-  await initialStepDefinition(shipmentId, true, session)
-
-  await NotificationModel.sendNotificationToAdmins(
-    {
-      varient: ENotificationVarient.WRANING,
-      title: 'คนขับยกเลิกงาน!',
-      message: [`คนขับได้ยกเลิกงานขนส่งหมายเลข '${_shipment.trackingNumber}' กรุณาจัดหาคนขับใหม่หรือดำเนินการแก้ไข`],
-      infoText: 'ดูรายละเอียดงาน',
-      infoLink: `/general/shipments/${_shipment.trackingNumber}`,
-    },
-    session,
-  )
-
-  const customerId = get(_shipment, 'customer._id', '')
-  await NotificationModel.sendNotification(
-    {
-      userId: customerId,
-      varient: ENotificationVarient.WRANING,
-      title: 'คนขับยกเลิกการจัดส่ง',
-      message: [`งานขนส่งหมายเลข ${_shipment.trackingNumber} ของคุณถูกยกเลิกโดยคนขับ`, `ระบบกำลังจัดหาคนขับใหม่ให้คุณ`],
-    },
-    session,
-  )
-
-  /**
-   * Add check remaining time is enough to get no
-   * Add to JOB notification
-   * TODO
-   */
-
-  /**
-   * Add Transaction for driver for history
-   */
-}
-
 /**
  * Revert Rejected Shipment
  * @param shipmentId

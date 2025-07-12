@@ -1,12 +1,12 @@
 import { GraphQLContext } from '@configs/graphQL.config'
-import { driverCancelledShipment } from '@controllers/shipmentOperation'
 import { EUserRole } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
 import { WithTransaction } from '@middlewares/RetryTransaction'
 import { Arg, Ctx, Mutation, Resolver, UseMiddleware } from 'type-graphql'
-import { getAdminMenuNotificationCount } from './notification.resolvers'
 import { GraphQLError } from 'graphql'
-import { cancelledShipment } from '@controllers/shipmentCancellation'
+import { cancelledShipment, driverCancelledShipment } from '@controllers/shipmentCancellation'
+import { shipmentNotify } from '@controllers/shipmentNotification'
+import { clearShipmentJobQueues } from '@controllers/shipmentJobQueue'
 
 @Resolver()
 export default class CancellationResolver {
@@ -22,6 +22,7 @@ export default class CancellationResolver {
     const actionUserId = ctx.req.user_id
     // Handle Refund
     await cancelledShipment({ shipmentId, reason }, actionUserId, session)
+    await clearShipmentJobQueues(shipmentId)
     return true
   }
 
@@ -40,8 +41,10 @@ export default class CancellationResolver {
     // Handle make new Matching
     await driverCancelledShipment({ shipmentId, reason }, session)
 
-    // Sent admin noti count updates
-    await getAdminMenuNotificationCount(session)
+    if (session) {
+      await session.commitTransaction()
+    }
+    await shipmentNotify(shipmentId)
     return true
   }
 }

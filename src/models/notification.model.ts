@@ -178,8 +178,10 @@ export class Notification extends TimeStamps {
           return res
         })
         .catch((error) => {
-          console.log(JSON.stringify(error))
-          throw error
+          console.error(JSON.stringify(error))
+          // TODO: Resolve this
+          // เคสเมื่อ driver logout และ fcm token ไม่ถูกเคลีย/หรือเคสอื่นๆ
+          // throw error
         })
     }
   }

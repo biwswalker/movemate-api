@@ -39,6 +39,7 @@ import {
   getAcceptedShipmentForDriverQuery,
   getNewAllAvailableShipmentForDriver,
   getNewAllAvailableShipmentForDriverQuery,
+  publishDriverMatchingShipment,
 } from '@controllers/shipmentGet'
 import { addStep, finishJob, nextStep, podSent } from '@controllers/shipmentOperation'
 import BillingModel from '@models/finance/billing.model'
@@ -48,6 +49,7 @@ import { generateBillingReceipt } from '@controllers/billingReceipt'
 import { AuditLogDecorator } from 'decorators/AuditLog.decorator'
 import { EAuditActions } from '@enums/audit'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
+import { clearShipmentJobQueues } from '@controllers/shipmentJobQueue'
 
 @Resolver()
 export default class MatchingResolver {
@@ -327,10 +329,13 @@ export default class MatchingResolver {
         }
       }
 
-      const newShipments = await getNewAllAvailableShipmentForDriver(undefined, undefined, session)
-      await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
+      // Clear Shipment Notification queue
+      await clearShipmentJobQueues(shipmentId)
 
-      // Sent admin noti count updates
+      // Update shipment list in Driver app
+      await publishDriverMatchingShipment(undefined, undefined, session)
+
+      // Sent admin notifcation count updates
       await getAdminMenuNotificationCount(session)
 
       return true

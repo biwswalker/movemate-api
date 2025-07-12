@@ -45,6 +45,7 @@ import { CreateAdjustmentNoteInput } from '@inputs/billingAdjustmentNote.input'
 import { createAdjustmentNote } from '@controllers/billingAdjustment'
 import NotificationModel, { ENotificationVarient, Notification } from '@models/notification.model'
 import { Invoice } from '@models/finance/invoice.model'
+import { updateCustomerCreditUsageBalance } from '@controllers/customer'
 
 @Resolver()
 export default class BillingResolver {
@@ -347,7 +348,8 @@ export default class BillingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.ADMIN]), RetryTransactionMiddleware)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async approvalBillingPayment(
     @Ctx() ctx: GraphQLContext,
     @Arg('data') data: ApprovalBillingPaymentInput,
@@ -412,12 +414,19 @@ export default class BillingResolver {
             },
             { session },
           )
+
+          // End Session transaction
+          await session.commitTransaction()
+          console.log('[Start] shipmentNotify process')
           await shipmentNotify(_shipment._id)
+          console.log('[End] shipmentNotify process')
         }
       }
-
+      
       // Update count admin
+      console.log('[Pre Endding] approvalBillingPayment')
       await getAdminMenuNotificationCount(session)
+      console.log('[Endding] approvalBillingPayment')
       return true
     } else if (data.result === 'reject') {
       await markBillingAsRejected(
@@ -458,6 +467,13 @@ export default class BillingResolver {
     if (_user) {
       const _invoice = _billing.invoice as Invoice | undefined
       const typeText = adjustmentNote.adjustmentType === EAdjustmentNoteType.CREDIT_NOTE ? 'ใบเพิ่มหนี้' : 'ใบลดหนี้'
+
+      // Update user credit usage
+      const amountToAdjustCredit =
+        adjustmentNote.adjustmentType === EAdjustmentNoteType.CREDIT_NOTE
+          ? -adjustmentNote.adjustmentSubTotal // ใบลดหนี้ (Credit Note) -> ลดหนี้ (ใช้ค่าลบ)
+          : adjustmentNote.adjustmentSubTotal // ใบเพิ่มหนี้ (Debit Note) -> เพิ่มหนี้ (ใช้ค่าบวก)
+      await updateCustomerCreditUsageBalance(_user._id.toString(), amountToAdjustCredit, session)
 
       if (_invoice) {
         await NotificationModel.sendNotification(

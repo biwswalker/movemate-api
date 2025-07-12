@@ -106,3 +106,17 @@ export default function initializeShipmentJob() {
     done()
   })
 }
+
+// ฟังก์ชัน Helper สำหรับเคลียร์ Queue
+export async function clearShipmentJobQueues(shipmentId: string): Promise<void> {
+  const queues = [shipmentNotifyQueue, cancelShipmentQueue];
+  for (const queue of queues) {
+    const jobs = await queue.getJobs(['waiting', 'active', 'delayed']);
+    for (const job of jobs) {
+      if (job.data.shipmentId === shipmentId) {
+        await job.remove();
+        console.log(`[Queue] Removed job ${job.id} for shipment ${shipmentId} from ${queue.name} queue.`);
+      }
+    }
+  }
+}
