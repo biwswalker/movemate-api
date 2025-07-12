@@ -2,11 +2,13 @@ import { GraphQLContext } from '@configs/graphQL.config'
 import { EUserRole } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
 import { WithTransaction } from '@middlewares/RetryTransaction'
-import { Arg, Ctx, Mutation, Resolver, UseMiddleware } from 'type-graphql'
+import { Arg, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { GraphQLError } from 'graphql'
 import { cancelledShipment, driverCancelledShipment } from '@controllers/shipmentCancellation'
 import { shipmentNotify } from '@controllers/shipmentNotification'
 import { clearShipmentJobQueues } from '@controllers/shipmentJobQueue'
+import { CancellationPreview } from '@payloads/cancellation.payload'
+import { getShipmentCancellationPreview } from '@controllers/shipmentOperation'
 
 @Resolver()
 export default class CancellationResolver {
@@ -46,5 +48,15 @@ export default class CancellationResolver {
     }
     await shipmentNotify(shipmentId)
     return true
+  }
+
+  @Query(() => CancellationPreview)
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN]))
+  async getShipmentCancellationPreview(@Arg('shipmentId') shipmentId: string): Promise<CancellationPreview> {
+    if (!shipmentId) {
+      throw new GraphQLError('กรุณาระบุเลขงานขนส่ง')
+    }
+    const previewData = await getShipmentCancellationPreview(shipmentId)
+    return previewData
   }
 }

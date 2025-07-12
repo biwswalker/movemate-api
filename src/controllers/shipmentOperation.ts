@@ -1,16 +1,11 @@
-import pubsub, { SHIPMENTS } from '@configs/pubsub'
-import { EBillingReason, EBillingState, EBillingStatus } from '@enums/billing'
-import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
+import { EPaymentMethod } from '@enums/payments'
 import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
 import { FileInput } from '@inputs/file.input'
 import DriverDetailModel from '@models/driverDetail.model'
 import FileModel from '@models/file.model'
-import BillingModel from '@models/finance/billing.model'
-import { BillingReason } from '@models/finance/objects'
-import PaymentModel from '@models/finance/payment.model'
 import { Quotation } from '@models/finance/quotation.model'
-import NotificationModel, { ENavigationType, ENotificationVarient } from '@models/notification.model'
-import ShipmentModel, { Shipment } from '@models/shipment.model'
+import NotificationModel, { ENotificationVarient } from '@models/notification.model'
+import ShipmentModel from '@models/shipment.model'
 import StepDefinitionModel, {
   EStepDefinition,
   EStepDefinitionName,
@@ -25,31 +20,13 @@ import TransactionModel, {
 } from '@models/transaction.model'
 import UserModel from '@models/user.model'
 import { VehicleType } from '@models/vehicleType.model'
-import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { REPONSE_NAME } from 'constants/status'
-import { differenceInMinutes, format } from 'date-fns'
+import { differenceInMinutes } from 'date-fns'
 import { GraphQLError } from 'graphql'
-import lodash, {
-  filter,
-  find,
-  get,
-  head,
-  includes,
-  isArray,
-  isEmpty,
-  isEqual,
-  last,
-  map,
-  reduce,
-  sortBy,
-  sum,
-  tail,
-} from 'lodash'
+import lodash, { filter, find, get, head, includes, isEmpty, isEqual, last, map, reduce, sortBy, tail } from 'lodash'
 import { ClientSession } from 'mongoose'
-import { getNewAllAvailableShipmentForDriver } from './shipmentGet'
-import { initialStepDefinition } from './steps'
-import { EUserRole } from '@enums/users'
+import { CancellationPolicyDetail, CancellationPreview } from '@payloads/cancellation.payload'
 
 Aigle.mixin(lodash, {})
 
@@ -420,4 +397,71 @@ export async function revertShipmentRejection(
 
   // 6. ลบ step ที่ไม่ต้องการออกจาก collection
   await StepDefinitionModel.deleteMany({ _id: { $in: stepIdsToRemove } }, { session })
+}
+
+/**
+ * CANCELLATION PREVIEW
+ * @param shipmentId
+ * @returns
+ */
+export async function getShipmentCancellationPreview(shipmentId: string): Promise<CancellationPreview> {
+  const shipment = await ShipmentModel.findById(shipmentId).populate('vehicleId')
+  if (!shipment) {
+    throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
+  }
+
+  const latestQuotation = last(sortBy(shipment.quotations, ['createdAt'])) as Quotation | undefined
+  if (!latestQuotation) {
+    throw new GraphQLError('ไม่พบข้อมูลใบเสนอราคา')
+  }
+
+  const vehicle = shipment.vehicleId as VehicleType
+  const isFourWheeler = vehicle.type === '4W'
+  const cancellationTime = new Date()
+  const minutesToBooking = differenceInMinutes(shipment.bookingDateTime, cancellationTime)
+
+  // --- กำหนดเงื่อนไขและนโยบาย ---
+  const policy: CancellationPolicyDetail[] = isFourWheeler
+    ? [
+        { condition: 'ยกเลิกก่อนเริ่มงานมากกว่า 120 นาที', feeDescription: 'ไม่มีค่าใช้จ่าย' },
+        { condition: 'ยกเลิกระหว่าง 40 - 120 นาที', feeDescription: 'คิดค่าใช้จ่าย 50%' },
+        { condition: 'ยกเลิกน้อยกว่า 40 นาที', feeDescription: 'คิดค่าใช้จ่าย 100%' },
+      ]
+    : [
+        { condition: 'ยกเลิกก่อนเริ่มงานมากกว่า 180 นาที', feeDescription: 'ไม่มีค่าใช้จ่าย' },
+        { condition: 'ยกเลิกระหว่าง 90 - 180 นาที', feeDescription: 'คิดค่าใช้จ่าย 50%' },
+        { condition: 'ยกเลิกน้อยกว่า 90 นาที', feeDescription: 'คิดค่าใช้จ่าย 100%' },
+      ]
+
+  // --- คำนวณค่าปรับและยอดคืนตามเงื่อนไขปัจจุบัน ---
+  const freeThreshold = isFourWheeler ? 120 : 180
+  const halfChargeThreshold = isFourWheeler ? 40 : 90
+  const totalCharge = latestQuotation.price.total
+
+  let cancellationFee = 0
+  let finalChargeDescription = ''
+
+  if (minutesToBooking > freeThreshold) {
+    cancellationFee = 0
+    finalChargeDescription = 'คุณอยู่ในเงื่อนไขยกเลิกฟรี ไม่มีค่าใช้จ่าย ตามเงื่อนไข'
+  } else if (minutesToBooking > halfChargeThreshold) {
+    cancellationFee = totalCharge * 0.5
+    finalChargeDescription = 'คุณจะถูกคิดค่าใช้จ่าย 50% ของค่าขนส่ง ตามเงื่อนไข'
+  } else {
+    cancellationFee = totalCharge
+    finalChargeDescription = 'คุณจะถูกคิดค่าใช้จ่ายเต็มจำนวน 100% ตามเงื่อนไข'
+  }
+
+  // สำหรับงานเงินสดที่จ่ายแล้ว ต้องคำนวณยอดคืน
+  // สมมติว่าถ้าจ่ายเงินสดคือจ่ายเต็มจำนวนแล้ว
+  const refundAmount = shipment.paymentMethod === EPaymentMethod.CASH ? Math.max(0, totalCharge - cancellationFee) : 0 // งานเครดิตไม่มีการคืนเงินสด แต่จะปรับยอดในบิล
+
+  return {
+    cancellationFee: cancellationFee,
+    refundAmount: refundAmount,
+    finalChargeDescription: finalChargeDescription,
+    policyDetails: policy,
+    isAllowed: true, // ในตัวอย่างนี้อนุญาตให้ยกเลิกได้เสมอ (สามารถเพิ่มเงื่อนไขตรวจสอบ Step ได้)
+    reasonIfNotAllowed: null,
+  }
 }
