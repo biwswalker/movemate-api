@@ -11,6 +11,7 @@ import lodash, {
   groupBy,
   head,
   includes,
+  isEmpty,
   isEqual,
   last,
   map,
@@ -46,7 +47,7 @@ import BillingModel from '@models/finance/billing.model'
 import { EBillingReason, EBillingState, EBillingStatus } from '@enums/billing'
 import ShipmentModel from '@models/shipment.model'
 import { initialStepDefinition } from './steps'
-import NotificationModel, { ENotificationVarient } from '@models/notification.model'
+import NotificationModel, { ENavigationType, ENotificationVarient } from '@models/notification.model'
 import addEmailQueue from '@utils/email.utils'
 import { UpdateShipmentInput } from '@inputs/booking.input'
 import { fCurrency } from '@utils/formatNumber'
@@ -61,6 +62,13 @@ import StepDefinitionModel, {
   EStepStatus,
   StepDefinition,
 } from '@models/shipmentStepDefinition.model'
+import TransactionModel, {
+  ERefType,
+  ETransactionOwner,
+  ETransactionStatus,
+  ETransactionType,
+} from '@models/transaction.model'
+import DriverDetailModel from '@models/driverDetail.model'
 
 Aigle.mixin(lodash, {})
 
@@ -384,7 +392,7 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
 export async function updateShipment(data: UpdateShipmentInput, adminId: string, session?: ClientSession) {
   const { isRounded, locations, vehicleTypeId, serviceIds, discountId, shipmentId, podDetail, quotation } = data
 
-  const _shipment = await ShipmentModel.findById(shipmentId).populate('customer').session(session)
+  const _shipment = await ShipmentModel.findById(shipmentId).session(session)
   if (!_shipment) throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
 
   const _customer = _shipment.customer as User | undefined
@@ -427,7 +435,7 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
     }
   } else {
     // ** LOGIC สำหรับงานเงินสด **
-    const _cashBilling = await BillingModel.findOne({ billingNumber: _shipment.trackingNumber }).populate('payments')
+    const _cashBilling = await BillingModel.findOne({ billingNumber: _shipment.trackingNumber }).session(session)
     const _lastPayment = last(sortBy(_cashBilling.payments as Payment[], 'createdAt'))
 
     if (_lastPayment && _lastPayment.status === EPaymentStatus.COMPLETE) {
@@ -467,6 +475,64 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
           },
           { session },
         )
+
+        /**
+         * ========================================
+         * ============ TRANSACTIONS ==============
+         * === Calculate WHT 1% for driver here ===
+         * ========================================
+         */
+        const costDifference = _newQuotationData.cost.acturePrice
+        if (costDifference > 0) {
+          const cost = _newQuotation?.cost
+          const isAgentDriver = !isEmpty(_shipment?.agentDriver)
+          const agentDriverId = get(_shipment, 'agentDriver._id', '')
+          const driverId = get(_shipment, 'driver._id', '')
+          const ownerDriverId = isAgentDriver ? agentDriverId : driverId
+
+          const driverOwner = await UserModel.findById(ownerDriverId).session(session)
+          if (isAgentDriver && driverId) {
+            /**
+             * Update employee transaction
+             */
+            const employeeTransaction = new TransactionModel({
+              amountTax: 0, // WHT
+              amountBeforeTax: 0,
+              amount: 0,
+              ownerId: get(this, 'driver._id', ''),
+              ownerType: ETransactionOwner.BUSINESS_DRIVER,
+              description: `${_shipment?.trackingNumber} งานจาก ${driverOwner.fullname}`,
+              refId: _shipment?._id,
+              refType: ERefType.SHIPMENT,
+              transactionType: ETransactionType.INCOME,
+              status: ETransactionStatus.COMPLETE,
+            })
+            await employeeTransaction.save({ session })
+          }
+          /**
+           * Add transaction for shipment driver owner
+           */
+          const driverTransaction = new TransactionModel({
+            amountTax: 0, // WHT
+            amountBeforeTax: Math.abs(_newQuotationData.cost?.acturePrice || 0),
+            amount: Math.abs(_newQuotationData.cost?.acturePrice || 0),
+            ownerId: ownerDriverId,
+            ownerType: ETransactionOwner.DRIVER,
+            description: `ค่าใช้จ่ายเพิ่มเติมจาก #${_shipment.trackingNumber}`,
+            refId: _shipment?._id,
+            refType: ERefType.SHIPMENT,
+            transactionType: ETransactionType.INCOME,
+            status: ETransactionStatus.PENDING,
+          })
+          await driverTransaction.save({ session })
+
+          // Update balance
+          if (driverOwner) {
+            const driverOwnerId = get(driverOwner, 'driverDetail._id', '')
+            const driverDetail = await DriverDetailModel.findById(driverOwnerId)
+            await driverDetail.updateBalance(session)
+          }
+        }
       }
     } else {
       // ** กรณีที่ยังไม่ได้จ่าย หรือจ่ายแล้วแต่ไม่สำเร็จ: ยกเลิกของเก่า สร้างใหม่เต็มจำนวน **
@@ -534,7 +600,7 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
       }
       return service._id
     } else {
-      const _newService = await AdditionalServiceCostPricingModel.findById(serviceId) //.session(session)
+      const _newService = await AdditionalServiceCostPricingModel.findById(serviceId).session(session)
       if (_newService) {
         const additionalService = _newService.additionalService as AdditionalService
         if (additionalService.name === VALUES.POD) {
@@ -545,16 +611,20 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
           price: _newService.price,
           reference: _newService._id,
         })
-        await _shipmentAddtionalService.save()
+        await _shipmentAddtionalService.save({ session })
         return _shipmentAddtionalService._id
       }
       return ''
     }
   })
 
-  await DirectionsResultModel.findByIdAndUpdate(get(_shipment, 'route._id', ''), {
-    rawData: JSON.stringify(_calculated.routes),
-  })
+  await DirectionsResultModel.findByIdAndUpdate(
+    get(_shipment, 'route._id', ''),
+    {
+      rawData: JSON.stringify(_calculated.routes),
+    },
+    { session },
+  )
 
   const _updatedShipment = await ShipmentModel.findByIdAndUpdate(
     _shipment._id,
@@ -731,15 +801,53 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
     }
   }
 
-  // Noti
-  await NotificationModel.sendNotification({
-    userId: _customer?._id,
-    varient: ENotificationVarient.INFO,
-    title: 'การจองของท่านมีการเปลี่ยนแปลง',
-    message: [
-      `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${_shipment.trackingNumber} มีการเปลี่ยนแปลงโปรดตรวจสอบ หากผิดข้อผิดพลาดกรุณาแจ้งผู้ดูแล`,
-    ],
-    infoText: 'ดูงานขนส่ง',
-    infoLink: `/main/tracking?tracking_number=${_shipment.trackingNumber}`,
-  })
+  // Notification
+  await NotificationModel.sendNotification(
+    {
+      userId: _customer?._id,
+      varient: ENotificationVarient.INFO,
+      title: 'การจองของท่านมีการเปลี่ยนแปลง',
+      message: [
+        `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${_shipment.trackingNumber} มีการเปลี่ยนแปลงโปรดตรวจสอบ หากผิดข้อผิดพลาดกรุณาแจ้งผู้ดูแล`,
+      ],
+      infoText: 'ดูงานขนส่ง',
+      infoLink: `/main/tracking?tracking_number=${_shipment.trackingNumber}`,
+    },
+    session,
+  )
+
+  if (_shipment.status === EShipmentStatus.PROGRESSING && (_shipment.driver || _shipment.agentDriver)) {
+    const agentDriverId = get(_shipment, 'agentDriver._id', '')
+    if (agentDriverId) {
+      await NotificationModel.sendNotification(
+        {
+          userId: agentDriverId,
+          varient: ENotificationVarient.INFO,
+          title: 'งานขนส่งมีการเปลี่ยนแปลง',
+          message: [
+            `เราขอแจ้งให้ท่าทราบว่างานขนส่งหมายเลข ${_shipment.trackingNumber} มีการเปลี่ยนแปลงโปรดตรวจสอบ หากผิดข้อผิดพลาดกรุณาแจ้งผู้ดูแล`,
+          ],
+        },
+        session,
+        true,
+        { navigation: ENavigationType.SHIPMENT, trackingNumber: _shipment.trackingNumber },
+      )
+    }
+    const driverId = get(_shipment, 'driver._id', '')
+    if (driverId) {
+      await NotificationModel.sendNotification(
+        {
+          userId: driverId,
+          varient: ENotificationVarient.INFO,
+          title: 'งานขนส่งมีการเปลี่ยนแปลง',
+          message: [
+            `เราขอแจ้งให้ท่าทราบว่างานขนส่งหมายเลข ${_shipment.trackingNumber} มีการเปลี่ยนแปลงโปรดตรวจสอบ หากผิดข้อผิดพลาดกรุณาแจ้งผู้ดูแล`,
+          ],
+        },
+        session,
+        true,
+        { navigation: ENavigationType.SHIPMENT, trackingNumber: _shipment.trackingNumber },
+      )
+    }
+  }
 }

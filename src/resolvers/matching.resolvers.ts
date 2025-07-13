@@ -450,15 +450,15 @@ export default class MatchingResolver {
         const today = new Date()
         const generateMonth = format(today, 'yyMM')
         const _receiptNumber = await generateTrackingNumber(`RE${generateMonth}`, 'receipt', 3)
+        const _quotation = _billing.quotation
 
-        const amount = _billing.amount
         const _receipt = new ReceiptModel({
           receiptNumber: _receiptNumber,
           receiptDate: today,
           document: null,
-          subTotal: amount.subTotal,
-          total: amount.total,
-          tax: amount.tax,
+          subTotal: _quotation.subTotal,
+          total: _quotation.total,
+          tax: _quotation.tax,
         })
         await _receipt.save({ session })
 
@@ -468,7 +468,7 @@ export default class MatchingResolver {
          * generate receipt
          */
         const documentId = await generateBillingReceipt(_billing._id, true, session)
-        await ReceiptModel.findByIdAndUpdate(_receipt._id, { document: documentId })
+        await ReceiptModel.findByIdAndUpdate(_receipt._id, { document: documentId }, { session })
       }
     }
 

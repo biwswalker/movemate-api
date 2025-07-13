@@ -27,6 +27,7 @@ import { generateBillingReceipt } from './billingReceipt'
 import { MakePayBillingInput } from '@inputs/payment.input'
 import FileModel from '@models/file.model'
 import { revertShipmentRejection } from './shipmentOperation'
+import { EShipmentStatus } from '@enums/shipments'
 
 Aigle.mixin(lodash, {})
 
@@ -43,7 +44,7 @@ export async function markBillingAsPaid(
   session?: ClientSession | null,
 ) {
   const { billingId, paymentId, imageEvidenceId, paymentDate } = input
-  const _billing = await BillingModel.findById(billingId).session(session).lean()
+  const _billing = await BillingModel.findById(billingId).session(session)
   const _payment = await PaymentModel.findById(paymentId).session(session)
 
   if (!_billing || !_payment) {
@@ -98,10 +99,11 @@ export async function markBillingAsPaid(
    * Only credit customer
    */
   let _receiptId = undefined
+  const receiptLength = (_billing.receipts || []).length
   const today = new Date()
-  if (_billing.paymentMethod === EPaymentMethod.CREDIT) {
+  if (_billing.paymentMethod === EPaymentMethod.CREDIT || receiptLength > 0) {
     /**
-     * สร้าง Receipt สำหรับ Credit payment
+     * สร้าง Receipt สำหรับ Credit payment หรือการชำระเงินสดที่ออกใบเสร็จแล้
      */
     const generateMonth = format(today, 'yyMM')
     const _receiptNumber = await generateTrackingNumber(`RE${generateMonth}`, 'receipt', 3)
@@ -137,7 +139,9 @@ export async function markBillingAsPaid(
    */
   if (_billing.paymentMethod === EPaymentMethod.CASH) {
     await Aigle.forEach(_billing.shipments as Shipment[], async (shipment) => {
-      await markShipmentVerified({ result: 'approve', shipmentId: shipment._id }, adminId, session)
+      if (shipment.status === EShipmentStatus.IDLE) {
+        await markShipmentVerified({ result: 'approve', shipmentId: shipment._id }, adminId, session)
+      }
     })
   } else {
     /**
@@ -214,7 +218,9 @@ export async function markBillingAsRejected(
        * - ถ้า Reject addditional pay จะเข้า process การคืนเงิน driver เลยไหมหรือยังไง
        *
        */
-      await markShipmentVerified({ result: 'reject', shipmentId: shipment._id, reason }, adminId, session)
+      if (shipment.status === EShipmentStatus.IDLE) {
+        await markShipmentVerified({ result: 'reject', shipmentId: shipment._id, reason }, adminId, session)
+      }
     })
   }
 }

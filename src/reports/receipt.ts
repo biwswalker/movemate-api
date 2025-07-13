@@ -4,7 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { fCurrency } from '@utils/formatNumber'
 import { fDate } from '@utils/formatTime'
-import ShipmentModel, { Shipment } from '@models/shipment.model'
+import { Shipment } from '@models/shipment.model'
 import { VehicleType } from '@models/vehicleType.model'
 import { HeaderComponent } from './components/header'
 import { ReceiptFooterComponent } from './components/footer'
@@ -25,11 +25,7 @@ interface GenerateReceiptResponse {
   document: BillingDocument
 }
 
-export async function generateReceipt(
-  billing: Billing,
-  filename?: string,
-  session?: ClientSession,
-): Promise<GenerateReceiptResponse> {
+export async function generateReceipt(billing: Billing, session?: ClientSession): Promise<GenerateReceiptResponse> {
   const isTaxIncluded = billing.amount.tax > 0
   const _receipts = billing.receipts as Receipt[]
   const _receipt = last(sortBy(_receipts, 'createdAt')) as Receipt | undefined
@@ -42,18 +38,23 @@ export async function generateReceipt(
 
   let isAdditionalPaid = false
   if (billing.paymentMethod === EPaymentMethod.CASH) {
-    const _shipment = await ShipmentModel.findOne({
-      trackingNumber: billing.billingNumber,
-      paymentMethod: EPaymentMethod.CASH,
-    })
-    if (_shipment) {
-      if (_shipment.status === EShipmentStatus.DELIVERED) {
-        isAdditionalPaid = true
-      }
+    const _receiptsLength = _receipts.length || 0
+    if (_receiptsLength > 1) {
+      isAdditionalPaid = true
     }
+    //)
+    // const _shipment = await ShipmentModel.findOne({
+    //   trackingNumber: billing.billingNumber,
+    //   paymentMethod: EPaymentMethod.CASH,
+    // })
+    // if (_shipment) {
+    //   if (_shipment.status === EShipmentStatus.DELIVERED) {
+    //     isAdditionalPaid = true
+    //   }
+    // }
   }
 
-  const fileName = filename ? filename : `receipt_${_receipt.receiptNumber}.pdf`
+  const fileName = `receipt_${_receipt.receiptNumber}.pdf`
   const filePath = path.join(__dirname, '..', '..', 'generated/receipt', fileName)
 
   const doc = new PDFDocument({

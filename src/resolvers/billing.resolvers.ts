@@ -184,7 +184,7 @@ export default class BillingResolver {
     const session = ctx.session
     const adminId = ctx.req.user_id
     const _billing = await BillingModel.findById(billingId).session(session)
-    const _document = await BillingDocumentModel.findByIdAndUpdate(
+    await BillingDocumentModel.findByIdAndUpdate(
       documentId,
       {
         receviedWHTDocumentDate: new Date(),
@@ -193,7 +193,7 @@ export default class BillingResolver {
       { session, new: true },
     )
     // Regenerate receipt
-    await generateReceipt(_billing, _document.filename, session)
+    await generateReceipt(_billing, session)
     return true
   }
 
@@ -342,8 +342,7 @@ export default class BillingResolver {
     @Arg('documentId') documentId: string,
   ): Promise<boolean> {
     const _billing = await BillingModel.findById(billingId)
-    const _document = await BillingDocumentModel.findById(documentId)
-    await generateReceipt(_billing, _document.filename)
+    await generateReceipt(_billing)
     return true
   }
 
@@ -422,7 +421,7 @@ export default class BillingResolver {
           console.log('[End] shipmentNotify process')
         }
       }
-      
+
       // Update count admin
       console.log('[Pre Endding] approvalBillingPayment')
       await getAdminMenuNotificationCount(session)

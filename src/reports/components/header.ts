@@ -92,113 +92,113 @@ export function HeaderComponent(
     .lineTo(maxWidth, doc.y + 3)
     .stroke()
   doc.moveDown(0.5)
-  if (isCreditPayment) {
-    if (type === 'invoice') {
-      const _invoice = billing.invoice as Invoice | undefined
-      // 1
-      doc.fontSize(8)
-      doc
-        .font(FONTS.SARABUN_MEDIUM)
-        .text('Invoice No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-      doc.font(FONTS.SARABUN_LIGHT).text(_invoice.invoiceNumber, 499, doc.y - 10, { align: 'left' })
-
-      // 2
-      const issueInBEDateMonth = fDate(_invoice.invoiceDate, 'dd/MM')
-      const issueInBEYear = toNumber(fDate(_invoice.invoiceDate, 'yyyy')) + 543
-      doc.moveDown(0.3)
-      doc
-        .font(FONTS.SARABUN_MEDIUM)
-        .text('Date :', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-      doc.font(FONTS.SARABUN_LIGHT).text(`${issueInBEDateMonth}/${issueInBEYear}`, 499, doc.y - 10, { align: 'left' })
-
-      // 3
-      const duedateInBEDateMonth = fDate(billing.paymentDueDate, 'dd/MM')
-      const duedateInBEYear = toNumber(fDate(billing.paymentDueDate, 'yyyy')) + 543
-      doc.moveDown(0.3)
-      doc
-        .font(FONTS.SARABUN_MEDIUM)
-        .text('Due Date :', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-      doc
-        .font(FONTS.SARABUN_LIGHT)
-        .text(`${duedateInBEDateMonth}/${duedateInBEYear}`, 499, doc.y - 10, { align: 'left' })
-    } else if (type === 'receipt') {
-      // ---
-      const _receipts = billing.receipts as Receipt[]
-      const _latestReceipt = last(sortBy(_receipts, 'createdAt')) as Receipt | undefined
-      const _invoice = billing.invoice as Invoice | undefined
-
-      doc.fontSize(8)
-      doc
-        .font(FONTS.SARABUN_MEDIUM)
-        .text('Receipt No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-      doc.font(FONTS.SARABUN_LIGHT).text(_latestReceipt.receiptNumber, 499, doc.y - 10, { align: 'left' })
-
-      // ---
-      doc.moveDown(0.3)
-      doc
-        .font(FONTS.SARABUN_MEDIUM)
-        .text('Invoice No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-      doc.font(FONTS.SARABUN_LIGHT).text(_invoice.invoiceNumber, 499, doc.y - 10, { align: 'left' })
-
-      // ---
-      const receiptInBEDateMonth = fDate(_latestReceipt.receiptDate, 'dd/MM')
-      const receiptInBEYear = toNumber(fDate(_latestReceipt.receiptDate, 'yyyy')) + 543
-      doc.moveDown(0.3)
-      doc
-        .font(FONTS.SARABUN_MEDIUM)
-        .text('Date :', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-      doc
-        .font(FONTS.SARABUN_LIGHT)
-        .text(`${receiptInBEDateMonth}/${receiptInBEYear}`, 499, doc.y - 10, { align: 'left' })
-      // Doc Number React
-    } else if (type === 'creditnote' || type === 'debitnote') {
-      // ---
-      const _adjistmentNotes = billing.adjustmentNotes as BillingAdjustmentNote[]
-      const _adjistmentNote = (
-        targetId
-          ? find(_adjistmentNotes, (item) => item._id.toString() === targetId.toString())
-          : last(sortBy(_adjistmentNotes, 'issueDate'))
-      ) as BillingAdjustmentNote | undefined
-
-      doc.fontSize(8)
-      doc
-        .font(FONTS.SARABUN_MEDIUM)
-        .text(type === 'creditnote' ? 'Credit note No.:' : 'Debit note No.:', docNumberReactX, doc.y, {
-          align: 'right',
-          width: docNumberRectWidth / 2 - 4,
-        }) // 81
-      doc.font(FONTS.SARABUN_LIGHT).text(_adjistmentNote?.adjustmentNumber, 499, doc.y - 10, { align: 'left' })
-
-      // ---
-      const receiptInBEDateMonth = fDate(_adjistmentNote?.issueDate, 'dd/MM')
-      const receiptInBEYear = toNumber(fDate(_adjistmentNote?.issueDate, 'yyyy')) + 543
-      doc.moveDown(0.3)
-      doc
-        .font(FONTS.SARABUN_MEDIUM)
-        .text('Date :', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-      doc
-        .font(FONTS.SARABUN_LIGHT)
-        .text(`${receiptInBEDateMonth}/${receiptInBEYear}`, 499, doc.y - 10, { align: 'left' })
-
-      // ---
-      doc.moveDown(0.3)
-      doc
-        .font(FONTS.SARABUN_MEDIUM)
-        .text('Ref invoice No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-      doc
-        .font(FONTS.SARABUN_LIGHT)
-        .text(_adjistmentNote?.previousDocumentRef.documentNumber, 499, doc.y - 10, { align: 'left' })
-      // Doc Number React
-    }
-    doc.rect(docNumberReactX, 54, docNumberRectWidth, 84).lineWidth(2).stroke()
+  if (type === 'invoice') {
+    const _invoice = billing.invoice as Invoice | undefined
+    // 1
+    doc.fontSize(8)
     doc
-      .lineCap('butt')
-      .lineWidth(1.5)
-      .moveTo(marginLeft, doc.y + 14)
-      .lineTo(maxWidth, doc.y + 14)
-      .stroke()
-    doc.moveDown(2.2)
+      .font(FONTS.SARABUN_MEDIUM)
+      .text('Invoice No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
+    doc.font(FONTS.SARABUN_LIGHT).text(_invoice.invoiceNumber, 499, doc.y - 10, { align: 'left' })
+
+    // 2
+    const issueInBEDateMonth = fDate(_invoice.invoiceDate, 'dd/MM')
+    const issueInBEYear = toNumber(fDate(_invoice.invoiceDate, 'yyyy')) + 543
+    doc.moveDown(0.3)
+    doc
+      .font(FONTS.SARABUN_MEDIUM)
+      .text('Date :', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
+    doc.font(FONTS.SARABUN_LIGHT).text(`${issueInBEDateMonth}/${issueInBEYear}`, 499, doc.y - 10, { align: 'left' })
+
+    // 3
+    const duedateInBEDateMonth = fDate(billing.paymentDueDate, 'dd/MM')
+    const duedateInBEYear = toNumber(fDate(billing.paymentDueDate, 'yyyy')) + 543
+    doc.moveDown(0.3)
+    doc
+      .font(FONTS.SARABUN_MEDIUM)
+      .text('Due Date :', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
+    doc.font(FONTS.SARABUN_LIGHT).text(`${duedateInBEDateMonth}/${duedateInBEYear}`, 499, doc.y - 10, { align: 'left' })
+  } else if (type === 'receipt') {
+    // ---
+    const _receipts = billing.receipts as Receipt[]
+    const _latestReceipt = last(sortBy(_receipts, 'createdAt')) as Receipt | undefined
+    const _invoice = billing.invoice as Invoice | undefined
+
+    doc.fontSize(8)
+    doc
+      .font(FONTS.SARABUN_MEDIUM)
+      .text('Receipt No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
+    doc.font(FONTS.SARABUN_LIGHT).text(_latestReceipt.receiptNumber, 499, doc.y - 10, { align: 'left' })
+
+    // ---
+    if (isCreditPayment) {
+      doc.moveDown(0.3)
+      doc
+        .font(FONTS.SARABUN_MEDIUM)
+        .text('Invoice No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
+      doc.font(FONTS.SARABUN_LIGHT).text(_invoice?.invoiceNumber || '-', 499, doc.y - 10, { align: 'left' })
+    }
+
+    // ---
+    const receiptInBEDateMonth = fDate(_latestReceipt.receiptDate, 'dd/MM')
+    const receiptInBEYear = toNumber(fDate(_latestReceipt.receiptDate, 'yyyy')) + 543
+    doc.moveDown(0.3)
+    doc
+      .font(FONTS.SARABUN_MEDIUM)
+      .text('Date :', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
+    doc.font(FONTS.SARABUN_LIGHT).text(`${receiptInBEDateMonth}/${receiptInBEYear}`, 499, doc.y - 10, { align: 'left' })
+    // Doc Number React
+  } else if (type === 'creditnote' || type === 'debitnote') {
+    // ---
+    const _adjistmentNotes = billing.adjustmentNotes as BillingAdjustmentNote[]
+    const _adjistmentNote = (
+      targetId
+        ? find(_adjistmentNotes, (item) => item._id.toString() === targetId.toString())
+        : last(sortBy(_adjistmentNotes, 'issueDate'))
+    ) as BillingAdjustmentNote | undefined
+
+    doc.fontSize(8)
+    doc
+      .font(FONTS.SARABUN_MEDIUM)
+      .text(type === 'creditnote' ? 'Credit note No.:' : 'Debit note No.:', docNumberReactX, doc.y, {
+        align: 'right',
+        width: docNumberRectWidth / 2 - 4,
+      }) // 81
+    doc.font(FONTS.SARABUN_LIGHT).text(_adjistmentNote?.adjustmentNumber, 499, doc.y - 10, { align: 'left' })
+
+    // ---
+    const receiptInBEDateMonth = fDate(_adjistmentNote?.issueDate, 'dd/MM')
+    const receiptInBEYear = toNumber(fDate(_adjistmentNote?.issueDate, 'yyyy')) + 543
+    doc.moveDown(0.3)
+    doc
+      .font(FONTS.SARABUN_MEDIUM)
+      .text('Date :', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
+    doc.font(FONTS.SARABUN_LIGHT).text(`${receiptInBEDateMonth}/${receiptInBEYear}`, 499, doc.y - 10, { align: 'left' })
+
+    // ---
+    doc.moveDown(0.3)
+    doc
+      .font(FONTS.SARABUN_MEDIUM)
+      .text('Ref invoice No.:', docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .text(_adjistmentNote?.previousDocumentRef.documentNumber, 499, doc.y - 10, { align: 'left' })
+    // Doc Number React
   }
+  doc
+    .rect(docNumberReactX, 54, docNumberRectWidth, isCreditPayment ? 84 : 70)
+    .lineWidth(2)
+    .stroke()
+  if (!isCreditPayment) {
+    doc.moveDown(0.5)
+  }
+  doc
+    .lineCap('butt')
+    .lineWidth(1.5)
+    .moveTo(marginLeft, doc.y + 14)
+    .lineTo(maxWidth, doc.y + 14)
+    .stroke()
+  doc.moveDown(2.2)
 
   // Seperate line
 

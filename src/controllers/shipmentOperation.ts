@@ -487,24 +487,19 @@ export async function handleUpdateBookingTime(
     throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
   }
 
-  console.log('1.....')
   const oldBookingDateTime = shipment.bookingDateTime
 
   // --- อัปเดตเวลาในฐานข้อมูลก่อน ---
   shipment.bookingDateTime = newBookingDateTime
 
   // เพิ่มประวัติการแก้ไข
-  console.log('2.....')
   shipment.modifieds.push({
     modifiedBy,
     createdAt: new Date(),
     reason: `เปลี่ยนแปลงเวลาเริ่มงานจาก ${fDateTime(oldBookingDateTime)} เป็น ${fDateTime(newBookingDateTime)}`,
   })
 
-  console.log('3.....')
   await shipment.save({ session })
-
-  console.log('4.....')
 
   // --- ตรวจสอบสถานะและจัดการ Logic การแจ้งเตือน ---
   if (shipment.driver && shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.ACCEPTED) {
@@ -512,7 +507,6 @@ export async function handleUpdateBookingTime(
     // แจ้งเตือนคนขับและลูกค้าโดยตรง
     const driver = shipment.driver as User
     const customer = shipment.customer as User
-    console.log('3.....')
 
     // แจ้งเตือนคนขับที่รับงาน
     await NotificationModel.sendNotification(
@@ -526,7 +520,6 @@ export async function handleUpdateBookingTime(
       true,
       { navigation: ENavigationType.SHIPMENT, trackingNumber: shipment.trackingNumber },
     )
-    console.log('4.....')
 
     // แจ้งเตือนลูกค้า
     await NotificationModel.sendNotification(
@@ -539,7 +532,6 @@ export async function handleUpdateBookingTime(
       },
       session,
     )
-    console.log('5.....')
 
     console.log(`Booking time updated for accepted shipment ${shipmentId}. Notified driver and customer.`)
   } else {

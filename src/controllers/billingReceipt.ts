@@ -15,14 +15,15 @@ export async function generateBillingReceipt(billingId: string, sentEmail?: bool
    * Generate receipt
    */
   const _billing = await BillingModel.findById(billingId).session(session)
-  const { filePath, fileName, document } = await generateReceipt(_billing)
+  const { filePath, fileName, document } = await generateReceipt(_billing, session)
 
   console.log('Generate receipt document: ', document)
   /**
    * Email
    */
   if (sentEmail) {
-    const _customer = await UserModel.findById(get(_billing, 'user._id', ''))
+    const _customerId = get(_billing, 'user._id', '')
+    const _customer = await UserModel.findById(_customerId).session(session)
     const _isCashReceipt = _billing.paymentMethod === EPaymentMethod.CASH
     if (_isCashReceipt && _customer) {
       const shipment = last(_billing.shipments) as Shipment | undefined
