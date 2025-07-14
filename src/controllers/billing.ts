@@ -13,20 +13,19 @@ import { PaymentAmounts } from '@models/finance/objects'
 import PaymentModel from '@models/finance/payment.model'
 import { Quotation } from '@models/finance/quotation.model'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
-import ShipmentModel, { Shipment } from '@models/shipment.model'
+import ShipmentModel from '@models/shipment.model'
 import UserModel, { User } from '@models/user.model'
 import { GET_CUSTOMER_WITH_TODAY_BILLED_DATE } from '@pipelines/user.pipeline'
 import addEmailQueue from '@utils/email.utils'
 import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
-import { addDays, addMonths, differenceInDays, format, setDate, setDay, setMonth } from 'date-fns'
+import { addDays, addMonths, differenceInDays, endOfDay, setDate, format, setMonth, startOfDay } from 'date-fns'
 import { th } from 'date-fns/locale'
-import lodash, { get, includes, isEmpty, last, reduce, sortBy, sum, toNumber, toString, uniq } from 'lodash'
+import lodash, { get, includes, isEmpty, last, sortBy, sum, toNumber, toString, uniq } from 'lodash'
 import { ClientSession, Types } from 'mongoose'
-import { generateInvoice } from 'reports/invoice'
 import path from 'path'
+import { generateInvoice } from 'reports/invoice'
 import BillingDocumentModel from '@models/finance/documents.model'
-import { calculateCancellationFee } from './shipmentCancellation'
 
 Aigle.mixin(lodash, {})
 
@@ -67,9 +66,9 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
        * Convert Billing day number to Date and get Billing start/end date
        * Period: (Previous Month - Previous Day)
        */
-      const prevIssueBillingCycleDate = setDate(prevMonth, _prevBillingCycle.issueDate).setHours(0, 0, 0, 0)
+      const prevIssueBillingCycleDate = startOfDay(setDate(prevMonth, _prevBillingCycle.issueDate))
       const issueDate = setDate(today, _currentBillingCycle.issueDate)
-      const currentIssueBillingCycleDate = addDays(issueDate, -1).setHours(23, 59, 59, 999)
+      const currentIssueBillingCycleDate = endOfDay(addDays(issueDate, -1))
 
       /**
        * Get Complete Shipment
@@ -118,7 +117,7 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
         if (shipment.status === EShipmentStatus.DELIVERED) {
           subTotalAmount += latestQuotation.price.subTotal
         } else if (shipment.status === EShipmentStatus.CANCELLED) {
-          subTotalAmount += shipment.cancellationFee;
+          subTotalAmount += shipment.cancellationFee
         }
       }
 
@@ -142,7 +141,7 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
       /**
        * Create Invoice data
        */
-      const _monthyear = format(new Date(), 'yyMM')
+      const _monthyear = format(today, 'yyMM')
       const _invoiceNumber = await generateTrackingNumber(`IV${_monthyear}`, 'invoice', 3)
       const _invoice = new InvoiceModel({
         invoiceNumber: _invoiceNumber,
@@ -163,7 +162,7 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
       /**
        * Create Payment
        */
-      const generateMonth = format(new Date(), 'yyMM')
+      const generateMonth = format(today, 'yyMM')
       const _paymentNumber = await generateTrackingNumber(`PAYCRE${generateMonth}`, 'payment', 3)
       const _payment = new PaymentModel({
         quotations: quotationIds,
@@ -179,10 +178,9 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
       /**
        * Convert Duedate day number to Date
        */
-      const paymentDueDate = setDate(
-        setMonth(new Date(), _currentBillingCycle.dueMonth),
-        _currentBillingCycle.dueDate,
-      ).setHours(23, 59, 59, 999)
+      const paymentDueDate = endOfDay(
+        setDate(setMonth(today, _currentBillingCycle.dueMonth), _currentBillingCycle.dueDate),
+      )
       /**
        * Create Billing for Credit user
        */
@@ -221,8 +219,8 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
 export async function checkNearbyDuedateBilling(before: number = 1): Promise<Billing[]> {
   const today = new Date()
   const beforeDay = addDays(today, before)
-  const startOfBeforeDay = beforeDay.setHours(0, 0, 0, 0)
-  const endOfBeforeDay = beforeDay.setHours(23, 59, 59, 999)
+  const startOfBeforeDay = startOfDay(beforeDay)
+  const endOfBeforeDay = endOfDay(beforeDay)
   const billing = await BillingModel.find({
     billingStatus: EBillingStatus.PENDING,
     paymentDueDate: {
@@ -269,9 +267,9 @@ export async function notifyOverdueBilling() {
     state: EBillingState.OVERDUE,
   }).lean()
 
+  const today = new Date()
   await Aigle.forEach(overdueBilling, async (billing) => {
-    const today = new Date()
-    const overdate = differenceInDays(today.setHours(0, 0, 0, 0), new Date(billing.paymentDueDate).setHours(0, 0, 0, 0))
+    const overdate = differenceInDays(startOfDay(today), startOfDay(new Date(billing.paymentDueDate)))
     await NotificationModel.sendNotification({
       userId: billing.user.toString() as string,
       varient: ENotificationVarient.ERROR,
@@ -288,8 +286,8 @@ export async function notifyOverdueBilling() {
  */
 export async function notifyIssueBillingToCustomer() {
   const today = new Date()
-  const startRange = today.setHours(0, 0, 0, 0)
-  const endRange = today.setHours(23, 59, 59, 999)
+  const startRange = startOfDay(today)
+  const endRange = endOfDay(today)
 
   const _billings = await BillingModel.find({
     status: EBillingStatus.PENDING,
@@ -315,8 +313,8 @@ export async function notifyIssueBillingToCustomer() {
  */
 export async function emailIssueBillingToCustomer(session?: ClientSession) {
   const today = new Date()
-  const startRange = today.setHours(0, 0, 0, 0)
-  const endRange = today.setHours(23, 59, 59, 999)
+  const startRange = startOfDay(today)
+  const endRange = endOfDay(today)
 
   const _billings = await BillingModel.find({
     status: EBillingStatus.PENDING,
@@ -337,10 +335,10 @@ export async function emailIssueBillingToCustomer(session?: ClientSession) {
     if (customer) {
       const financialEmails = get(customer, 'businessDetail.creditPayment.financialContactEmails', [])
       const emails = uniq([customer.email, ...financialEmails]).filter((email) => !isEmpty(email))
-      const month_text = format(new Date(), 'MMMM', { locale: th })
-      const year_number = toNumber(format(new Date(), 'yyyy', { locale: th }))
+      const month_text = format(today, 'MMMM', { locale: th })
+      const year_number = toNumber(format(today, 'yyyy', { locale: th }))
       const year_text = toString(year_number + 543)
-      const invoice = await generateInvoice(billing, undefined, session)
+      const { document, fileName, filePath } = await generateInvoice(billing, undefined, session)
       await addEmailQueue({
         from: process.env.MAILGUN_SMTP_EMAIL,
         to: emails,
@@ -354,10 +352,11 @@ export async function emailIssueBillingToCustomer(session?: ClientSession) {
           contact_number: '02-xxx-xxxx',
           movemate_link: `https://www.movematethailand.com`,
         },
-        attachments: [{ filename: path.basename(invoice.filePath), path: invoice.filePath }],
+        attachments: [{ filename: path.basename(filePath), path: filePath }],
       })
-      const documentId = invoice?.document?._id
-      await InvoiceModel.findByIdAndUpdate(billing.invoice, { document: documentId })
+      const documentId = document?._id
+      const invoiceId = get(billing, 'invoice._id', '')
+      await InvoiceModel.findByIdAndUpdate(invoiceId, { document: documentId }, { session })
       await BillingDocumentModel.findByIdAndUpdate(documentId, { emailTime: new Date() }, { session })
       console.log(`[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Billing Cycle has sent for ${emails.join(', ')}`)
     }
@@ -366,6 +365,7 @@ export async function emailIssueBillingToCustomer(session?: ClientSession) {
 
 export async function issueCreditBilling() {
   const customers = await UserModel.aggregate(GET_CUSTOMER_WITH_TODAY_BILLED_DATE())
+  console.log('customers:', customers.length)
   if (customers && !isEmpty(customers)) {
     await Aigle.forEach(customers as User[], async (customer) => {
       if (customer._id) {
@@ -383,7 +383,7 @@ export async function checkBillingStatus() {
   const _overdueBillings = await BillingModel.find({
     status: EBillingStatus.PENDING,
     state: EBillingState.CURRENT,
-    paymentDueDate: { $lt: today.setHours(0, 0, 0, 0) },
+    paymentDueDate: { $lt: startOfDay(today) },
   }).lean()
 
   await Aigle.forEach(_overdueBillings, async (billing) => {
@@ -402,7 +402,7 @@ export async function checkBillingStatus() {
   const _suspendedBillings = await BillingModel.find({
     status: EBillingStatus.PENDING,
     state: EBillingState.OVERDUE,
-    paymentDueDate: { $lt: addDays(today, -16).setHours(0, 0, 0, 0) },
+    paymentDueDate: { $lt: startOfDay(addDays(today, -16)) },
   }).lean()
 
   let _bannedCustomer = []

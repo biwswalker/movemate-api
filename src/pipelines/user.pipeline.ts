@@ -7,10 +7,10 @@ import {
   EUserValidationStatus,
 } from '@enums/users'
 import { GetUserArgs } from '@inputs/user.input'
-import { addDays, format } from 'date-fns'
 import { isEmpty, toNumber } from 'lodash'
 import { PipelineStage, Types } from 'mongoose'
 import { filePipelineStage } from './file.pipline'
+import { format, fromZonedTime } from 'date-fns-tz'
 
 export function GET_USER_LOOKUPS(lean = false) {
   const businessDetailLookup: PipelineStage.Lookup = {
@@ -559,9 +559,12 @@ export const GET_CUSTOMER_BY_EMAIL = (email: string) => [
 ]
 
 export const GET_CUSTOMER_WITH_TODAY_BILLED_DATE = () => {
-  const today = addDays(new Date(), 1)
-  const currentMonth = format(today, 'MMM').toLowerCase()
-  const currentDay = toNumber(format(today, 'dd'))
+  const timeZone = 'Asia/Bangkok'
+  const nowInBangkok = fromZonedTime(new Date(), timeZone)
+  const dayOfMonthInBangkok = parseInt(format(nowInBangkok, 'd', { timeZone }))
+  const monthInBangkok = format(nowInBangkok, 'MMM', { timeZone }).toLowerCase()
+
+  console.log(`[Cron Job] Finding customers with billingDate: ${dayOfMonthInBangkok}-${monthInBangkok}`)
 
   return [
     {
@@ -596,7 +599,7 @@ export const GET_CUSTOMER_WITH_TODAY_BILLED_DATE = () => {
     },
     {
       $match: {
-        [`businessDetail.creditPayment.billingCycle.${currentMonth}.issueDate`]: currentDay,
+        [`businessDetail.creditPayment.billingCycle.${monthInBangkok}.issueDate`]: dayOfMonthInBangkok,
       },
     },
   ]
