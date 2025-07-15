@@ -5,7 +5,7 @@ import { AllowGuard, AuthGuard } from '@guards/auth.guards'
 import { GetPrivilegesArgs, PrivilegeInput } from '@inputs/privilege.input'
 import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
 import PrivilegeModel, { Privilege } from '@models/privilege.model'
-import { PrivilegePaginationPayload, PrivilegeUsedPayload } from '@payloads/privilege.payloads'
+import { PrivilegePaginationPayload, SearchPrivilegeResultPayload } from '@payloads/privilege.payloads'
 import { yupValidationThrow } from '@utils/error.utils'
 import { reformPaginate } from '@utils/pagination.utils'
 import { PrivilegeSchema } from '@validations/privilege.validations'
@@ -61,7 +61,7 @@ export default class PrivilegeResolver {
       const filterEmptyQuery = omitBy(query, isEmpty)
       const filterQuery: FilterQuery<typeof Privilege> = {
         ...filterEmptyQuery,
-        ...(status ? status === EPrivilegeStatusCriteria.ALL ? {} : { status: status } : {}),
+        ...(status ? (status === EPrivilegeStatusCriteria.ALL ? {} : { status: status }) : {}),
         ...(query.name ? { name: { $regex: query.name, $options: 'i' } } : {}),
         ...(query.code ? { code: query.code } : { defaultShow: true }),
       }
@@ -86,7 +86,7 @@ export default class PrivilegeResolver {
       const filterEmptyQuery = omitBy(query, isEmpty)
       const filterQuery: FilterQuery<typeof Privilege> = {
         ...filterEmptyQuery,
-        ...(status ? status === EPrivilegeStatusCriteria.ALL ? {} : { status: status } : {}),
+        ...(status ? (status === EPrivilegeStatusCriteria.ALL ? {} : { status: status }) : {}),
         ...(query.name ? { name: { $regex: query.name, $options: 'i' } } : {}),
         ...(query.code ? { code: { $regex: query.code, $options: 'i' } } : {}),
       }
@@ -151,9 +151,12 @@ export default class PrivilegeResolver {
       throw new GraphQLError('ไม่สามารถเรียกข้อมูลส่วนลดได้ โปรดลองอีกครั้ง')
     }
   }
-  @Query(() => [PrivilegeUsedPayload])
+  @Query(() => [SearchPrivilegeResultPayload])
   @UseMiddleware(AllowGuard)
-  async searchPrivilegeByCode(@Arg('code') code: string, @Ctx() ctx: GraphQLContext): Promise<PrivilegeUsedPayload[]> {
+  async searchPrivilegeByCode(
+    @Arg('code') code: string,
+    @Ctx() ctx: GraphQLContext,
+  ): Promise<SearchPrivilegeResultPayload[]> {
     const user_id = ctx.req.user_id
     try {
       const searchedCode = (code || '').toUpperCase()
@@ -162,16 +165,31 @@ export default class PrivilegeResolver {
         status: EPrivilegeStatus.ACTIVE,
       }).lean()
       if (!privileges) {
-        const message = `ไม่สามารถเรียกข้อมูลส่วนลดได้`
-        throw new GraphQLError(message, {
-          extensions: { code: 'NOT_FOUND', errors: [{ message }] },
-        })
+        return []
       }
-      const privilegePayload = map<Privilege, PrivilegeUsedPayload>(privileges, (privilege) => {
+
+      const now = new Date()
+
+      const privilegePayload = map<Privilege, SearchPrivilegeResultPayload>(privileges, (privilege) => {
         const usedUser = map(privilege.usedUser, (user) => user.toString())
         const isUsed = includes(usedUser, user_id)
-        return { ...privilege, used: isUsed }
+        const isExpired = privilege.endDate ? now > new Date(privilege.endDate) : false
+        const isLimitReached =
+          !privilege.isInfinity && privilege.limitAmout != null && usedUser.length >= privilege.limitAmout
+
+        return {
+          _id: privilege._id,
+          name: privilege.name,
+          code: privilege.code,
+          discount: privilege.discount,
+          unit: privilege.unit,
+          expired: isExpired,
+          used: isUsed,
+          limitReached: isLimitReached,
+          description: privilege.description,
+        }
       })
+
       return privilegePayload
     } catch (error) {
       console.log('error: ', error)
