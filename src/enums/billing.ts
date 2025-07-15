@@ -85,3 +85,14 @@ registerEnumType(EPriceItemType, {
   name: 'EPriceItemType',
   description: 'Price item type',
 })
+
+export enum EBillingInfoStatus {
+  AVAILABLE = 'AVAILABLE',
+  NOT_YET_BILLED = 'NOT_YET_BILLED',
+  NO_RECORD = 'NO_RECORD',
+}
+
+registerEnumType(EBillingInfoStatus, {
+  name: 'EBillingInfoStatus',
+  description: 'Status of billing information retrieval',
+})

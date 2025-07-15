@@ -37,11 +37,12 @@ export default class CancellationResolver {
     @Arg('reason') reason: string,
   ): Promise<boolean> {
     const session = ctx.session
+    const user_id = ctx.req.user_id
     if (!shipmentId) {
       throw new GraphQLError('ไม่พบงานขนส่ง')
     }
     // Handle make new Matching
-    await driverCancelledShipment({ shipmentId, reason }, session)
+    await driverCancelledShipment({ shipmentId, reason }, user_id, session)
 
     if (session) {
       await session.commitTransaction()

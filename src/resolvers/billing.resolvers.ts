@@ -5,8 +5,14 @@ import {
   markBillingAsRejected,
   revertPaymentRejection,
 } from '@controllers/billingPayment'
-import { EAdjustmentNoteType, EBillingCriteriaStatus, EBillingState, EBillingStatus } from '@enums/billing'
-import { EPaymentMethod } from '@enums/payments'
+import {
+  EAdjustmentNoteType,
+  EBillingCriteriaStatus,
+  EBillingInfoStatus,
+  EBillingState,
+  EBillingStatus,
+} from '@enums/billing'
+import { EPaymentMethod, EPaymentStatus } from '@enums/payments'
 import { EUserRole, EUserType } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
 import { GetBillingInput, ProcessBillingRefundInput } from '@inputs/billingCycle.input'
@@ -14,11 +20,11 @@ import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
 import RetryTransactionMiddleware, { WithTransaction } from '@middlewares/RetryTransaction'
 import FileModel from '@models/file.model'
 import BillingModel, { Billing } from '@models/finance/billing.model'
-import { BillingListPayload, TotalBillingRecordPayload } from '@payloads/billingCycle.payloads'
+import { BillingInfoPayload, BillingListPayload, TotalBillingRecordPayload } from '@payloads/billingCycle.payloads'
 import { BILLING_CYCLE_LIST } from '@pipelines/billingCycle.pipeline'
 import { reformPaginate } from '@utils/pagination.utils'
 import { GraphQLError } from 'graphql'
-import { get, head, map, toNumber, toString, uniq } from 'lodash'
+import { get, head, includes, last, map, sortBy, toNumber, toString, uniq } from 'lodash'
 import { PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
@@ -46,6 +52,8 @@ import { createAdjustmentNote } from '@controllers/billingAdjustment'
 import NotificationModel, { ENotificationVarient, Notification } from '@models/notification.model'
 import { Invoice } from '@models/finance/invoice.model'
 import { updateCustomerCreditUsageBalance } from '@controllers/customer'
+import { Quotation } from '@models/finance/quotation.model'
+import PaymentModel from '@models/finance/payment.model'
 
 @Resolver()
 export default class BillingResolver {
@@ -546,5 +554,82 @@ export default class BillingResolver {
     await getAdminMenuNotificationCount()
 
     return true
+  }
+
+  @Query(() => BillingInfoPayload)
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN, EUserRole.DRIVER]))
+  async getBillingInfoByShipmentId(@Arg('shipmentId') shipmentId: string): Promise<BillingInfoPayload> {
+    const shipment = await ShipmentModel.findById(shipmentId).lean()
+
+    if (!shipment) {
+      return {
+        paymentMethod: EPaymentMethod.CASH,
+        status: EBillingInfoStatus.NO_RECORD,
+        message: 'ไม่พบข้อมูลงานขนส่งดังกล่าว',
+      }
+    }
+
+    const billing = await BillingModel.findOne({ shipments: shipmentId }).lean()
+
+    if (billing) {
+      // Billing record found, return it
+      return {
+        paymentMethod: shipment.paymentMethod,
+        billingNumber: billing.billingNumber,
+        billingState: billing.state,
+        billingStatus: billing.status,
+        status: EBillingInfoStatus.AVAILABLE,
+        message: 'ออกใบแจ้งหนี้แล้ว',
+      }
+    } else {
+      // No direct billing record found, determine the reason
+      const latestQuotation = last(sortBy(shipment.quotations, ['createdAt'])) as Quotation | undefined
+
+      if (!latestQuotation) {
+        // This case should ideally not happen if a shipment exists and was priced
+        return {
+          paymentMethod: shipment.paymentMethod,
+          status: EBillingInfoStatus.NO_RECORD,
+          message: 'ไม่พบข้อมูลราคาสำหรับการขนส่งนี้',
+        }
+      }
+
+      const isCreditPayment = shipment.paymentMethod === EPaymentMethod.CREDIT
+
+      // Handle cases based on shipment status and payment method
+      if (shipment.status === EShipmentStatus.CANCELLED) {
+        // If shipment is cancelled/refunded, but no billing record linked (might be a very old entry or a data inconsistency)
+        return {
+          paymentMethod: shipment.paymentMethod,
+          status: EBillingInfoStatus.NO_RECORD, // Or a more specific status like CANCELLED_NO_BILLING
+          message: `งานขนส่งถูกยกเลิก ไม่มียอดต้องชำระ`,
+        }
+      } else if (isCreditPayment) {
+        // For credit payments, billing is cyclical. If no billing found, it's likely not yet generated.
+        return {
+          paymentMethod: shipment.paymentMethod,
+          status: EBillingInfoStatus.NOT_YET_BILLED,
+          message: 'รอวางบิล',
+          // message: 'ใบแจ้งหนี้สำหรับการขนส่งนี้ยังไม่ถูกสร้าง (อยู่ระหว่างรอบบิล)',
+        }
+      } else {
+        // For cash payments, billing should be immediate. If not found, it's an unexpected error or pending verification.
+        // Check if there's any pending payment record for this quotation
+        const payment = await PaymentModel.findOne({ quotations: latestQuotation._id }).lean()
+        if (payment && includes([EPaymentStatus.PENDING, EPaymentStatus.VERIFY], payment.status)) {
+          return {
+            paymentMethod: shipment.paymentMethod,
+            status: EBillingInfoStatus.NOT_YET_BILLED, // Reusing NOT_YET_BILLED for "pending processing"
+            message: 'การชำระเงินอยู่ระหว่างการตรวจสอบและยืนยัน',
+          }
+        } else {
+          return {
+            paymentMethod: shipment.paymentMethod,
+            status: EBillingInfoStatus.NO_RECORD,
+            message: 'ไม่พบใบแจ้งหนี้/ใบเสร็จรับเงินสำหรับงานขนส่งนี้ อาจเกิดข้อผิดพลาดหรือข้อมูลไม่ครบถ้วน',
+          }
+        }
+      }
+    }
   }
 }

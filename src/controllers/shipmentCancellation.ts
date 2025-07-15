@@ -218,14 +218,13 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
   } else {
     // Credit logic
     if (forCustomer > 0) {
-      
       // ใช้ addCustomerCreditUsage โดยส่งค่าเป็นลบ เพื่อลด Credit Usage ลง
       await addCustomerCreditUsage(lodash.get(_shipment, 'customer._id', ''), -forCustomer, session)
     }
   }
-  
+
   const customerCancellationFee = latestQuotation.price.subTotal - forCustomer
-  
+
   // Update Shipment final status
   await ShipmentModel.findByIdAndUpdate(
     _shipment._id,
@@ -240,7 +239,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
     },
     { session },
   )
-  
+
   const updatedBy = await UserModel.findById(userId)
   const isCancelledByAdmin = updatedBy.userRole === EUserRole.ADMIN
 
@@ -326,7 +325,7 @@ interface CancelledShipmentInput {
   reason: string
 }
 
-export async function driverCancelledShipment(input: CancelledShipmentInput, session?: ClientSession) {
+export async function driverCancelledShipment(input: CancelledShipmentInput, driverId: string,session?: ClientSession) {
   const { shipmentId, reason } = input
   const cancellationTime = new Date()
 
@@ -367,17 +366,22 @@ export async function driverCancelledShipment(input: CancelledShipmentInput, ses
       cancellationReason: reason,
       cancelledDate: cancellationTime,
       currentStepSeq: 0,
+      cancellationBy: driverId,
       steps: [],
     },
     { session },
   )
   await initialStepDefinition(shipmentId, true, session)
 
+  const _driver = await UserModel.findById(driverId).session(session)
+
   await NotificationModel.sendNotificationToAdmins(
     {
       varient: ENotificationVarient.WRANING,
       title: 'คนขับยกเลิกงาน!',
-      message: [`คนขับได้ยกเลิกงานขนส่งหมายเลข '${_shipment.trackingNumber}' กรุณาจัดหาคนขับใหม่หรือดำเนินการแก้ไข`],
+      message: [
+        `คนขับ ${_driver.fullname} (${_driver.userNumber}) ได้ยกเลิกงานขนส่งหมายเลข '${_shipment.trackingNumber}' กรุณาจัดหาคนขับใหม่หรือดำเนินการแก้ไข`,
+      ],
       infoText: 'ดูรายละเอียดงาน',
       infoLink: `/general/shipments/${_shipment.trackingNumber}`,
     },
@@ -390,7 +394,10 @@ export async function driverCancelledShipment(input: CancelledShipmentInput, ses
       userId: customerId,
       varient: ENotificationVarient.WRANING,
       title: 'คนขับยกเลิกการจัดส่ง',
-      message: [`งานขนส่งหมายเลข ${_shipment.trackingNumber} ของคุณถูกยกเลิกโดยคนขับ`, `ระบบกำลังจัดหาคนขับใหม่ให้คุณ`],
+      message: [
+        `งานขนส่งหมายเลข ${_shipment.trackingNumber} ของคุณถูกยกเลิกโดยคนขับ ${_driver.fullname} (${_driver.userNumber})`,
+        `ระบบกำลังจัดหาคนขับใหม่ให้คุณ`,
+      ],
     },
     session,
   )
