@@ -13,7 +13,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>Movemate Thailand ใบแจ้งหนี้ค่าบริการ</title>
+  <title>Movemate Thailand ใกล้ถึงกำหนดชำระค่าบริการ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -182,8 +182,9 @@
                             box-sizing: border-box;
                             color: #212b36;
                           "><br style="-webkit-font-smoothing: antialiased; box-sizing: border-box" />
-                        Movemate ขอนำส่งใบแจ้งหนี้ค่าบริการประจำเดือน {{month_text}} พ.ศ. {{year_text}} ให้ตามไฟล์แนบ
-                        กรุณาชำระเงินตามรอบชำระ และส่งหลักฐานการชำระเงินพร้อมระบุหมายเลขใบแจ้งหนี้มาที่
+                        Movemate ขอแจ้งให้ท่านทราบว่าใบแจ้งหนี้ค่าบริการประจำเดือน {{month_text}} พ.ศ. {{year_text}}
+                        หมายเลข {{billing_number}}
+                        ของท่านกำลังจะถึงกำหนดชำระในอีก {{due_days}} วัน กรุณาเตรียมการชำระเงิน และส่งหลักฐานการชำระเงินพร้อมระบุหมายเลขใบแจ้งหนี้มาที่
                         {{financial_email}}
                         หากต้องการสอบถามข้อมูลเพิ่มเติมกรุณาติดต่อ {{contact_number}}
                         <br style="-webkit-font-smoothing: antialiased; box-sizing: border-box" /><br
@@ -218,7 +219,7 @@
                   ">
                 <tr style="vertical-align: top">
                   <td align="left" style="position: relative">
-                    <a href="{{movemate_link}}" target="_blank" style="text-decoration: none;">
+                    <a href="{{billing_link}}" target="_blank" style="text-decoration: none;">
                       <table border="0" cellpadding="0" cellspacing="0" class="button-2" style="
                           border-collapse: separate;
                           -webkit-font-smoothing: antialiased;
@@ -253,7 +254,7 @@
                                 line-height: 24px;
                                 white-space: nowrap;
                               ">
-                              Go to Movemate Thailand
+                              ดูรายละเอียดใบแจ้งหนี้
                             </div>
                           </td>
                         </tr>
@@ -352,7 +353,7 @@
                     <img class="MM-smalllogo" src="https://www.movematethailand.com/assets/images/logo/MMLogo_small.png"
                       style="
                           {{!-- Remove display: none; --}}
-                          display: none; 
+                          display: none;
                           margin: 0;
                           padding: 0;
                           border: 0;

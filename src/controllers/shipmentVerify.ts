@@ -26,7 +26,7 @@ interface MarkShipmentVerifiedInput {
 export async function markShipmentVerified(input: MarkShipmentVerifiedInput, adminId: string, session?: ClientSession) {
   const { shipmentId, result, reason } = input
 
-  const _shipment = await ShipmentModel.findById(shipmentId)
+  const _shipment = await ShipmentModel.findById(shipmentId).session(session)
   if (!_shipment) {
     const message = 'ไม่สามารถหาข้อมูลงานขนส่ง เนื่องจากไม่พบงานขนส่งดังกล่าว'
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })

@@ -383,7 +383,9 @@ export default class BillingResolver {
       )
 
       if (_billing.paymentMethod === EPaymentMethod.CASH) {
-        const _shipment = await ShipmentModel.findOne({ trackingNumber: _billing.billingNumber }).lean()
+        const _shipment = await ShipmentModel.findOne({ trackingNumber: _billing.billingNumber })
+          .session(session)
+          .lean()
         if (_shipment.status === EShipmentStatus.DELIVERED) {
           /**
            * Handle If shipment complete
@@ -412,27 +414,37 @@ export default class BillingResolver {
       if (_billing.paymentMethod === EPaymentMethod.CASH) {
         const _shipment = head(_billing.shipments) as Shipment
         if (_shipment) {
-          await ShipmentModel.findByIdAndUpdate(
-            _shipment._id,
-            {
-              driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
-              adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,
-              ...(data.newBookingDateTime ? { bookingDateTime: data.newBookingDateTime } : {}),
-            },
-            { session },
-          )
-
-          // End Session transaction
-          await session.commitTransaction()
-          console.log('[Start] shipmentNotify process')
-          await shipmentNotify(_shipment._id)
-          console.log('[End] shipmentNotify process')
+          const currentShipmentState = await ShipmentModel.findById(_shipment._id).session(session).lean()
+          if (
+            currentShipmentState &&
+            currentShipmentState.status === EShipmentStatus.IDLE &&
+            currentShipmentState.adminAcceptanceStatus === EAdminAcceptanceStatus.PENDING
+          ) {
+            await ShipmentModel.findByIdAndUpdate(
+              _shipment._id,
+              {
+                driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
+                adminAcceptanceStatus: EAdminAcceptanceStatus.ACCEPTED,
+                ...(data.newBookingDateTime ? { bookingDateTime: data.newBookingDateTime } : {}),
+              },
+              { session },
+            )
+            // End Session transaction
+            await session.commitTransaction()
+            console.log('[Start] shipmentNotify process')
+            await shipmentNotify(_shipment._id)
+            console.log('[End] shipmentNotify process')
+          } else {
+            console.log(
+              `Skipping shipment status update for ${_shipment.trackingNumber}: Not in initial IDLE/PENDING state.`,
+            )
+          }
         }
       }
 
       // Update count admin
       console.log('[Pre Endding] approvalBillingPayment')
-      await getAdminMenuNotificationCount(session)
+      await getAdminMenuNotificationCount()
       console.log('[Endding] approvalBillingPayment')
       return true
     } else if (data.result === 'reject') {

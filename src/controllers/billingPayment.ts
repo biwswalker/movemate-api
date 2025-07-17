@@ -3,7 +3,7 @@ import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
 import BillingModel from '@models/finance/billing.model'
 import { BillingReason } from '@models/finance/objects'
 import PaymentModel from '@models/finance/payment.model'
-import { Shipment } from '@models/shipment.model'
+import ShipmentModel, { Shipment } from '@models/shipment.model'
 import Aigle from 'aigle'
 import { REPONSE_NAME } from 'constants/status'
 import { GraphQLError } from 'graphql'
@@ -27,7 +27,7 @@ import { generateBillingReceipt } from './billingReceipt'
 import { MakePayBillingInput } from '@inputs/payment.input'
 import FileModel from '@models/file.model'
 import { revertShipmentRejection } from './shipmentOperation'
-import { EShipmentStatus } from '@enums/shipments'
+import { EAdminAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
 
 Aigle.mixin(lodash, {})
 
@@ -139,8 +139,18 @@ export async function markBillingAsPaid(
    */
   if (_billing.paymentMethod === EPaymentMethod.CASH) {
     await Aigle.forEach(_billing.shipments as Shipment[], async (shipment) => {
-      if (shipment.status === EShipmentStatus.IDLE) {
+      const currentShipmentState = await ShipmentModel.findById(shipment._id).session(session).lean()
+      if (
+        currentShipmentState &&
+        currentShipmentState.status === EShipmentStatus.IDLE &&
+        currentShipmentState.adminAcceptanceStatus === EAdminAcceptanceStatus.PENDING
+      ) {
         await markShipmentVerified({ result: 'approve', shipmentId: shipment._id }, adminId, session)
+      } else {
+        // If the shipment is already delivered, just ensure financial records are updated,
+        // and optionally generate a new receipt if this is for an additional payment.
+        // The core status change is handled by the billing resolver's top-level check.
+        console.log(`Skipping markShipmentVerified for delivered/in-progress shipment ${shipment.trackingNumber}.`)
       }
     })
   } else {
@@ -189,10 +199,14 @@ export async function markBillingAsRejected(
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
   }
 
-  await PaymentModel.findByIdAndUpdate(_payment._id, {
-    status: EPaymentStatus.PENDING,
-    type: EPaymentType.REFUND,
-  })
+  await PaymentModel.findByIdAndUpdate(
+    _payment._id,
+    {
+      status: EPaymentStatus.PENDING,
+      type: EPaymentType.REFUND,
+    },
+    { session },
+  )
 
   const _reason: BillingReason = {
     detail: reason,
@@ -215,11 +229,19 @@ export async function markBillingAsRejected(
        * TODO:
        * When Payment type PAY rejected
        * - So what we do -> (Cancelled shipment or not action with shipment) หรือเพิ่ม ADDITONAL_PAY และจับจากตัวนี้และไม่เข้าสู่การ cancelled
-       * - ถ้า Reject addditional pay จะเข้า process การคืนเงิน driver เลยไหมหรือยังไง
-       *
        */
-      if (shipment.status === EShipmentStatus.IDLE) {
+      const currentShipmentState = await ShipmentModel.findById(shipment._id).session(session).lean()
+      if (
+        currentShipmentState &&
+        currentShipmentState.status === EShipmentStatus.IDLE &&
+        currentShipmentState.adminAcceptanceStatus === EAdminAcceptanceStatus.PENDING
+      ) {
         await markShipmentVerified({ result: 'reject', shipmentId: shipment._id, reason }, adminId, session)
+      } else {
+        // If the shipment is already delivered, just ensure financial records are updated,
+        // and optionally generate a new receipt if this is for an additional payment.
+        // The core status change is handled by the billing resolver's top-level check.
+        console.log(`Skipping markShipmentVerified for delivered/in-progress shipment ${shipment.trackingNumber}.`)
       }
     })
   }

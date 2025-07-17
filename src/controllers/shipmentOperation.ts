@@ -115,16 +115,16 @@ export async function replaceStep(
 }
 
 export async function nextStep(shipmentId: string, images?: FileInput[], session?: ClientSession): Promise<boolean> {
-  const shipment = await ShipmentModel.findById(shipmentId)
+  const shipment = await ShipmentModel.findById(shipmentId).session(session)
   const currentStep = find(shipment?.steps, ['seq', shipment?.currentStepSeq])
   const uploadedFiles = await Aigle.map(images, async (image) => {
     const fileModel = new FileModel(image)
-    await fileModel.save()
-    const file = await FileModel.findById(fileModel._id)
+    await fileModel.save({ session })
+    const file = await FileModel.findById(fileModel._id).session(session)
     return file
   })
 
-  const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', ''))
+  const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', '')).session(session)
   await stepDefinitionModel.updateOne(
     {
       stepStatus: EStepStatus.DONE,
@@ -136,7 +136,7 @@ export async function nextStep(shipmentId: string, images?: FileInput[], session
   const nextStepDeifinition = find(shipment?.steps, ['seq', shipment?.currentStepSeq + 1])
   const nextStepId = get(nextStepDeifinition, '_id', '')
   if (nextStepId) {
-    const nextStepDefinitionModel = await StepDefinitionModel.findById(nextStepId)
+    const nextStepDefinitionModel = await StepDefinitionModel.findById(nextStepId).session(session)
     await nextStepDefinitionModel.updateOne({ stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() }, { session })
     await ShipmentModel.findByIdAndUpdate(shipment?._id, { currentStepSeq: nextStepDefinitionModel.seq }, { session })
     return true
@@ -151,15 +151,15 @@ export async function podSent(
   provider: string,
   session?: ClientSession,
 ): Promise<boolean> {
-  const shipment = await ShipmentModel.findById(shipmentId)
+  const shipment = await ShipmentModel.findById(shipmentId).session(session)
   const currentStep = find(shipment?.steps, ['seq', shipment?.currentStepSeq])
   const uploadedFiles = await Aigle.map(images, async (image) => {
     const fileModel = new FileModel(image)
-    await fileModel.save()
-    const file = await FileModel.findById(fileModel._id)
+    await fileModel.save({ session })
+    const file = await FileModel.findById(fileModel._id).session(session)
     return file
   })
-  const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', ''))
+  const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', '')).session(session)
   if (stepDefinitionModel.step === EStepDefinition.POD) {
     await stepDefinitionModel.updateOne(
       {
@@ -171,9 +171,9 @@ export async function podSent(
     )
     const nextStep = find(shipment?.steps, ['seq', shipment?.currentStepSeq + 1])
     const nextStepId = get(nextStep, '_id', '')
-    const shipmentModel = await ShipmentModel.findById(shipment?._id)
+    const shipmentModel = await ShipmentModel.findById(shipment?._id).session(session)
     if (nextStepId) {
-      const nextStepDefinitionModel = await StepDefinitionModel.findById(nextStepId)
+      const nextStepDefinitionModel = await StepDefinitionModel.findById(nextStepId).session(session)
       await nextStepDefinitionModel.updateOne(
         { stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() },
         { session },
@@ -203,9 +203,9 @@ export async function podSent(
 }
 
 export async function finishJob(shipmentId: string, session?: ClientSession): Promise<boolean> {
-  const shipment = await ShipmentModel.findById(shipmentId)
+  const shipment = await ShipmentModel.findById(shipmentId).session(session)
   const currentStep = find(shipment?.steps, ['seq', shipment?.currentStepSeq])
-  const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', ''))
+  const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', '')).session(session)
   const currentDate = new Date()
   if (stepDefinitionModel.step === EStepDefinition.FINISH) {
     await stepDefinitionModel.updateOne(
@@ -244,7 +244,7 @@ export async function finishJob(shipmentId: string, session?: ClientSession): Pr
     const isAgentDriver = !isEmpty(shipment?.agentDriver)
     const ownerDriverId = isAgentDriver ? get(shipment, 'agentDriver._id', '') : get(shipment, 'driver._id', '')
 
-    const driver = await UserModel.findById(ownerDriverId)
+    const driver = await UserModel.findById(ownerDriverId).session(session)
     if (isAgentDriver && get(this, 'driver._id', '')) {
       /**
        * Update employee transaction
@@ -482,7 +482,7 @@ export async function handleUpdateBookingTime(
   modifiedBy: string,
   session?: ClientSession,
 ): Promise<Shipment> {
-  const shipment = await ShipmentModel.findById(shipmentId)
+  const shipment = await ShipmentModel.findById(shipmentId).session(session)
   if (!shipment) {
     throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
   }

@@ -258,6 +258,34 @@ export async function notifyNearbyDuedate(beforeDuedateDay: number) {
       infoLink: `/main/billing?billing_number=${billing.billingNumber}`,
       infoText: 'คลิกเพื่อดูรายละเอียด',
     })
+
+    const customer = await UserModel.findById(billing.user)
+    if (customer) {
+      const financialEmails = get(customer, 'businessDetail.creditPayment.financialContactEmails', [])
+      const emails = uniq([customer.email, ...financialEmails]).filter((email) => !isEmpty(email))
+      const month_text = format(billing.issueDate, 'MMMM')
+      const year_number = toNumber(format(billing.issueDate, 'yyyy'))
+      const year_text = toString(year_number + 543)
+      const billing_link = `https://www.movematethailand.com/main/billing?billing_number=${billing.billingNumber}`
+
+      await addEmailQueue({
+        from: process.env.MAILGUN_SMTP_EMAIL,
+        to: emails,
+        subject: `[Auto Email] Movemate Thailand ใกล้ถึงกำหนดชำระค่าบริการ ${billing.billingNumber}`,
+        template: 'nearby_duedate',
+        context: {
+          business_name: customer.fullname,
+          month_text,
+          year_text,
+          billing_number: billing.billingNumber,
+          due_days: beforeDuedateDay,
+          financial_email: 'acc@movematethailand.com', // Placeholder or dynamic from settings
+          contact_number: '02-xxx-xxxx', // Placeholder or dynamic from settings
+          movemate_link: `https://www.movematethailand.com`,
+          billing_link,
+        },
+      })
+    }
   })
 }
 
