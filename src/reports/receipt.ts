@@ -25,10 +25,14 @@ interface GenerateReceiptResponse {
   document: BillingDocument
 }
 
-export async function generateReceipt(billing: Billing, session?: ClientSession): Promise<GenerateReceiptResponse> {
-  const isTaxIncluded = billing.amount.tax > 0
+export async function generateReceipt(billing: Billing, receipt?: Receipt, session?: ClientSession): Promise<GenerateReceiptResponse> {
   const _receipts = billing.receipts as Receipt[]
-  const _receipt = last(sortBy(_receipts, 'createdAt')) as Receipt | undefined
+  const _quotation = billing.quotation as Quotation
+  const _receipt = receipt ? receipt :last(sortBy(_receipts, 'createdAt')) as Receipt | undefined
+  if (!_quotation) {
+    const message = 'ไม่พบข้อมูลใบเสนอราคา'
+    throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+  }
   if (!_receipt) {
     const message = 'ไม่พบข้อมูลใบเสร็จ'
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -163,7 +167,7 @@ export async function generateReceipt(billing: Billing, session?: ClientSession)
   })
 
   nomoredata = true
-  await ReceiptFooterComponent(doc, billing, isTaxIncluded, isReceiveWHTDocument, isAdditionalPaid)
+  await ReceiptFooterComponent(doc, _quotation, _receipt, isReceiveWHTDocument, isAdditionalPaid)
   isOiginal = false
 
   // Copy section
@@ -181,7 +185,7 @@ export async function generateReceipt(billing: Billing, session?: ClientSession)
     prepareHeader: () => doc.font(FONTS.SARABUN_MEDIUM).fontSize(7),
   })
   nomoredata = true
-  await ReceiptFooterComponent(doc, billing, isTaxIncluded, isReceiveWHTDocument, isAdditionalPaid)
+  await ReceiptFooterComponent(doc, _quotation, _receipt, isReceiveWHTDocument, isAdditionalPaid)
 
   doc.end()
   await new Promise((resolve) => writeStream.on('finish', resolve))

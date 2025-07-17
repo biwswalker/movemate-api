@@ -54,6 +54,7 @@ import { Invoice } from '@models/finance/invoice.model'
 import { updateCustomerCreditUsageBalance } from '@controllers/customer'
 import { Quotation } from '@models/finance/quotation.model'
 import PaymentModel from '@models/finance/payment.model'
+import ReceiptModel, { Receipt } from '@models/finance/receipt.model'
 
 @Resolver()
 export default class BillingResolver {
@@ -201,7 +202,7 @@ export default class BillingResolver {
       { session, new: true },
     )
     // Regenerate receipt
-    await generateReceipt(_billing, session)
+    await generateReceipt(_billing, undefined, session)
     return true
   }
 
@@ -344,13 +345,17 @@ export default class BillingResolver {
   }
 
   @Mutation(() => Boolean)
+  @WithTransaction()
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async regenerateReceipt(
+    @Ctx() ctx: GraphQLContext,
     @Arg('billingId') billingId: string,
-    @Arg('documentId') documentId: string,
+    @Arg('receiptId') receiptId: string,
   ): Promise<boolean> {
-    const _billing = await BillingModel.findById(billingId)
-    await generateReceipt(_billing)
+    const session = ctx.session
+    const _billing = await BillingModel.findById(billingId).session(session)
+    const _receipt = await ReceiptModel.findById(receiptId).session(session)
+    await generateReceipt(_billing, _receipt, session)
     return true
   }
 
@@ -391,7 +396,9 @@ export default class BillingResolver {
            * Handle If shipment complete
            * CASH: Payment genrate new Receipt
            */
-          await generateBillingReceipt(_billing._id, true, session)
+          const lastReceipt = last(sortBy(_billing.receipts, 'createdAt')) as Receipt
+          const documentId = await generateBillingReceipt(_billing._id, true, session)
+          await ReceiptModel.findByIdAndUpdate(lastReceipt._id, { document: documentId }, { session })
         }
       }
 

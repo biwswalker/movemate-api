@@ -6,11 +6,12 @@ import { fDate } from '@utils/formatTime'
 import { sum, toNumber } from 'lodash'
 import { Billing } from '@models/finance/billing.model'
 import { Quotation } from '@models/finance/quotation.model'
+import { Receipt } from '@models/finance/receipt.model'
 
 export async function ReceiptFooterComponent(
   doc: PDFDocument,
-  billing: Billing,
-  taxIncluded?: boolean,
+  quotation: Quotation,
+  receipt: Receipt,
   isReceiveWHTDocument?: boolean,
   isAdditionalPaid?: boolean,
 ) {
@@ -19,7 +20,7 @@ export async function ReceiptFooterComponent(
   const maxWidth = doc.page.width - marginRight
   const remainingHeight = doc.page.height - doc.y - doc.page.margins.bottom
 
-  const _qoutation = billing.quotation as Quotation
+  const isTaxInclude = receipt.tax > 0
 
   doc
     .lineCap('butt')
@@ -41,16 +42,17 @@ export async function ReceiptFooterComponent(
   doc.moveDown(2.6).fillColor(COLORS.TEXT_PRIMARY)
 
   // Tax section
-  if (taxIncluded) {
-    doc
-      .fontSize(8)
-      .font(FONTS.SARABUN_MEDIUM)
-      .text('รวมเป็นเงิน :', 0, doc.y - 10, { width: 400, align: 'right' })
-    doc
-      .font(FONTS.SARABUN_LIGHT)
-      .fontSize(8)
-      .text(fCurrency(billing.amount.subTotal), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
-      .moveDown(1.5)
+  doc
+    .fontSize(8)
+    .font(FONTS.SARABUN_MEDIUM)
+    .text('รวมเป็นเงิน :', 0, doc.y - 10, { width: 400, align: 'right' })
+  doc
+    .font(FONTS.SARABUN_LIGHT)
+    .fontSize(8)
+    .text(fCurrency(receipt.subTotal), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+    .moveDown(1.5)
+  
+  if (isTaxInclude) {
     doc
       .fontSize(8)
       .font(FONTS.SARABUN_MEDIUM)
@@ -58,7 +60,7 @@ export async function ReceiptFooterComponent(
     doc
       .font(FONTS.SARABUN_LIGHT)
       .fontSize(8)
-      .text(fCurrency(billing.amount.tax), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+      .text(fCurrency(receipt.tax), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
 
     doc.moveDown(2.6) //.fillColor(COLORS.TEXT_PRIMARY)
   }
@@ -69,7 +71,7 @@ export async function ReceiptFooterComponent(
    * มีค่าใช้จ่ายเพิ่ม จะต้อง แสดงส่วนต่าง
    */
   if (isAdditionalPaid) {
-    const _price = _qoutation.price
+    const _price = quotation.price
     const _paidBefore = sum([_price.total || 0, -_price.acturePrice || 0])
 
     doc
@@ -91,7 +93,7 @@ export async function ReceiptFooterComponent(
   doc
     .font(FONTS.SARABUN_SEMI_BOLD)
     .fontSize(10)
-    .text(fCurrency(billing.amount.total), 400, doc.y - 12, { align: 'right', width: maxWidth - 400 })
+    .text(fCurrency(receipt.total), 400, doc.y - 12, { align: 'right', width: maxWidth - 400 })
   doc
     .lineCap('butt')
     .lineWidth(1)
@@ -101,13 +103,13 @@ export async function ReceiptFooterComponent(
   doc
     .fontSize(7)
     .font(FONTS.SARABUN_LIGHT)
-    .text(`( ${ThaiBahtText(billing.amount.total)} )`, 0, doc.y + 8, {
+    .text(`( ${ThaiBahtText(receipt.total)} )`, 0, doc.y + 8, {
       align: 'right',
       width: maxWidth,
     })
 
   // After transfer detail
-  if (taxIncluded && !isReceiveWHTDocument) {
+  if (isTaxInclude && !isReceiveWHTDocument) {
     // Tax detail
     doc.moveDown(4)
     doc.font(FONTS.SARABUN_MEDIUM).fontSize(9).text('กรุณาออกเอกสารภาษีหัก ณ ที่จ่าย ในนาม', marginLeft).moveDown(0.8)
@@ -172,9 +174,9 @@ export async function ReceiptFooterComponent(
   /**
    * Signature
    */
-  const issueBEDate = fDate(billing.issueDate, 'dd')
-  const issueBEMonth = fDate(billing.issueDate, 'MM')
-  const issueBEYear = toNumber(fDate(billing.issueDate, 'yyyy')) + 543
+  const issueBEDate = fDate(receipt.receiptDate, 'dd')
+  const issueBEMonth = fDate(receipt.receiptDate, 'MM')
+  const issueBEYear = toNumber(fDate(receipt.receiptDate, 'yyyy')) + 543
 
   const signatureX = maxWidth / 2
   const signatureWidth = maxWidth - signatureX

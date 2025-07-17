@@ -15,7 +15,7 @@ export async function generateBillingReceipt(billingId: string, sentEmail?: bool
    * Generate receipt
    */
   const _billing = await BillingModel.findById(billingId).session(session)
-  const { filePath, fileName, document } = await generateReceipt(_billing, session)
+  const { filePath, fileName, document } = await generateReceipt(_billing, undefined, session)
 
   console.log('Generate receipt document: ', document)
   /**
