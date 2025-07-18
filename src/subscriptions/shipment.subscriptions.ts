@@ -29,7 +29,11 @@ export default class ShipmentSubscription {
 
         const subscription = pubsub.subscribe(SHIPMENTS.UPDATE, user_id)
         for await (const updatedShipment of subscription) {
-          await push([updatedShipment])
+          const _initialShipments = await ShipmentModel.aggregate(
+            GET_SHIPMENT_LIST(filters, user_role, user_id, sort, skip || 0, limit || 10),
+          )
+          await push(_initialShipments)
+          // await push([updatedShipment])
         }
 
         await stop

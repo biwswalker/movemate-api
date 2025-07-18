@@ -49,7 +49,7 @@ const GET_SHIPMENT_LIST_LOOKUPs: PipelineStage[] = [
     $lookup: {
       from: 'billings',
       let: { shipment_id: '$_id' },
-      pipeline: [{ $match: { $expr: { $in: ['$$shipment_id', '$shipments'] } } }],
+      pipeline: [{ $match: { $expr: { $in: ['$$shipment_id', '$shipments'] } } }, { $limit: 1 }],
       as: 'billing',
     },
   },
