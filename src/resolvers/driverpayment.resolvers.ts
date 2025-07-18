@@ -21,7 +21,7 @@ import { generateTrackingNumber } from '@utils/string.utils'
 import { REPONSE_NAME } from 'constants/status'
 import { format } from 'date-fns'
 import { GraphQLError } from 'graphql'
-import { map } from 'lodash'
+import { isEmpty, map } from 'lodash'
 import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
@@ -42,15 +42,31 @@ export default class DriverPaymentResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    const driver = await UserModel.findById(driverId)
-    const transactions = await TransactionModel.find({ _id: { $in: data.transactionIds }, refType: ERefType.SHIPMENT })
-    const shipments = transactions.map((transaction) => transaction.refId)
+    // 1. ตรวจสอบว่ามี transactionIds ส่งมาหรือไม่
+    if (isEmpty(data.transactionIds)) {
+      throw new GraphQLError('กรุณาเลือกรายการที่ต้องการชำระ')
+    }
+
+    // 2. ดึงข้อมูล transaction จากฐานข้อมูลเพื่อตรวจสอบสถานะล่าสุด
+    const transactionsInDB = await TransactionModel.find({ _id: { $in: data.transactionIds } }).session(session)
+
+    // 3. ตรวจสอบว่าหาเจอครบทุกรายการหรือไม่
+    if (transactionsInDB.length !== data.transactionIds.length) {
+      throw new GraphQLError('ไม่พบ transaction บางรายการ กรุณารีเฟรชและลองใหม่อีกครั้ง')
+    }
+
+    // 4. ตรวจสอบว่ามีรายการใดที่ไม่ใช่สถานะ PENDING หรือไม่
+    const alreadyProcessed = transactionsInDB.some((t) => t.status !== ETransactionStatus.PENDING)
+    if (alreadyProcessed) {
+      throw new GraphQLError('มีบางรายการที่ถูกดำเนินการไปแล้ว กรุณารีเฟรชและลองใหม่อีกครั้ง')
+    }
+
+    const shipments = transactionsInDB.map((transaction) => transaction.refId)
 
     // Update shipment trnasaction
     await TransactionModel.updateMany(
       {
         _id: { $in: data.transactionIds },
-        refType: ERefType.SHIPMENT,
         status: ETransactionStatus.PENDING,
       },
       { status: ETransactionStatus.COMPLETE },
@@ -74,7 +90,7 @@ export default class DriverPaymentResolver {
       whtNumber: _whtNumber,
       // whtBookNo: data.whtBookNo,
       imageEvidence,
-      transactions,
+      transactions: transactionsInDB,
       shipments,
       paymentDate: data.paymentDate,
       paymentTime: data.paymentTime,
@@ -103,7 +119,8 @@ export default class DriverPaymentResolver {
     await driverTransaction.save({ session })
 
     // Add transaction For Admin
-    const descriptionForAdmin = `ชำระค่าขนส่งคนขับหมายเลข ${driver.userNumber} (ใบสำคัญจ่าย #${_paymentNumber})`;
+    const driver = await UserModel.findById(driverId).session(session)
+    const descriptionForAdmin = `ชำระค่าขนส่งคนขับหมายเลข ${driver.userNumber} (ใบสำคัญจ่าย #${_paymentNumber})`
     const movemateTransaction = new TransactionModel({
       amountBeforeTax: data.subtotal,
       amountTax: data.tax,

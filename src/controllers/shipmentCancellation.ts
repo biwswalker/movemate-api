@@ -249,7 +249,9 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
     const driverSubtotal = forDriver
     const driverTax = driverSubtotal * 0.01
     const driverTotal = lodash.sum([driverSubtotal, -driverTax])
-    const driverTransaction = new TransactionModel({
+
+    // ตรวจสอบ transaction จากการยกเลิกงานที่มีอยู่แล้ว
+    const existingCancelTransaction = await TransactionModel.findOne({
       amountTax: driverTax, // WHT
       amountBeforeTax: driverSubtotal,
       amount: driverTotal,
@@ -258,10 +260,27 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
       description: `ค่าชดเชยงาน #${_shipment.trackingNumber} ${description}`,
       refId: _shipment._id,
       refType: ERefType.SHIPMENT,
-      transactionType: ETransactionType.INCOME,
-      status: ETransactionStatus.PENDING,
-    })
-    await driverTransaction.save({ session })
+    }).session(session)
+
+    if (existingCancelTransaction) {
+      console.warn(
+        `[cancelledShipment] Cancellation transaction for shipment ${_shipment._id} already exists. Skipping creation.`,
+      )
+    } else {
+      const driverTransaction = new TransactionModel({
+        amountTax: driverTax, // WHT
+        amountBeforeTax: driverSubtotal,
+        amount: driverTotal,
+        ownerId: driverId,
+        ownerType: ETransactionOwner.DRIVER,
+        description: `ค่าชดเชยงาน #${_shipment.trackingNumber} ${description}`,
+        refId: _shipment._id,
+        refType: ERefType.SHIPMENT,
+        transactionType: ETransactionType.INCOME,
+        status: ETransactionStatus.PENDING,
+      })
+      await driverTransaction.save({ session })
+    }
 
     // Driver Notification
     await NotificationModel.sendNotification(
@@ -325,7 +344,11 @@ interface CancelledShipmentInput {
   reason: string
 }
 
-export async function driverCancelledShipment(input: CancelledShipmentInput, driverId: string,session?: ClientSession) {
+export async function driverCancelledShipment(
+  input: CancelledShipmentInput,
+  driverId: string,
+  session?: ClientSession,
+) {
   const { shipmentId, reason } = input
   const cancellationTime = new Date()
 

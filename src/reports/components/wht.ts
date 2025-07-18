@@ -424,7 +424,7 @@ export async function renderWHTContent(doc: PDFDocument, whtInfo: WHTData, table
     fullname: 'นาย สรณัฐ อินทร์ตลาดชุม',
     signDate: fDate(new Date(), 'dd/MM/yyyy'),
     // WHT Info
-    whtName: 'บริษัท เทพพรชัน เอ็นเทอร์ไพรส์ จำกัด',
+    whtName: 'บริษัท เทพพรชัย เอ็นเทอร์ไพรส์ จำกัด',
     whtAddress: 'เลขที่ 156 ซอยลาดพร้าว 96 ถนนลาดพร้าว แขวงพลับพลา เขตวังทองหลาง กรุงเทพมหานคร 10310',
     whtTaxId: '0-1055-64086-72-3',
   }

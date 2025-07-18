@@ -239,12 +239,26 @@ export async function finishJob(shipmentId: string, session?: ClientSession): Pr
      * TRANSACTIONS
      * Calculate WHT 1% for driver here
      */
+    // ตรวจสอบว่ามี transaction จากการ finish job นี้แล้วหรือยัง
+    const existingFinishTransaction = await TransactionModel.findOne({
+      refId: shipment?._id,
+      refType: ERefType.SHIPMENT,
+      transactionType: ETransactionType.INCOME, // ตรวจสอบเฉพาะรายรับที่เกิดจากการจบงาน
+    }).session(session)
+
+    if (existingFinishTransaction) {
+      console.warn(`[finishJob] Transaction for shipment ${shipmentId} already exists. Skipping creation.`)
+      // อาจจะคืนค่า true ไปเลย เพราะถือว่าจบงานสำเร็จแล้ว แต่ transaction ถูกสร้างไปก่อนหน้า
+      return true
+    }
+
     const lastPayment = last(sortBy(shipment?.quotations, ['createdAt'])) as Quotation
     const cost = lastPayment?.cost
     const isAgentDriver = !isEmpty(shipment?.agentDriver)
     const ownerDriverId = isAgentDriver ? get(shipment, 'agentDriver._id', '') : get(shipment, 'driver._id', '')
 
     const driver = await UserModel.findById(ownerDriverId).session(session)
+
     if (isAgentDriver && get(this, 'driver._id', '')) {
       /**
        * Update employee transaction
@@ -281,21 +295,8 @@ export async function finishJob(shipmentId: string, session?: ClientSession): Pr
     await driverTransaction.save({ session })
 
     /**
-     * Add transaction for Movemate Thailand
+     * Update driver balance
      */
-    // const movemateTransaction = new TransactionModel({
-    //   amount: amountPrice,
-    //   ownerId: MOVEMATE_OWNER_ID,
-    //   ownerType: ETransactionOwner.MOVEMATE,
-    //   description: description,
-    //   refId: shipment?._id,
-    //   refType: ERefType.SHIPMENT,
-    //   transactionType: ETransactionType.INCOME,
-    //   status: ETransactionStatus.COMPLETE,
-    // })
-    // await movemateTransaction.save({ session })
-
-    // Update balance
     if (driver) {
       const driverDetail = await DriverDetailModel.findById(driver.driverDetail)
       await driverDetail.updateBalance(session)
