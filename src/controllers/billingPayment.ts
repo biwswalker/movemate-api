@@ -21,7 +21,7 @@ import TransactionModel, {
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import PaymentEvidenceModel from '@models/finance/evidence.model'
 import { format } from 'date-fns'
-import { generateTrackingNumber } from '@utils/string.utils'
+import { generateMonthlySequenceNumber, generateTrackingNumber } from '@utils/string.utils'
 import ReceiptModel from '@models/finance/receipt.model'
 import { generateBillingReceipt } from './billingReceipt'
 import { MakePayBillingInput } from '@inputs/payment.input'
@@ -105,8 +105,7 @@ export async function markBillingAsPaid(
     /**
      * สร้าง Receipt สำหรับ Credit payment หรือการชำระเงินสดที่ออกใบเสร็จแล้
      */
-    const generateMonth = format(today, 'yyMM')
-    const _receiptNumber = await generateTrackingNumber(`RE${generateMonth}`, 'receipt', 3)
+    const _receiptNumber = await generateMonthlySequenceNumber('receipt')
     const _receipt = new ReceiptModel({
       receiptNumber: _receiptNumber,
       receiptDate: today,

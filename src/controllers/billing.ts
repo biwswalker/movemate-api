@@ -17,7 +17,6 @@ import ShipmentModel from '@models/shipment.model'
 import UserModel, { User } from '@models/user.model'
 import { GET_CUSTOMER_WITH_TODAY_BILLED_DATE } from '@pipelines/user.pipeline'
 import addEmailQueue from '@utils/email.utils'
-import { generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { addDays, addMonths, differenceInDays, endOfDay, setDate, format, setMonth, startOfDay } from 'date-fns'
 import { th } from 'date-fns/locale'
@@ -26,6 +25,7 @@ import { ClientSession, Types } from 'mongoose'
 import path from 'path'
 import { generateInvoice } from 'reports/invoice'
 import BillingDocumentModel from '@models/finance/documents.model'
+import { generateMonthlySequenceNumber, generateTrackingNumber } from '@utils/string.utils'
 
 Aigle.mixin(lodash, {})
 
@@ -70,6 +70,13 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
       const issueDate = setDate(today, _currentBillingCycle.issueDate)
       const currentIssueBillingCycleDate = endOfDay(addDays(issueDate, -1))
 
+      // Get IDs of shipments already included in existing non-cancelled/non-refunded billings
+      const billedShipmentIds = await BillingModel.find({
+        user: customerId,
+        status: { $in: [EBillingStatus.PENDING, EBillingStatus.VERIFY, EBillingStatus.COMPLETE] },
+      })
+        .distinct('shipments')
+        .session(session)
       /**
        * Get Complete Shipment
        * Complete period: (Previous Month - Previous Day)
@@ -77,6 +84,7 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
       const shipmentsInPeriod = await ShipmentModel.find({
         customer: customerId,
         paymentMethod: EPaymentMethod.CREDIT,
+        _id: { $nin: billedShipmentIds },
         $or: [
           {
             status: EShipmentStatus.DELIVERED,
@@ -141,8 +149,7 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
       /**
        * Create Invoice data
        */
-      const _monthyear = format(today, 'yyMM')
-      const _invoiceNumber = await generateTrackingNumber(`IV${_monthyear}`, 'invoice', 3)
+      const _invoiceNumber = await generateMonthlySequenceNumber('invoice')
       const _invoice = new InvoiceModel({
         invoiceNumber: _invoiceNumber,
         invoiceDate: issueDate,
@@ -179,7 +186,7 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
        * Convert Duedate day number to Date
        */
       const paymentDueDate = endOfDay(
-        setDate(setMonth(today, _currentBillingCycle.dueMonth), _currentBillingCycle.dueDate),
+        setDate(setMonth(today, _currentBillingCycle.dueMonth - 1), _currentBillingCycle.dueDate),
       )
       /**
        * Create Billing for Credit user

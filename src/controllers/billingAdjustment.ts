@@ -1,7 +1,7 @@
 import { CreateAdjustmentNoteInput } from '@inputs/billingAdjustmentNote.input'
 import { ClientSession } from 'mongoose'
 import { GraphQLError } from 'graphql'
-import { generateTrackingNumber } from '@utils/string.utils'
+import { generateMonthlySequenceNumber, generateTrackingNumber } from '@utils/string.utils'
 import { format } from 'date-fns'
 import { last, sortBy, sumBy } from 'lodash'
 import BillingAdjustmentNoteModel, { BillingAdjustmentNote } from '@models/finance/billingAdjustmentNote.model'
@@ -65,11 +65,8 @@ export async function createAdjustmentNote(
   const newTotalAmount = newSubTotal - newTaxAmount // รวมที่ต้องชำระทั้งสิ้น
 
   // --- 3. สร้างและบันทึกเอกสาร ---
-  const prefix = adjustmentType === EAdjustmentNoteType.DEBIT_NOTE ? 'DR' : 'CR'
   const idType: TGenerateIDType = adjustmentType === EAdjustmentNoteType.DEBIT_NOTE ? 'debitnote' : 'creditnote'
-  const today = new Date()
-  const generateMonth = format(today, 'yyMM')
-  const adjustmentNumber = await generateTrackingNumber(`${prefix}${generateMonth}`, idType, 3)
+  const adjustmentNumber = await generateMonthlySequenceNumber(idType)
   const newAdjustmentNote = new BillingAdjustmentNoteModel({
     adjustmentNumber,
     billing: billing._id,
@@ -95,6 +92,8 @@ export async function createAdjustmentNote(
     }
   }
 
+  const today = new Date()
+  const generateMonth = format(today, 'yyMM')
   const _paymentNumber = await generateTrackingNumber(`PAYCAS${generateMonth}`, 'payment', 3)
 
   const _payment = new PaymentModel({

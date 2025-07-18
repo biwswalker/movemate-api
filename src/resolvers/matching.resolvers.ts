@@ -34,7 +34,7 @@ import StepDefinitionModel, {
   EStepStatus,
 } from '@models/shipmentStepDefinition.model'
 import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
-import { generateTrackingNumber } from '@utils/string.utils'
+import { generateMonthlySequenceNumber } from '@utils/string.utils'
 import {
   getAcceptedShipmentForDriverQuery,
   getNewAllAvailableShipmentForDriver,
@@ -448,8 +448,7 @@ export default class MatchingResolver {
 
       if (_billing) {
         const today = new Date()
-        const generateMonth = format(today, 'yyMM')
-        const _receiptNumber = await generateTrackingNumber(`RE${generateMonth}`, 'receipt', 3)
+        const _receiptNumber = await generateMonthlySequenceNumber('receipt')
         const _quotation = _billing.quotation
 
         const _receipt = new ReceiptModel({
