@@ -20,7 +20,11 @@ import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
 import RetryTransactionMiddleware, { WithTransaction } from '@middlewares/RetryTransaction'
 import FileModel from '@models/file.model'
 import BillingModel, { Billing } from '@models/finance/billing.model'
-import { BillingInfoPayload, BillingListPayload, TotalBillingRecordPayload } from '@payloads/billingCycle.payloads'
+import {
+  BillingInfoPayload,
+  BillingListPaginationPayload,
+  TotalBillingRecordPayload,
+} from '@payloads/billingCycle.payloads'
 import { BILLING_CYCLE_LIST } from '@pipelines/billingCycle.pipeline'
 import { reformPaginate } from '@utils/pagination.utils'
 import { GraphQLError } from 'graphql'
@@ -49,7 +53,7 @@ import { generateBillingReceipt } from '@controllers/billingReceipt'
 import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
 import { CreateAdjustmentNoteInput } from '@inputs/billingAdjustmentNote.input'
 import { createAdjustmentNote } from '@controllers/billingAdjustment'
-import NotificationModel, { ENotificationVarient, Notification } from '@models/notification.model'
+import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import { Invoice } from '@models/finance/invoice.model'
 import { updateCustomerCreditUsageBalance } from '@controllers/customer'
 import { Quotation } from '@models/finance/quotation.model'
@@ -58,17 +62,17 @@ import ReceiptModel, { Receipt } from '@models/finance/receipt.model'
 
 @Resolver()
 export default class BillingResolver {
-  @Query(() => BillingListPayload)
+  @Query(() => BillingListPaginationPayload)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getBillingList(
     @Arg('data', { nullable: true }) data: GetBillingInput,
     @Args() paginate: PaginationArgs,
-  ): Promise<BillingListPayload> {
+  ): Promise<BillingListPaginationPayload> {
     try {
       const { sort = undefined, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
       // Aggregrated
       const aggregate = BillingModel.aggregate(BILLING_CYCLE_LIST(data, sort))
-      const _billings = (await BillingModel.aggregatePaginate(aggregate, reformSorts)) as BillingListPayload
+      const _billings = (await BillingModel.aggregatePaginate(aggregate, reformSorts)) as BillingListPaginationPayload
       if (!_billings) {
         const message = `ไม่สามารถเรียกข้อมูลใบแจ้งหนี้`
         throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })

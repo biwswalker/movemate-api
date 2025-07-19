@@ -5,8 +5,13 @@ import { PipelineStage, Types } from 'mongoose'
 import { userPipelineStage } from './user.pipeline'
 import { filePipelineStage } from './file.pipline'
 import { billingDocumentPipelineStage } from './document.pipeline'
+import { endOfDay, startOfDay } from 'date-fns'
 
-export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {}) => {
+export const BILLING_CYCLE_LIST = (
+  data: GetBillingInput,
+  sort: any | undefined = {},
+  project = {},
+): PipelineStage[] => {
   const {
     status,
     state,
@@ -20,7 +25,8 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
     receiptDate,
     customerId,
   } = data
-  const statusFilter = status !== EBillingCriteriaStatus.ALL ? [status] : []
+
+  const statusFilter = status && status !== EBillingCriteriaStatus.ALL ? [status] : []
   const stateFilter = state && state !== EBillingCriteriaState.ALL ? [state] : []
 
   const customerNameMatch = customerName
@@ -39,18 +45,18 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
 
   const startBilledDateRaw = get(billedDate, '0', '')
   const endBilledDateRaw = get(billedDate, '1', '')
-  const startBilledDate = startBilledDateRaw ? new Date(new Date(startBilledDateRaw).setHours(0, 0, 0, 0)) : null
-  const endBilledDate = endBilledDateRaw ? new Date(new Date(endBilledDateRaw).setHours(23, 59, 59, 999)) : null
+  const startBilledDate = startBilledDateRaw ? startOfDay(startBilledDateRaw) : null
+  const endBilledDate = endBilledDateRaw ? endOfDay(endBilledDateRaw) : null
 
   const startIssueDateRaw = get(issueDate, '0', '')
   const endIssueDateRaw = get(issueDate, '1', '')
-  const startIssueDate = startIssueDateRaw ? new Date(new Date(startIssueDateRaw).setHours(0, 0, 0, 0)) : null
-  const endIssueDate = endIssueDateRaw ? new Date(new Date(endIssueDateRaw).setHours(23, 59, 59, 999)) : null
+  const startIssueDate = startIssueDateRaw ? startOfDay(startIssueDateRaw) : null
+  const endIssueDate = endIssueDateRaw ? endOfDay(endIssueDateRaw) : null
 
   const startReceiptDateRaw = get(receiptDate, '0', '')
   const endReceiptDateRaw = get(receiptDate, '1', '')
-  const startReceiptDate = startReceiptDateRaw ? new Date(new Date(startReceiptDateRaw).setHours(0, 0, 0, 0)) : null
-  const endReceiptDate = endReceiptDateRaw ? new Date(new Date(endReceiptDateRaw).setHours(23, 59, 59, 999)) : null
+  const startReceiptDate = startReceiptDateRaw ? startOfDay(startReceiptDateRaw) : null
+  const endReceiptDate = endReceiptDateRaw ? endOfDay(endReceiptDateRaw) : null
 
   const beforeMatch: PipelineStage[] = [
     ...(customerId
@@ -108,16 +114,189 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
         },
       },
     },
+  ]
+
+  const optimizedProject: PipelineStage[] = [
     {
-      $sort: {
-        statusWeight: 1,
-        stateWeight: 1,
-        ...(!isEmpty(sort) ? sort : {}),
+      $project: {
+        _id: 1,
+        billingNumber: 1,
+        status: 1,
+        state: 1,
+        paymentMethod: 1,
+        userTitle: {
+          $switch: {
+            branches: [
+              {
+                case: { $eq: ['$user.userType', 'INDIVIDUAL'] },
+                then: {
+                  $cond: {
+                    if: { $eq: ['$user.individualDetail.title', 'อื่นๆ'] },
+                    then: '$user.individualDetail.otherTitle',
+                    else: '$user.individualDetail.title',
+                  },
+                },
+              },
+              {
+                case: { $eq: ['$user.userType', 'BUSINESS'] },
+                then: '$user.businessDetail.businessTitle',
+              },
+            ],
+            default: '',
+          },
+        },
+        userFullname: {
+          $cond: {
+            if: { $eq: ['$user.userType', 'BUSINESS'] },
+            then: '$user.businessDetail.businessName',
+            else: { $concat: ['$user.individualDetail.firstname', ' ', '$customer.individualDetail.lastname'] },
+          },
+        },
+        latestQuotationTax: {
+          $let: {
+            vars: {
+              lastPayment: { $arrayElemAt: ['$payments', -1] },
+            },
+            in: {
+              $let: {
+                vars: {
+                  lastQuotation: { $arrayElemAt: ['$$lastPayment.quotations', -1] },
+                },
+                in: '$$lastQuotation.price.tax',
+              },
+            },
+          },
+        },
+        latestQuotationPrice: {
+          $let: {
+            vars: {
+              lastPayment: { $arrayElemAt: ['$payments', -1] },
+            },
+            in: {
+              $let: {
+                vars: {
+                  lastQuotation: { $arrayElemAt: ['$$lastPayment.quotations', -1] },
+                },
+                in: '$$lastQuotation.price.total',
+              },
+            },
+          },
+        },
+        latestAmount: {
+          $let: {
+            vars: {
+              lastPayment: { $arrayElemAt: ['$payments', -1] },
+            },
+            in: '$$lastPayment.total',
+          },
+        },
+        latestPaymentStatus: {
+          $let: {
+            vars: {
+              lastPayment: { $arrayElemAt: ['$payments', -1] },
+            },
+            in: '$$lastPayment.status',
+          },
+        },
+        latestPaymentType: {
+          $let: {
+            vars: {
+              lastPayment: { $arrayElemAt: ['$payments', -1] },
+            },
+            in: '$$lastPayment.type',
+          },
+        },
+        createdAt: 1,
+        receiptNumbers: {
+          $reduce: {
+            input: '$receipts.receiptNumber',
+            initialValue: '',
+            in: {
+              $concat: ['$$value', { $cond: [{ $eq: ['$$value', ''] }, '', ', '] }, '$$this'],
+            },
+          },
+        },
+        latestReceiptDate: { $max: '$receipts.receiptDate' },
+        latestPaymentDate: { $max: '$payments.createdAt' },
+        adjustmentIncreaseNumbers: {
+          $reduce: {
+            input: {
+              $filter: {
+                input: '$adjustmentNotes',
+                as: 'note',
+                cond: { $eq: ['$$note.adjustmentType', 'DEBIT_NOTE'] },
+              },
+            },
+            initialValue: '',
+            in: {
+              $concat: ['$$value', { $cond: [{ $eq: ['$$value', ''] }, '', ', '] }, '$$this.adjustmentNumber'],
+            },
+          },
+        },
+        adjustmentDecreaseNumbers: {
+          $reduce: {
+            input: {
+              $filter: {
+                input: '$adjustmentNotes',
+                as: 'note',
+                cond: { $eq: ['$$note.adjustmentType', 'CREDIT_NOTE'] },
+              },
+            },
+            initialValue: '',
+            in: {
+              $concat: ['$$value', { $cond: [{ $eq: ['$$value', ''] }, '', ', '] }, '$$this.adjustmentNumber'],
+            },
+          },
+        },
+        billingStartDate: '$billingStartDate',
+        billingEndDate: '$billingEndDate',
+        invoiceDate: '$invoice.invoiceDate',
+        paymentDueDate: '$paymentDueDate',
+        invoicePostalStatus: {
+          $cond: {
+            if: { $and: ['$invoice.document.postalTime', '$invoice.document.trackingNumber'] },
+            then: 'จัดส่งแล้ว',
+            else: {
+              $cond: {
+                if: '$invoice.document.postalTime',
+                then: 'จัดส่งแล้ว',
+                else: '',
+              },
+            },
+          },
+        },
+        invoiceFilename: '$invoice.document.filename',
+        receiptFilenames: '$receipts.document.filename',
+        invoiceTrackingNumber: '$invoice.document.trackingNumber',
+        receiptTrackingNumbers: {
+          $reduce: {
+            input: '$receipts.document.trackingNumber',
+            initialValue: '',
+            in: {
+              $concat: ['$$value', { $cond: [{ $eq: ['$$value', ''] }, '', ', '] }, '$$this'],
+            },
+          },
+        },
       },
     },
   ]
 
-  const projects: PipelineStage[] = !isEmpty(project) ? [{ $project: project as any }] : []
+  const postQuery: PipelineStage[] = [
+    {
+      $match: {
+        ...(startReceiptDate || endReceiptDate
+          ? {
+              latestReceiptDate: {
+                ...(startReceiptDate ? { $gte: startReceiptDate } : {}),
+                ...(endReceiptDate ? { $lte: endReceiptDate } : {}),
+              },
+            }
+          : {}),
+      },
+    },
+  ]
+
+  const projects: PipelineStage[] = !isEmpty(project) ? [{ $project: project as any }] : optimizedProject
 
   return [
     ...beforeMatch,
@@ -130,6 +309,7 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
         foreignField: '_id',
         as: 'payments',
         pipeline: [
+          { $sort: { createdAt: 1 } }, // Sort payments to get the latest
           {
             $lookup: {
               from: 'paymentevidences',
@@ -145,7 +325,7 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
               localField: 'quotations',
               foreignField: '_id',
               as: 'quotations',
-              pipeline: userPipelineStage('updatedBy'),
+              pipeline: [{ $sort: { createdAt: 1 } }, ...userPipelineStage('updatedBy')], // Sort quotations
             },
           },
           ...userPipelineStage('updatedBy'),
@@ -210,5 +390,13 @@ export const BILLING_CYCLE_LIST = (data: GetBillingInput, sort = {}, project = {
     },
     ...query,
     ...projects,
+    ...postQuery,
+    {
+      $sort: {
+        statusWeight: 1,
+        stateWeight: 1,
+        ...sort,
+      },
+    },
   ]
 }

@@ -1298,17 +1298,18 @@ export default class UserResolver {
   }
 
   @Mutation(() => Boolean)
+  @WithTransaction()
   @UseMiddleware(AuthGuard([EUserRole.DRIVER, EUserRole.CUSTOMER, EUserRole.ADMIN]))
   async updateProfileImage(
     @Ctx() ctx: GraphQLContext,
     @Arg('fileDetail') fileDetail: FileInput,
     @Arg('uid', { nullable: true }) uid: string,
   ): Promise<boolean> {
+    const session = ctx.session
     try {
       const userId = uid || ctx.req.user_id
-      console.log('ctx: ', ctx)
       if (userId) {
-        const userModel = await UserModel.findById(userId)
+        const userModel = await UserModel.findById(userId).session(session)
         if (!userModel) {
           const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
           throw new GraphQLError(message, {
@@ -1319,8 +1320,8 @@ export default class UserResolver {
           })
         }
         const file = new FileModel(fileDetail)
-        await file.save()
-        await userModel.updateOne({ profileImage: file })
+        await file.save({ session })
+        await userModel.updateOne({ profileImage: file }, { session })
         return true
       }
       const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน'
