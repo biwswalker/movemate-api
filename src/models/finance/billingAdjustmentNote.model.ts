@@ -43,7 +43,7 @@ export class BillingAdjustmentNote {
   readonly _id: string
 
   @Field()
-  @Property({ required: true, unique: true })
+  @Property({ required: true })
   adjustmentNumber: string
 
   @Field(() => Billing)

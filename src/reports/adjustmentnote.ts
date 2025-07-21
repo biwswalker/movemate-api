@@ -1,4 +1,4 @@
-import { round } from 'lodash'
+import { findIndex, round } from 'lodash'
 import PDFDocument, { Table, DataOptions } from 'pdfkit-table'
 import fs from 'fs'
 import path from 'path'
@@ -24,12 +24,14 @@ export async function generateAdjustmentNote(
   adjustmentNote: BillingAdjustmentNote,
   session?: ClientSession,
 ): Promise<GenerateAdjustmentNoteResponse> {
+  billing
   const documentType =
     adjustmentNote.adjustmentType === EAdjustmentNoteType.DEBIT_NOTE
       ? { title: 'ใบเพิ่มหนี้', short: 'DR', full: 'debitnote' }
       : { title: 'ใบลดหนี้', short: 'CR', full: 'creditnote' }
 
-  const fileName = `${documentType.full}_${adjustmentNote.adjustmentNumber}.pdf`
+  const number = findIndex(billing.adjustmentNotes, { _id: adjustmentNote._id })
+  const fileName = `${documentType.full}_${number + 1}_${adjustmentNote.adjustmentNumber}.pdf`
 
   const filePath = path.join(__dirname, '..', '..', 'generated/adjustmentnote', fileName) // หรือ path ที่ต้องการ
 

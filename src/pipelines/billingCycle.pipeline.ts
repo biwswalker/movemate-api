@@ -124,6 +124,7 @@ export const BILLING_CYCLE_LIST = (
         status: 1,
         state: 1,
         paymentMethod: 1,
+        userId: '$user._id',
         userTitle: {
           $switch: {
             branches: [
@@ -265,6 +266,7 @@ export const BILLING_CYCLE_LIST = (
             },
           },
         },
+        invoiceNumber: '$invoice.invoiceNumber',
         invoiceFilename: '$invoice.document.filename',
         receiptFilenames: '$receipts.document.filename',
         invoiceTrackingNumber: '$invoice.document.trackingNumber',

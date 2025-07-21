@@ -26,6 +26,7 @@ export class CreateDriverPaymentInput {
 }
 
 @ArgsType()
+@InputType()
 export class GetDriverPaymentArgs {
   @Field({ nullable: true })
   shipmentTracking?: string

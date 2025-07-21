@@ -33,7 +33,7 @@ import StepDefinitionModel, {
   EStepDefinitionName,
   EStepStatus,
 } from '@models/shipmentStepDefinition.model'
-import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
+import RetryTransactionMiddleware, { WithTransaction } from '@middlewares/RetryTransaction'
 import { generateMonthlySequenceNumber } from '@utils/string.utils'
 import {
   getAcceptedShipmentForDriverQuery,
@@ -377,7 +377,8 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER, EUserRole.ADMIN]), RetryTransactionMiddleware)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER, EUserRole.ADMIN]))
   async nextShipmentStep(@Ctx() ctx: GraphQLContext, @Arg('data') data: NextShipmentStepInput): Promise<boolean> {
     const session = ctx.session
     const userId = ctx.req.user_id
@@ -385,7 +386,7 @@ export default class MatchingResolver {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
-    const shipment = await ShipmentModel.findById(data.shipmentId)
+    const shipment = await ShipmentModel.findById(data.shipmentId).session(session)
     if (!shipment) {
       const message = 'ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })

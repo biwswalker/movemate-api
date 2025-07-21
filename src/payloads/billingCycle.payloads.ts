@@ -23,6 +23,9 @@ export class BillingListPayload {
   paymentMethod: EPaymentMethod
 
   @Field(() => String)
+  userId: string
+
+  @Field(() => String)
   userTitle: string
 
   @Field(() => String)

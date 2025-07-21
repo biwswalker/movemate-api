@@ -3,7 +3,7 @@ import { ClientSession } from 'mongoose'
 import { GraphQLError } from 'graphql'
 import { generateMonthlySequenceNumber, generateTrackingNumber } from '@utils/string.utils'
 import { format } from 'date-fns'
-import { last, sortBy, sumBy } from 'lodash'
+import { find, last, sortBy, sumBy } from 'lodash'
 import BillingAdjustmentNoteModel, { BillingAdjustmentNote } from '@models/finance/billingAdjustmentNote.model'
 import BillingModel from '@models/finance/billing.model'
 import { User } from '@models/user.model'
@@ -20,7 +20,7 @@ export async function createAdjustmentNote(
   adminId: string,
   session?: ClientSession,
 ): Promise<{ adjustmentNote: BillingAdjustmentNote; document: BillingDocument; fileName: string; filePath: string }> {
-  const { billingId, adjustmentType, items, issueDate, remarks } = input
+  const { billingId, adjustmentType, items, remarks } = input
 
   const billing = await BillingModel.findById(billingId)
     .populate(['user', 'invoice', 'adjustmentNotes'])
@@ -28,58 +28,74 @@ export async function createAdjustmentNote(
   if (!billing || !billing.user) throw new GraphQLError('ไม่พบข้อมูล Billing หรือ User')
 
   const customer = billing.user as User
+  const invoice = billing.invoice as Invoice
+  const existingNotes = sortBy(billing.adjustmentNotes, 'issueDate')
+  const lastNote = last(existingNotes) as BillingAdjustmentNote | undefined
 
-  // --- 1. หายอดล่าสุด (Previous State) ---
-  const lastAdjustmentNote = last(sortBy(billing.adjustmentNotes, 'issueDate')) as BillingAdjustmentNote | undefined
+  let adjustmentNumber: string
+  let issueDate: Date
 
-  let originalSubTotal = 0 // มูลค่าตามใบแจ้งหนี้เดิม
-  let previousDocumentRef: { documentNumber: string; documentType: string }
-
-  if (lastAdjustmentNote) {
-    // ถ้ามี Note อยู่แล้ว ใช้ยอดจาก Note ล่าสุด
-    originalSubTotal = lastAdjustmentNote.newSubTotal
-    previousDocumentRef = {
-      documentNumber: lastAdjustmentNote.adjustmentNumber,
-      documentType: lastAdjustmentNote.adjustmentType,
-    }
-  } else if (billing.invoice) {
-    // ถ้ายังไม่มี Note ใช้ยอดจาก Invoice
-    const invoice = billing.invoice as Invoice
-    originalSubTotal = invoice.subTotal
-    previousDocumentRef = {
-      documentNumber: invoice.invoiceNumber,
-      documentType: 'INVOICE',
-    }
+  if (lastNote && lastNote.adjustmentType === adjustmentType) {
+    // ---- กรณีที่ 1: สร้างประเภทเดียวกับใบล่าสุด ----
+    // ให้ใช้ข้อมูลจาก "ใบแรกสุด" ของประเภทนั้น
+    const firstNoteOfSameType = find(existingNotes, { adjustmentType }) as BillingAdjustmentNote
+    adjustmentNumber = firstNoteOfSameType!.adjustmentNumber
+    issueDate = firstNoteOfSameType!.issueDate
   } else {
-    throw new GraphQLError('ไม่พบเอกสารอ้างอิงเริ่มต้น (Invoice)')
+    // ---- กรณีที่ 2: เป็นใบแรก หรือ สร้างคนละประเภทกับใบล่าสุด ----
+    const firstNoteOfNewType = find(existingNotes, { adjustmentType }) as BillingAdjustmentNote | undefined
+    if (firstNoteOfNewType) {
+      // 2.1) ถ้าเคยมีประเภทนี้อยู่แล้ว ให้ใช้ข้อมูลจากใบแรกสุดของประเภทนั้น
+      adjustmentNumber = firstNoteOfNewType.adjustmentNumber
+      issueDate = firstNoteOfNewType.issueDate
+    } else {
+      // 2.2) ถ้าไม่เคยมีประเภทนี้เลย ให้สร้างใหม่ทั้งหมด
+      const idType: TGenerateIDType = adjustmentType === EAdjustmentNoteType.DEBIT_NOTE ? 'debitnote' : 'creditnote'
+      adjustmentNumber = await generateMonthlySequenceNumber(idType)
+      issueDate = input.issueDate || new Date()
+    }
   }
 
-  // --- 2. คำนวณยอดใหม่และภาษี ---
-  const adjustmentSubTotal = sumBy(items, 'amount') // ผลต่าง
+  // --- 2. หายอดล่าสุด (Previous State) ---
+  let previousSubTotal = 0
+  let previousDocumentRef: { documentNumber: string; documentType: string }
+
+  if (lastNote && lastNote.adjustmentType !== adjustmentType) {
+    // อ้างอิงจากใบปรับปรุงล่าสุด ถ้าสร้างคนละประเภท
+    previousSubTotal = lastNote.newSubTotal
+    previousDocumentRef = { documentNumber: lastNote.adjustmentNumber, documentType: lastNote.adjustmentType }
+  } else {
+    // อ้างอิงจาก Invoice ถ้าเป็นใบแรก หรือสร้างประเภทเดียวกัน
+    if (lastNote) {
+      previousSubTotal = lastNote.originalSubTotal
+      previousDocumentRef = { documentNumber: lastNote.adjustmentNumber, documentType: lastNote.adjustmentType }
+    } else {
+      previousSubTotal = invoice.subTotal
+      previousDocumentRef = { documentNumber: invoice.invoiceNumber, documentType: 'INVOICE' }
+    }
+  }
+
+  const adjustmentAmount = sumBy(items, 'amount')
   const newSubTotal =
     adjustmentType === EAdjustmentNoteType.DEBIT_NOTE
-      ? originalSubTotal + adjustmentSubTotal
-      : originalSubTotal - adjustmentSubTotal
+      ? previousSubTotal + adjustmentAmount
+      : previousSubTotal - adjustmentAmount
+  const newTax = customer.userType === EUserType.BUSINESS && newSubTotal > 1000 ? newSubTotal * 0.01 : 0
+  const newTotalAmount = newSubTotal - newTax
 
-  const newTaxAmount = customer.userType === EUserType.BUSINESS && newSubTotal > 1000 ? newSubTotal * 0.01 : 0 // ภาษีหัก ณ ที่จ่าย 1%
-  const newTotalAmount = newSubTotal - newTaxAmount // รวมที่ต้องชำระทั้งสิ้น
-
-  // --- 3. สร้างและบันทึกเอกสาร ---
-  const idType: TGenerateIDType = adjustmentType === EAdjustmentNoteType.DEBIT_NOTE ? 'debitnote' : 'creditnote'
-  const adjustmentNumber = await generateMonthlySequenceNumber(idType)
   const newAdjustmentNote = new BillingAdjustmentNoteModel({
     adjustmentNumber,
     billing: billing._id,
     adjustmentType,
     items,
-    issueDate: issueDate || new Date(),
+    issueDate,
     remarks,
     createdBy: adminId,
     previousDocumentRef,
-    originalSubTotal,
-    adjustmentSubTotal,
+    originalSubTotal: previousSubTotal,
+    adjustmentSubTotal: adjustmentAmount,
     newSubTotal,
-    taxAmount: newTaxAmount, // <-- บันทึกยอดภาษีใหม่
+    taxAmount: newTax,
     totalAmount: newTotalAmount,
   })
 

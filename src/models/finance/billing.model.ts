@@ -9,9 +9,9 @@ import { Payment } from './payment.model'
 import { Receipt } from './receipt.model'
 import { EBillingState, EBillingStatus } from '@enums/billing'
 import { BillingAdjustmentNote } from './billingAdjustmentNote.model'
-import { EPaymentMethod } from '@enums/payments'
+import { EPaymentMethod, EPaymentType } from '@enums/payments'
 import { BillingReason, PaymentAmounts } from './objects'
-import { get, last, sortBy } from 'lodash'
+import { filter, get, last, sortBy } from 'lodash'
 import { Invoice } from './invoice.model'
 import { AggregatePaginateModel, PaginateModel } from 'mongoose'
 import mongoosePagination from 'mongoose-paginate-v2'
@@ -143,8 +143,13 @@ export class Billing extends TimeStamps {
 
   @Field(() => Quotation, { nullable: true })
   get quotation(): Quotation {
-    const _payments = get(this, '_doc.payments', this.payments || [])
-    const latestPayment = last(sortBy(_payments, ['createdAt'])) as Payment | undefined
+    const _payments = get(this, '_doc.payments', this.payments || []) as Payment[]
+    const latestPayment = last(
+      sortBy(
+        filter(_payments, (_payment) => _payment.type === EPaymentType.PAY),
+        ['createdAt'],
+      ),
+    ) as Payment | undefined
 
     if (latestPayment) {
       const quotation = last(sortBy(latestPayment.quotations, 'createdAt')) as Quotation | undefined
