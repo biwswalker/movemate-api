@@ -438,6 +438,9 @@ export async function getShipmentCancellationPreview(shipmentId: string): Promis
       ]
 
   // --- คำนวณค่าปรับและยอดคืนตามเงื่อนไขปัจจุบัน ---
+  const pickupStep = find(shipment.steps, ['step', EStepDefinition.PICKUP]) as StepDefinition | undefined
+  const isDonePickup = pickupStep && pickupStep.stepStatus === EStepStatus.DONE
+
   const freeThreshold = isFourWheeler ? 120 : 180
   const halfChargeThreshold = isFourWheeler ? 40 : 90
   const totalCharge = latestQuotation.price.total
@@ -445,7 +448,19 @@ export async function getShipmentCancellationPreview(shipmentId: string): Promis
   let cancellationFee = 0
   let finalChargeDescription = ''
 
-  if (minutesToBooking > freeThreshold) {
+  if (
+    !shipment.driver &&
+    includes(
+      [EDriverAcceptanceStatus.IDLE, EDriverAcceptanceStatus.PENDING, EDriverAcceptanceStatus.UNINTERESTED],
+      shipment.driverAcceptanceStatus,
+    )
+  ) {
+    cancellationFee = 0
+    finalChargeDescription = 'คุณอยู่ในเงื่อนไขยกเลิกฟรี ไม่มีค่าใช้จ่าย ตามเงื่อนไข'
+  } else if (isDonePickup) {
+    cancellationFee = totalCharge
+    finalChargeDescription = 'คุณจะถูกคิดค่าใช้จ่ายเต็มจำนวน 100% ตามเงื่อนไข'
+  } else if (minutesToBooking > freeThreshold) {
     cancellationFee = 0
     finalChargeDescription = 'คุณอยู่ในเงื่อนไขยกเลิกฟรี ไม่มีค่าใช้จ่าย ตามเงื่อนไข'
   } else if (minutesToBooking > halfChargeThreshold) {

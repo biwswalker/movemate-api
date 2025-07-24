@@ -26,7 +26,7 @@ import Aigle from 'aigle'
 import { REPONSE_NAME } from 'constants/status'
 import { differenceInMinutes, format } from 'date-fns'
 import { GraphQLError } from 'graphql'
-import lodash, { find, get } from 'lodash'
+import lodash, { find, get, includes } from 'lodash'
 import { ClientSession } from 'mongoose'
 import { publishDriverMatchingShipment } from './shipmentGet'
 import { EUserRole, EUserType } from '@enums/users'
@@ -58,11 +58,35 @@ export function calculateCancellationFee(shipment: Shipment, isPaymentComplete: 
   const vehicle = shipment.vehicleId as VehicleType
   const timeDifferenceInMinutes = differenceInMinutes(shipment.bookingDateTime, cancellationTime)
 
+  const pickupStep = find(shipment.steps, ['step', EStepDefinition.PICKUP]) as StepDefinition | undefined
+  const isDonePickup = pickupStep && pickupStep.stepStatus === EStepStatus.DONE
+
   const isFourWheeler = lodash.isEqual(vehicle.type, '4W')
   const urgentCancellingTime = isFourWheeler ? 40 : 90
   const middleCancellingTime = isFourWheeler ? 120 : 180
 
-  if (timeDifferenceInMinutes <= urgentCancellingTime) {
+  const isDriverNotAccepted =
+    !shipment.driver &&
+    includes(
+      [EDriverAcceptanceStatus.IDLE, EDriverAcceptanceStatus.PENDING, EDriverAcceptanceStatus.UNINTERESTED],
+      shipment.driverAcceptanceStatus,
+    )
+
+  if (isDriverNotAccepted) {
+    // ไม่คิดค่าบริการ -> คืนเงิน 100%
+    return {
+      forDriver: 0,
+      forCustomer: totalPayPrice,
+      description: `ผู้ใช้ยกเลิกงานขนส่ง`,
+    }
+  } else if (isDonePickup) {
+    // คิดค่าบริการ 100% -> คืนเงิน 0%
+    return {
+      forDriver: totalPayCost,
+      forCustomer: 0,
+      description: `ผู้ใช้ยกเลิกงานขนส่งหลังรับสินค้าแล้ว`,
+    }
+  } else if (timeDifferenceInMinutes <= urgentCancellingTime) {
     // คิดค่าบริการ 100% -> คืนเงิน 0%
     return {
       forDriver: totalPayCost,
