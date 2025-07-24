@@ -169,7 +169,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
       let whtAmount = 0
       // หักภาษี ณ ที่จ่าย 1% สำหรับลูกค้าธุรกิจที่มียอดเกิน 1,000 บาท
       const customerType = lodash.get(_shipment, 'customer.userType', '')
-      if (customerType === EUserType.BUSINESS && forCustomer > 1000) {
+      if (customerType === EUserType.BUSINESS) {
         whtAmount = forCustomer * 0.01
       }
       const finalTotalAmount = forCustomer - whtAmount

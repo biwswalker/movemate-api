@@ -80,7 +80,7 @@ export async function createAdjustmentNote(
     adjustmentType === EAdjustmentNoteType.DEBIT_NOTE
       ? previousSubTotal + adjustmentAmount
       : previousSubTotal - adjustmentAmount
-  const newTax = customer.userType === EUserType.BUSINESS && newSubTotal > 1000 ? newSubTotal * 0.01 : 0
+  const newTax = customer.userType === EUserType.BUSINESS ? newSubTotal * 0.01 : 0
   const newTotalAmount = newSubTotal - newTax
 
   const newAdjustmentNote = new BillingAdjustmentNoteModel({

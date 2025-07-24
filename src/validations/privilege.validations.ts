@@ -39,9 +39,19 @@ export const PrivilegeSchema = (_id?: string) =>
     discount: Yup.number().required('ระบุส่วนลด'),
     unit: Yup.string().required('ระบุหน่วยของส่วนลด'),
     minPrice: Yup.number(),
+    // .nullable()
+    // .transform((value) => (value === '' ? null : value))
+    // .when(['unit', 'discount'], ([unit, discount], schema) => {
+    //   return unit === EPrivilegeDiscountUnit.CURRENCY
+    //     ? schema.when('$self', {
+    //         is: (value: any) => value !== null,
+    //         then: (schema) => schema.min(discount, 'กรุณาระบุค่าส่วนลดให้ถูกต้อง'),
+    //       })
+    //     : schema
+    // }),
     maxDiscountPrice: Yup.number(),
-    isInfinity: Yup.boolean(),
     limitAmout: Yup.number(),
+    limitPerUser: Yup.number(),
     description: Yup.string(),
-    afterSubmit: Yup.string(),
+    defaultShow: Yup.boolean(),
   })

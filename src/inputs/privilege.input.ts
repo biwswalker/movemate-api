@@ -1,5 +1,5 @@
 import { EPrivilegeDiscountUnit, EPrivilegeStatus, EPrivilegeStatusCriteria } from '@enums/privilege'
-import { ArgsType, Field, Float, InputType } from 'type-graphql'
+import { ArgsType, Field, Float, InputType, Int } from 'type-graphql'
 
 @InputType()
 export class PrivilegeInput {
@@ -30,11 +30,11 @@ export class PrivilegeInput {
   @Field(() => Float, { nullable: true })
   maxDiscountPrice: number
 
-  @Field({ nullable: true })
-  isInfinity: boolean
-
-  @Field({ nullable: true })
+  @Field(() => Int, { nullable: true })
   limitAmout: number
+
+  @Field(() => Int, { nullable: true })
+  limitPerUser: number
 
   @Field()
   description: string

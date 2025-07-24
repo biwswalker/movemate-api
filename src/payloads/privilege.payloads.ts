@@ -31,10 +31,13 @@ export class SearchPrivilegeResultPayload {
   expired: boolean
 
   @Field(() => Boolean)
-  used: boolean
+  notStart: boolean
 
   @Field(() => Boolean)
   limitReached: boolean
+
+  @Field(() => Boolean)
+  limitPerUserReached: boolean
 
   @Field({ nullable: true })
   description: string

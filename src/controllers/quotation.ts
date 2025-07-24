@@ -202,30 +202,7 @@ export async function calculateQuotation(
    *
    * Privilege
    */
-  let discountName = ''
-  let totalDiscount = 0
-  if (discountId) {
-    const privilege = await PrivilegeModel.findById(discountId)
-    const { name, unit } = privilege
-    const _discount = (privilege.discount || 0) as number
-    const _minPrice = (privilege.minPrice || 0) as number
-    const _maxDiscountPrice = (privilege.maxDiscountPrice || 0) as number
-    const isPercent = unit === EPrivilegeDiscountUnit.PERCENTAGE
-    if (subTotalPrice >= _minPrice) {
-      if (isPercent) {
-        const discountAsBath = (_discount / 100) * subTotalPrice
-        const maxDiscountAsBath = _maxDiscountPrice ? min([_maxDiscountPrice, discountAsBath]) : discountAsBath
-        totalDiscount = maxDiscountAsBath
-      } else {
-        totalDiscount = _discount
-      }
-    } else {
-      totalDiscount = 0
-    }
-    discountName = `${name} (${_discount}${
-      unit === EPrivilegeDiscountUnit.CURRENCY ? ' บาท' : unit === EPrivilegeDiscountUnit.PERCENTAGE ? '%' : ''
-    })`
-  }
+  const { discountName, totalDiscount } = await PrivilegeModel.calculateDiscount(discountId, subTotalPrice)
 
   const subTotalAfterDiscountPrice = sum([subTotalPrice, -totalDiscount])
 
@@ -243,7 +220,7 @@ export async function calculateQuotation(
   const customer = shipment ? shipment.customer : await UserModel.findById(userId)
   if (customer) {
     const customerTypes = get(customer, 'userType', '')
-    isTaxCalculation = customerTypes === EUserType.BUSINESS && subTotalPrice > 1000
+    isTaxCalculation = customerTypes === EUserType.BUSINESS
     if (isTaxCalculation) {
       whtName = 'ภาษีหัก ณ ที่จ่าย 1% (WHT)'
       whtPrice = subTotalAfterDiscountPrice * 0.01

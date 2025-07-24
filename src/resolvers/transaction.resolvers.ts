@@ -154,7 +154,7 @@ export default class TransactionResolver {
      * Driver WHT Payment
      * WHT1% for driver
      */
-    // const taxPercent = subTotal > 1000 ? (isBusinessDriver ? 0.01 : 0) : 0
+    // const taxPercent = (isBusinessDriver ? 0.01 : 0)
     // const taxPercent = 0.01
     // const taxIncluded = subTotal * taxPercent
     // const total = sum([subTotal, -taxIncluded])

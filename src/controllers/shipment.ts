@@ -169,14 +169,29 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
    */
   let _discountId = null
   if (data.discountId) {
-    const privilege = await PrivilegeModel.findOne({ _id: data.discountId, usedUser: { $nin: customerId } })
-      .session(session)
-      .lean()
+    const privilege = await PrivilegeModel.findOne({ _id: data.discountId }).session(session).lean()
     if (!privilege) {
       const message = 'ไม่สามารถหาข้อมูลส่วนลดได้ เนื่องจากไม่พบส่วนลดดังกล่าว'
       throw new GraphQLError(message, {
         extensions: { code: 'NOT_FOUND', errors: [{ message }] },
       })
+    }
+    if (privilege.limitAmout && privilege.limitAmout > 0) {
+      const usedCount = await ShipmentModel.countDocuments({ discountId: privilege._id }).session(session)
+      console.log('usedCount: ', usedCount)
+      if (usedCount >= privilege.limitAmout) {
+        throw new GraphQLError('โค้ดส่วนลดนี้ถูกใช้ครบจำนวนสิทธิ์แล้ว')
+      }
+    }
+
+    if (privilege.limitPerUser && privilege.limitPerUser > 0) {
+      const usedCount = await ShipmentModel.countDocuments({
+        discountId: privilege._id,
+        customer: customer._id,
+      }).session(session)
+      if (usedCount >= privilege.limitPerUser) {
+        throw new GraphQLError('คุณได้ใช้โค้ดส่วนลดนี้ครบจำนวนครั้งที่กำหนดแล้ว')
+      }
     }
     await PrivilegeModel.findByIdAndUpdate(privilege._id, { $push: { usedUser: customerId } }, { session })
   }

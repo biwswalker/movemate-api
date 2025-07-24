@@ -11,7 +11,7 @@ import { reformPaginate } from '@utils/pagination.utils'
 import { PrivilegeSchema } from '@validations/privilege.validations'
 import { GraphQLError } from 'graphql'
 import { filter, includes, isEmpty, isEqual, map, omitBy } from 'lodash'
-import { FilterQuery, PaginateOptions } from 'mongoose'
+import { FilterQuery, PaginateOptions, Types } from 'mongoose'
 import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { ValidationError } from 'yup'
 
@@ -172,10 +172,18 @@ export default class PrivilegeResolver {
 
       const privilegePayload = map<Privilege, SearchPrivilegeResultPayload>(privileges, (privilege) => {
         const usedUser = map(privilege.usedUser, (user) => user.toString())
-        const isUsed = includes(usedUser, user_id)
+
         const isExpired = privilege.endDate ? now > new Date(privilege.endDate) : false
+        const isNotStart = privilege.startDate ? now < new Date(privilege.startDate) : false
+
         const isLimitReached =
-          !privilege.isInfinity && privilege.limitAmout != null && usedUser.length >= privilege.limitAmout
+          privilege.limitAmout && privilege.limitAmout > 0 && usedUser.length >= privilege.limitAmout
+
+        const requestUserUsed = filter(privilege.usedUser || [], (userId) =>
+          new Types.ObjectId(userId.toString()).equals(user_id),
+        )
+        const isUserLimitReached =
+        privilege.limitPerUser && privilege.limitPerUser > 0 ? requestUserUsed.length >= privilege.limitPerUser : false
 
         return {
           _id: privilege._id,
@@ -184,8 +192,9 @@ export default class PrivilegeResolver {
           discount: privilege.discount,
           unit: privilege.unit,
           expired: isExpired,
-          used: isUsed,
+          notStart: isNotStart,
           limitReached: isLimitReached,
+          limitPerUserReached: isUserLimitReached,
           description: privilege.description,
         }
       })

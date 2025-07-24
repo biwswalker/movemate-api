@@ -131,7 +131,7 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
 
       let whtAmount = 0
       // หักภาษี ณ ที่จ่าย 1% สำหรับลูกค้าธุรกิจที่มียอดเกิน 1,000 บาท
-      if (_customer.userType === EUserType.BUSINESS && subTotalAmount > 1000) {
+      if (_customer.userType === EUserType.BUSINESS) {
         whtAmount = subTotalAmount * 0.01
       }
       const finalTotalAmount = subTotalAmount - whtAmount
