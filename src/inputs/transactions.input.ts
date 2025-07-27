@@ -1,8 +1,9 @@
 import { EUserType } from "@enums/users"
 import { ERefType, ETransactionStatus, ETransactionType } from "@models/transaction.model"
-import { ArgsType, Field } from "type-graphql"
+import { ArgsType, Field, InputType } from "type-graphql"
 
 @ArgsType()
+@InputType()
 export class GetDriverTransactionArgs {
   @Field({ nullable: true })
   driverName?: string

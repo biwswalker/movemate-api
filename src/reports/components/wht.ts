@@ -345,7 +345,7 @@ function Remark(doc: PDFDocument, data: RemarkData) {
     .fontSize(15)
     .text(data.signDate || '-', _signPositionY, _remarkLine1Y + 19, { width: _longerWidth, align: 'center' })
 
-  const _circleHeight = _rectHeight - 4
+  const _circleHeight = _rectHeight - 6
   const _stampX = _longerWidth + _signPositionY + 55
   doc.fontSize(13).text('ประทับตรา นิติบุคคล ถ้ามี', _stampX + 23, _remarkLine1Y + 2, {
     align: 'center',
@@ -353,7 +353,7 @@ function Remark(doc: PDFDocument, data: RemarkData) {
     width: _circleHeight,
   })
   doc.save()
-  doc.translate(_stampX, _remarkLine1Y - 20).circle(_circleHeight, _circleHeight, _circleHeight / 2)
+  doc.translate(_stampX - 5, _remarkLine1Y - 24).circle(_rectHeight, _rectHeight, _rectHeight / 2)
   // doc.circle(_rectHeight, _rectHeight, _rectHeight / 2)
   doc.restore()
   doc

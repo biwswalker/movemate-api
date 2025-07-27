@@ -4,6 +4,7 @@ import mongooseAutoPopulate from 'mongoose-autopopulate'
 import { ClientSession } from 'mongoose'
 import { PaymentAmounts } from './objects'
 import { BillingDocument } from './documents.model'
+import { EReceiptType } from '@enums/billing'
 
 @plugin(mongooseAutoPopulate)
 @ObjectType()
@@ -15,9 +16,17 @@ export class Receipt extends PaymentAmounts {
   @Property()
   receiptNumber: string
 
+  @Field({ nullable: true })
+  @Property({ required: false })
+  refReceiptNumber: string
+
   @Field()
   @Property({ required: true })
   receiptDate: Date
+
+  @Field(() => EReceiptType)
+  @Property({ enum: EReceiptType, required: true, default: EReceiptType.FINAL })
+  receiptType: EReceiptType // <-- เพิ่มฟิลด์ประเภท
 
   @Field(() => BillingDocument, { nullable: true })
   @Property({ ref: () => BillingDocument, autopopulate: true })
@@ -34,6 +43,10 @@ export class Receipt extends PaymentAmounts {
   @Field({ nullable: true })
   @Property({ required: false })
   updatedBy: string
+
+  @Field({ nullable: true })
+  @Property()
+  remarks?: string
 }
 
 const ReceiptModel = getModelForClass(Receipt)

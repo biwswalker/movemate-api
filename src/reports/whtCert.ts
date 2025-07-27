@@ -26,7 +26,6 @@ export async function generateWHTCert(
   const filePath = path.join(__dirname, '..', '..', 'generated/whtcert', fileName)
 
   const driverInfo = driverPayment.driver as User | undefined
-  // TODO: Add info
 
   /**
    * Input data

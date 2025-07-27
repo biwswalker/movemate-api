@@ -1,4 +1,4 @@
-import { EBillingReason, EBillingState, EBillingStatus } from '@enums/billing'
+import { EBillingReason, EBillingState, EBillingStatus, EReceiptType, ERefundAmountType } from '@enums/billing'
 import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
 import { EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
 import BillingModel from '@models/finance/billing.model'
@@ -21,7 +21,7 @@ import TransactionModel, {
 } from '@models/transaction.model'
 import UserModel from '@models/user.model'
 import { VehicleType } from '@models/vehicleType.model'
-import { generateTrackingNumber } from '@utils/string.utils'
+import { generateMonthlySequenceNumber, generateRandomNumberPattern, generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { REPONSE_NAME } from 'constants/status'
 import { differenceInMinutes, format } from 'date-fns'
@@ -34,6 +34,10 @@ import { getAdminMenuNotificationCount } from '@resolvers/notification.resolvers
 import { initialStepDefinition } from './steps'
 import { clearShipmentJobQueues } from './shipmentJobQueue'
 import { addCustomerCreditUsage } from './customer'
+import RefundNoteModel from '@models/finance/refundNote.model'
+import ReceiptModel, { Receipt } from '@models/finance/receipt.model'
+import { generateAdvanceReceipt } from 'reports/advanceReceipt'
+import { generateNonTaxReceipt } from 'reports/nonTaxReceipt'
 
 Aigle.mixin(lodash, {})
 
@@ -78,6 +82,7 @@ export function calculateCancellationFee(shipment: Shipment, isPaymentComplete: 
       forDriver: 0,
       forCustomer: totalPayPrice,
       description: `ผู้ใช้ยกเลิกงานขนส่ง`,
+      state: 'FULL_CUSTOMER_REFUND',
     }
   } else if (isDonePickup) {
     // คิดค่าบริการ 100% -> คืนเงิน 0%
@@ -85,6 +90,7 @@ export function calculateCancellationFee(shipment: Shipment, isPaymentComplete: 
       forDriver: totalPayCost,
       forCustomer: 0,
       description: `ผู้ใช้ยกเลิกงานขนส่งหลังรับสินค้าแล้ว`,
+      state: 'FULL_CHARGE',
     }
   } else if (timeDifferenceInMinutes <= urgentCancellingTime) {
     // คิดค่าบริการ 100% -> คืนเงิน 0%
@@ -92,6 +98,7 @@ export function calculateCancellationFee(shipment: Shipment, isPaymentComplete: 
       forDriver: totalPayCost,
       forCustomer: 0,
       description: `ผู้ใช้ยกเลิกงานขนส่งก่อนเวลาน้อยกว่า ${urgentCancellingTime} นาที`,
+      state: 'FULL_CHARGE',
     }
   } else if (timeDifferenceInMinutes > urgentCancellingTime && timeDifferenceInMinutes <= middleCancellingTime) {
     // คิดค่าบริการ 50% -> คืนเงิน 50%
@@ -99,6 +106,7 @@ export function calculateCancellationFee(shipment: Shipment, isPaymentComplete: 
       forDriver: totalPayCost * 0.5,
       forCustomer: totalPayPrice * 0.5,
       description: `ผู้ใช้ยกเลิกงานขนส่งก่อนเวลาน้อยกว่า ${middleCancellingTime} นาที`,
+      state: 'HALF_CUSTOMER_REFUND',
     }
   } else {
     // ไม่คิดค่าบริการ -> คืนเงิน 100%
@@ -106,6 +114,7 @@ export function calculateCancellationFee(shipment: Shipment, isPaymentComplete: 
       forDriver: 0,
       forCustomer: totalPayPrice,
       description: `ผู้ใช้ยกเลิกงานขนส่ง`,
+      state: 'FULL_CUSTOMER_REFUND',
     }
   }
 }
@@ -142,7 +151,12 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
   const isDriverAccepted = _shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.ACCEPTED && _shipment.driver
   const isCompletePayment = isCredit ? true : _latestPayment?.status === EPaymentStatus.COMPLETE
 
-  const { forCustomer, forDriver, description } = calculateCancellationFee(_shipment, isCompletePayment)
+  const {
+    forCustomer,
+    forDriver,
+    description,
+    state: feeState,
+  } = calculateCancellationFee(_shipment, isCompletePayment)
 
   // Update step definitions
   const currentStep = lodash.find(_shipment.steps, ['seq', _shipment.currentStepSeq]) as StepDefinition | undefined
@@ -173,6 +187,13 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
   let finalShipmentStatus = EShipmentStatus.CANCELLED
 
   if (!isCredit) {
+    const _billing = await BillingModel.findOne({ billingNumber: _shipment.trackingNumber }).session(session)
+    if (!_billing) {
+      throw new GraphQLError('ไม่พบข้อมูลการเรียกเก็บเงินสำหรับงานขนส่งนี้', {
+        extensions: { code: REPONSE_NAME.NOT_FOUND },
+      })
+    }
+
     if (forCustomer > 0) {
       // **[Corrected Logic]** Only enter refund flow if there is an amount to refund.
       finalShipmentStatus = EShipmentStatus.REFUND
@@ -211,6 +232,51 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
       })
       await _refund.save({ session })
 
+      let refundNoteId = undefined
+      if (feeState === 'FULL_CUSTOMER_REFUND') {
+        /**
+         * คืนเงิน 100%
+         * ออกใบคืนเงินเต็มจำนวน
+         * REFUND RECEIPT
+         * nonTaxRefundReceipt
+         * ลูกค้ายกเลิกการใช้บริการก่อนวันให้บริิการจริง คืนเงินเต็มจำนวนตามเงื่อนไขบริษัท
+         */
+        const _refundNoteNumber = await generateMonthlySequenceNumber('refundnote')
+        const _advanceReceipt = _billing.advanceReceipt
+        const _advanceReceiptNumber = _advanceReceipt?.receiptNumber || ''
+        const _refundNote = new RefundNoteModel({
+          refundNoteNumber: _refundNoteNumber,
+          refAdvanceReceiptNo: _advanceReceiptNumber,
+          billing: _billing._id,
+          amount: forCustomer,
+          amountType: ERefundAmountType.FULL_AMOUNT,
+          remark: 'ลูกค้ายกเลิกการใช้บริการก่อนวันให้บริิการจริง คืนเงินเต็มจำนวนตามเงื่อนไขบริษัท',
+        })
+        await _refundNote.save({ session })
+        refundNoteId = _refundNote._id
+      } else if (feeState === 'HALF_CUSTOMER_REFUND') {
+        /**
+         * คืนเงิน 50%
+         * ออกใบเสร็จคืนเงินบางส่วน
+         * RECEIPT
+         * generateNonTaxReceipt
+         */
+        // Make dummy
+        const _refundNoteNumber = generateRandomNumberPattern(`DUMMYREFUNDNOTE####`)
+        const _advanceReceipt = _billing.advanceReceipt
+        const _advanceReceiptNumber = _advanceReceipt?.receiptNumber || ''
+        const _refundNote = new RefundNoteModel({
+          refundNoteNumber: _refundNoteNumber,
+          refAdvanceReceiptNo: _advanceReceiptNumber,
+          billing: _billing._id,
+          amount: forCustomer,
+          amountType: ERefundAmountType.HALF_AMOUNT,
+          remark: 'ลูกค้ายกเลิกบริการใช้บริการ คืนเงินบางส่วนจากยอดชำระล่วงหน้าตามเงื่อนไขบริษัท',
+        })
+        await _refundNote.save({ session })
+        refundNoteId = _refundNote._id
+      }
+
       // Update billing to REFUND state
       const refundReason: BillingReason = {
         detail: description,
@@ -221,16 +287,42 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
         {
           status: EBillingStatus.PENDING,
           state: EBillingState.REFUND,
+          ...(refundNoteId ? { refundNote: refundNoteId } : {}),
           $push: { payments: _refund, reasons: refundReason },
         },
       )
     } else {
+      /**
+       * คิดค่าบริการ 100% -> คืนเงิน 0%
+       * ออกใบเสร็จ
+       * generateNonTaxReceipt
+       */
+      const _receiptNumber = await generateMonthlySequenceNumber('receipt')
+      const _advanceReceipt = _billing.advanceReceipt
+      const _advanceReceiptNumber = _advanceReceipt?.receiptNumber || ''
+      const _receipt = new ReceiptModel({
+        receiptNumber: _receiptNumber,
+        refReceiptNumber: _advanceReceiptNumber,
+        receiptType: EReceiptType.FINAL,
+        receiptDate: cancellationTime,
+        total: _advanceReceipt?.total || 0,
+        subTotal: _advanceReceipt?.subTotal || 0,
+        tax: _advanceReceipt?.tax || 0,
+        remarks: `ลูกค้ายกเลิกการใช้บริการ`,
+        updatedBy: userId,
+      })
+      const { document } = await generateNonTaxReceipt(_billing, _receipt, session)
+      _receipt.document = document._id
+      await _receipt.save({ session })
+      // Sent Email????
+
       // **[Corrected Logic]** No refund, so just cancel the billing.
       await BillingModel.findOneAndUpdate(
         { billingNumber: _shipment.trackingNumber },
         {
           status: EBillingStatus.CANCELLED,
           state: EBillingState.CURRENT, // Or other appropriate state
+          $push: { receipts: _receipt },
         },
       )
     }

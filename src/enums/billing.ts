@@ -96,3 +96,23 @@ registerEnumType(EBillingInfoStatus, {
   name: 'EBillingInfoStatus',
   description: 'Status of billing information retrieval',
 })
+
+export enum EReceiptType {
+  ADVANCE = 'ADVANCE', // ใบรับเงินล่วงหน้า
+  FINAL = 'FINAL', // ใบเสร็จรับเงินฉบับสมบูรณ์
+}
+
+registerEnumType(EReceiptType, {
+  name: 'EReceiptType',
+  description: 'Receipt Type',
+})
+
+export enum ERefundAmountType {
+  FULL_AMOUNT = 'FULL_AMOUNT',
+  HALF_AMOUNT = 'HALF_AMOUNT',
+}
+
+registerEnumType(ERefundAmountType, {
+  name: 'ERefundAmountType',
+  description: 'Refund Amount Type',
+})

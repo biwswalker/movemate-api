@@ -4,7 +4,7 @@ import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import UserModel from '@models/user.model'
-import { find, get, head, includes, isEmpty, map, reduce, tail, uniq } from 'lodash'
+import { filter, find, get, head, includes, isEmpty, last, map, reduce, sortBy, tail, uniq } from 'lodash'
 import DriverDetailModel, { DriverDetail } from '@models/driverDetail.model'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
@@ -43,13 +43,14 @@ import {
 } from '@controllers/shipmentGet'
 import { addStep, finishJob, nextStep, podSent } from '@controllers/shipmentOperation'
 import BillingModel from '@models/finance/billing.model'
-import ReceiptModel from '@models/finance/receipt.model'
+import ReceiptModel, { Receipt } from '@models/finance/receipt.model'
 import _ from 'mongoose-paginate-v2'
 import { generateBillingReceipt } from '@controllers/billingReceipt'
 import { AuditLogDecorator } from 'decorators/AuditLog.decorator'
 import { EAuditActions } from '@enums/audit'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import { clearShipmentJobQueues } from '@controllers/shipmentJobQueue'
+import { EReceiptType } from '@enums/billing'
 
 @Resolver()
 export default class MatchingResolver {
@@ -448,21 +449,26 @@ export default class MatchingResolver {
       const _billing = await BillingModel.findOne({ billingNumber: shipment.trackingNumber }).session(session)
 
       if (_billing) {
+        // _billing.rec
+        const _advanceReceipts = filter(_billing.receipts, { receiptType: EReceiptType.ADVANCE })
+        const _advanceReceipt = last(sortBy(_advanceReceipts, 'createdAt')) as Receipt | undefined
         const today = new Date()
         const _receiptNumber = await generateMonthlySequenceNumber('receipt')
         const _quotation = _billing.quotation
 
         const _receipt = new ReceiptModel({
           receiptNumber: _receiptNumber,
+          receiptType: EReceiptType.FINAL,
           receiptDate: today,
           document: null,
           subTotal: _quotation.subTotal,
           total: _quotation.total,
           tax: _quotation.tax,
+          refReceiptNumber: _advanceReceipt?.receiptNumber,
         })
         await _receipt.save({ session })
 
-        await BillingModel.findByIdAndUpdate(_billing._id, { receipts: [_receipt] }, { session, new: true })
+        await BillingModel.findByIdAndUpdate(_billing._id, { $push: { receipts: _receipt._id } }, { session })
 
         /**
          * generate receipt

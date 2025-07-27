@@ -7,7 +7,7 @@ import { User } from '@models/user.model'
 import { Shipment } from '@models/shipment.model'
 import { Payment } from './payment.model'
 import { Receipt } from './receipt.model'
-import { EBillingState, EBillingStatus } from '@enums/billing'
+import { EBillingState, EBillingStatus, EReceiptType } from '@enums/billing'
 import { BillingAdjustmentNote } from './billingAdjustmentNote.model'
 import { EPaymentMethod, EPaymentType } from '@enums/payments'
 import { BillingReason, PaymentAmounts } from './objects'
@@ -17,6 +17,7 @@ import { AggregatePaginateModel, PaginateModel } from 'mongoose'
 import mongoosePagination from 'mongoose-paginate-v2'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
 import { Quotation } from './quotation.model'
+import { RefundNote } from './refundNote.model'
 
 /**
  * TODO:
@@ -75,6 +76,10 @@ export class Billing extends TimeStamps {
   @Field(() => Invoice, { nullable: true })
   @Property({ ref: () => Invoice, autopopulate: true })
   invoice: Ref<Invoice>
+
+  @Field(() => RefundNote, { nullable: true })
+  @Property({ ref: () => RefundNote, autopopulate: true })
+  refundNote: Ref<RefundNote>
 
   @Field()
   @Property({ required: true })
@@ -156,6 +161,17 @@ export class Billing extends TimeStamps {
       return quotation
     }
     return undefined
+  }
+
+  @Field(() => Receipt, { nullable: true })
+  get advanceReceipt(): Receipt | undefined {
+    const receipts = get(this, '_doc.receipts', this.receipts || []) as Receipt[]
+    const receiptSorted = sortBy(
+      filter(receipts, (_receipt) => _receipt.receiptType === EReceiptType.ADVANCE),
+      ['createdAt'],
+    )
+    const lastAdvanceReceipt = last(receiptSorted) as Receipt | undefined
+    return lastAdvanceReceipt
   }
 
   static paginate: PaginateModel<typeof Billing>['paginate']

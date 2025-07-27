@@ -82,10 +82,10 @@ export default class TransactionResolver {
   @Query(() => TransactionDriversAggregatePayload)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getTransactionDrivers(
-    @Args() queries: GetDriverTransactionArgs,
+    @Arg("filters") filters: GetDriverTransactionArgs,
     @Args() paginates: PaginationArgs,
   ): Promise<TransactionDriversAggregatePayload> {
-    const drivers = await TransactionModel.getTransactionDriverList(queries, paginates)
+    const drivers = await TransactionModel.getTransactionDriverList(filters, paginates)
     return drivers
   }
 
@@ -96,9 +96,9 @@ export default class TransactionResolver {
     const nonPayment = await TransactionModel.aggregate(TRANSACTION_DRIVER_LIST({ isPending: false }))
     const allPayment = await TransactionModel.aggregate(TRANSACTION_DRIVER_LIST({ isPending: undefined }))
     return [
+      { label: 'ทั้งหมด', count: allPayment.length, key: ETransactionDriverStatus.ALL },
       { label: 'มียอดทำจ่าย', count: pendingPayment.length, key: ETransactionDriverStatus.PENDING },
       { label: 'ไม่มียอด', count: nonPayment.length, key: ETransactionDriverStatus.NON_OUTSTANDING },
-      { label: 'ทั้งหมด', count: allPayment.length, key: ETransactionDriverStatus.ALL },
     ]
   }
 

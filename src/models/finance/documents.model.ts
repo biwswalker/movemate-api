@@ -33,6 +33,10 @@ export class BillingDocument {
   @Property({ required: false })
   receviedWHTDocumentDate: Date
 
+  @Field({ nullable: true })
+  @Property({ required: false })
+  documentNumber: string
+
   @Field(() => User, { nullable: true })
   @Property({ ref: () => User, required: false, autopopulate: true })
   updatedBy: Ref<User>

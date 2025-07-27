@@ -90,8 +90,18 @@ export async function generateMonthlySequenceNumber(docType: TDocumentType, leng
       prefix = 'DR' // Assuming 'ADJ' as a prefix for debitnote documents
       redisKeyType = 'debitnote_monthly_seq'
       break
+    case 'advancereceipt':
+      prefix = 'ADV' // Assuming 'ADJ' as a prefix for debitnote documents
+      redisKeyType = 'advance_receipt_monthly_seq'
+      break
+    case 'refundnote':
+      prefix = 'RFD' // Assuming 'ADJ' as a prefix for debitnote documents
+      redisKeyType = 'refund_receipt_monthly_seq'
+      break
     default:
-      throw new Error(`Invalid document type: ${docType}. Must be 'invoice', 'receipt', 'creditnote', or 'debitnote'.`)
+      throw new Error(
+        `Invalid document type: ${docType}. Must be 'invoice', 'receipt', 'creditnote', 'debitnote', 'advancereceipt', or 'refundnote'.`,
+      )
   }
 
   // Construct the Redis key using the document type and the current year-month

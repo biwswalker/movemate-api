@@ -11,6 +11,7 @@ import {
   EBillingInfoStatus,
   EBillingState,
   EBillingStatus,
+  EReceiptType,
 } from '@enums/billing'
 import { EPaymentMethod, EPaymentStatus } from '@enums/payments'
 import { EUserRole, EUserType } from '@enums/users'
@@ -28,8 +29,8 @@ import {
 import { BILLING_CYCLE_LIST } from '@pipelines/billingCycle.pipeline'
 import { reformPaginate } from '@utils/pagination.utils'
 import { GraphQLError } from 'graphql'
-import { get, head, includes, last, map, sortBy, toNumber, toString, uniq } from 'lodash'
-import { PaginateOptions } from 'mongoose'
+import { get, head, includes, last, map, reduce, sortBy, tail, toNumber, toString, uniq } from 'lodash'
+import { PaginateOptions, Types } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import BillingDocumentModel, { BillingDocument } from '@models/finance/documents.model'
@@ -59,6 +60,7 @@ import { updateCustomerCreditUsageBalance } from '@controllers/customer'
 import { Quotation } from '@models/finance/quotation.model'
 import PaymentModel from '@models/finance/payment.model'
 import ReceiptModel, { Receipt } from '@models/finance/receipt.model'
+import { generateMonthlySequenceNumber } from '@utils/string.utils'
 
 @Resolver()
 export default class BillingResolver {
@@ -192,7 +194,10 @@ export default class BillingResolver {
   async confirmReceiveWHTDocument(
     @Ctx() ctx: GraphQLContext,
     @Arg('billingId') billingId: string,
+    @Arg('receiptId') receiptId: string,
     @Arg('documentId') documentId: string,
+    @Arg('documentNumber') documentNumber: string,
+    @Arg('receiveDate', () => Date) receiveDate: Date,
   ): Promise<boolean> {
     const session = ctx.session
     const adminId = ctx.req.user_id
@@ -200,13 +205,82 @@ export default class BillingResolver {
     await BillingDocumentModel.findByIdAndUpdate(
       documentId,
       {
-        receviedWHTDocumentDate: new Date(),
+        receviedWHTDocumentDate: receiveDate,
+        documentNumber: documentNumber,
         updatedBy: adminId,
       },
       { session, new: true },
     )
     // Regenerate receipt
-    await generateReceipt(_billing, undefined, session)
+    const _receipt = await ReceiptModel.findById(receiptId).session(session)
+    const { document, fileName, filePath } = await generateReceipt(_billing, _receipt, session)
+
+    const _customerId = get(_billing, 'user._id', '')
+    const _customer = await UserModel.findById(_customerId).session(session)
+    const _isCashReceipt = _billing.paymentMethod === EPaymentMethod.CASH
+    if (_customer) {
+      const shipment = last(_billing.shipments) as Shipment | undefined
+      const financialEmails = get(_customer, 'businessDetail.creditPayment.financialContactEmails', [])
+      const emails = uniq([_customer.email, ...financialEmails])
+      const pickup = head(shipment.destinations)?.name || ''
+      const dropoffs = reduce(
+        tail(shipment?.destinations),
+        (prev, curr) => {
+          if (curr.name) {
+            return prev ? `${prev}, ${curr.name}` : curr.name
+          }
+          return prev
+        },
+        '',
+      )
+      const tracking_link = `https://www.movematethailand.com/main/tracking?tracking_number=${shipment.trackingNumber}`
+      const movemate_link = `https://www.movematethailand.com`
+      const contact_number = '02-xxx-xxxx'
+      const financial_email = 'acc@movematethailand.com'
+      const customer_type = 'บริษัท/องค์กร'
+
+      if (_isCashReceipt) {
+        await addEmailQueue({
+          from: process.env.MAILGUN_SMTP_EMAIL,
+          to: emails,
+          subject: `ใบเสร็จรับเงิน Movemate Thailand | Shipment No. ${shipment.trackingNumber}`,
+          template: 'cash_receipt',
+          context: {
+            tracking_number: shipment.trackingNumber,
+            fullname: _customer.fullname,
+            phone_number: _customer.contactNumber,
+            email: _customer.email,
+            customer_type,
+            pickup,
+            dropoffs,
+            tracking_link,
+            contact_number,
+            movemate_link,
+          },
+          attachments: [{ filename: fileName, path: filePath }],
+        })
+      } else {
+        await addEmailQueue({
+          from: process.env.MAILGUN_SMTP_EMAIL,
+          to: emails,
+          subject: `ใบเสร็จรับเงิน Movemate Thailand`,
+          template: 'notify_receipt',
+          context: {
+            business_name: _customer.fullname,
+            business_contact_number: _customer.contactNumber,
+            business_email: _customer.email,
+            customer_type,
+            financial_email,
+            contact_number,
+            movemate_link,
+          },
+          attachments: [{ filename: fileName, path: filePath }],
+        })
+      }
+      console.log(`[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Billing Receipt has sent for ${emails.join(', ')}`)
+      await BillingDocumentModel.findByIdAndUpdate(document._id, { emailTime: new Date().toISOString() }, { session })
+    }
+
     return true
   }
 
@@ -391,6 +465,7 @@ export default class BillingResolver {
         session,
       )
 
+      const userType = get(_billing, 'user.userType', '')
       if (_billing.paymentMethod === EPaymentMethod.CASH) {
         const _shipment = await ShipmentModel.findOne({ trackingNumber: _billing.billingNumber })
           .session(session)
@@ -403,6 +478,34 @@ export default class BillingResolver {
           const lastReceipt = last(sortBy(_billing.receipts, 'createdAt')) as Receipt
           const documentId = await generateBillingReceipt(_billing._id, true, session)
           await ReceiptModel.findByIdAndUpdate(lastReceipt._id, { document: documentId }, { session })
+        } else if (userType === EUserType.INDIVIDUAL) {
+          // 1. สร้าง "ใบรับเงินล่วงหน้า" เสมอ
+          const _advanceReceiptNumber = await generateMonthlySequenceNumber('advancereceipt') // แนะนำให้ใช้ sequence แยก
+          const _advanceReceipt = new ReceiptModel({
+            receiptNumber: _advanceReceiptNumber,
+            receiptType: EReceiptType.ADVANCE, // <-- ระบุประเภท
+            receiptDate: new Date(paymentDate), // <-- ใช้วันที่ได้รับเงินจริง
+            total: _billing.amount.total,
+            subTotal: _billing.amount.subTotal,
+            tax: _billing.amount.tax,
+            updatedBy: adminId,
+          })
+          await _advanceReceipt.save({ session })
+
+          // --- อัปเดต Billing ---
+          await BillingModel.findByIdAndUpdate(
+            _billing._id,
+            {
+              status: EBillingStatus.COMPLETE,
+              state: EBillingState.CURRENT,
+              updatedBy: adminId,
+              // เพิ่มใบเสร็จที่ถูกต้องลงไป
+              $push: { receipts: _advanceReceipt._id },
+            },
+            { session, new: true },
+          )
+          // 2. (Optional) สร้าง PDF ใบรับเงินล่วงหน้าเก็บไว้
+          // await generateAdvanceReceiptPDF(_billing._id, _advanceReceipt._id, session);
         }
       }
 
@@ -452,6 +555,8 @@ export default class BillingResolver {
           }
         }
       }
+
+      // QWE
 
       // Update count admin
       console.log('[Pre Endding] approvalBillingPayment')

@@ -1,4 +1,4 @@
-import { EBillingReason, EBillingState, EBillingStatus } from '@enums/billing'
+import { EBillingReason, EBillingState, EBillingStatus, EReceiptType, ERefundAmountType } from '@enums/billing'
 import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
 import BillingModel from '@models/finance/billing.model'
 import { BillingReason } from '@models/finance/objects'
@@ -28,6 +28,9 @@ import { MakePayBillingInput } from '@inputs/payment.input'
 import FileModel from '@models/file.model'
 import { revertShipmentRejection } from './shipmentOperation'
 import { EAdminAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
+import RefundNoteModel from '@models/finance/refundNote.model'
+import { generateNonTaxRefundReceipt } from 'reports/nonTaxRefundReceipt'
+import { generateNonTaxReceipt } from 'reports/nonTaxReceipt'
 
 Aigle.mixin(lodash, {})
 
@@ -337,6 +340,52 @@ export async function markBillingAsRefunded(input: MarkBillingAsRefundInput, adm
       status: ETransactionStatus.COMPLETE,
     })
     await _movemateTransaction.save({ session })
+
+    // Refund:
+    const _refund = await RefundNoteModel.findById(_billing.refundNote).session(session)
+
+    if (_refund.amountType === ERefundAmountType.FULL_AMOUNT) {
+      /**
+       * คืนเงิน 100%
+       * ออกใบคืนเงินเต็มจำนวน
+       * REFUND RECEIPT
+       * nonTaxRefundReceipt
+       * ลูกค้ายกเลิกการใช้บริการก่อนวันให้บริิการจริง คืนเงินเต็มจำนวนตามเงื่อนไขบริษัท
+       */
+      const _newRefund = await _refund.updateOne({ refundDate: paymentDate, amount }, { session, new: true })
+      const { document } = await generateNonTaxRefundReceipt(_billing, _newRefund, session)
+      await RefundNoteModel.findByIdAndUpdate(_refund._id, { document }, { session })
+      /**
+       * TODO: Send Email: ???
+       */
+    } else if (_refund.amountType === ERefundAmountType.HALF_AMOUNT) {
+      /**
+       * คืนเงิน 50%
+       * ออกใบเสร็จคืนเงินบางส่วน
+       * RECEIPT
+       * generateNonTaxReceipt
+       */
+      const _receiptNumber = await generateMonthlySequenceNumber('receipt')
+      const _advanceReceipt = _billing.advanceReceipt
+      const _advanceReceiptNumber = _advanceReceipt?.receiptNumber || ''
+      const _receipt = new ReceiptModel({
+        receiptNumber: _receiptNumber,
+        refReceiptNumber: _advanceReceiptNumber,
+        receiptType: EReceiptType.FINAL,
+        receiptDate: paymentDate,
+        total: _refund.amount || 0,
+        subTotal: _refund.amount || 0,
+        tax: 0,
+        remarks: _refund.remark,
+        updatedBy: adminId,
+      })
+      const { document } = await generateNonTaxReceipt(_billing, _receipt, session)
+      _receipt.document = document._id
+      await _receipt.save({ session })
+      /**
+       * TODO: Send Email: ???
+       */
+    }
   }
 
   if (_billing.state === EBillingState.REFUND) {

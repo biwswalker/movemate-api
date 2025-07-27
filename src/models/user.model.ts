@@ -369,6 +369,11 @@ export class User extends TimeStamps {
           }
         }
       }
+    } else if (userRole === EUserRole.DRIVER) {
+      const _driverDetail = (get(this, '_doc.driverDetail', '') || this.driverDetail) as DriverDetail | undefined
+      if (_driverDetail) {
+        return `${_driverDetail.address} แขวง/ตำบล ${_driverDetail.subDistrict} เขต/อำเภอ ${_driverDetail.district} จังหวัด ${_driverDetail.province} ${_driverDetail.postcode}`
+      }
     }
     return ''
   }
@@ -414,6 +419,17 @@ export class User extends TimeStamps {
               postcode: _businessDetail.postcode,
             }
           }
+        }
+      }
+    } else if (userRole === EUserRole.DRIVER) {
+      const _driverDetail = (get(this, '_doc.driverDetail', '') || this.driverDetail) as DriverDetail | undefined
+      if (_driverDetail) {
+        return {
+          address: _driverDetail.address,
+          subDistrict: _driverDetail.subDistrict,
+          district: _driverDetail.district,
+          province: _driverDetail.province,
+          postcode: _driverDetail.postcode,
         }
       }
     }

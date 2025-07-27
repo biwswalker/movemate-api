@@ -284,6 +284,8 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
       billingEndDate: today,
     })
     await _billing.save({ session })
+
+    
   } else {
     /**
      * Update Customer Balance
