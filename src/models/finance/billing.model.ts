@@ -78,7 +78,7 @@ export class Billing extends TimeStamps {
   invoice: Ref<Invoice>
 
   @Field(() => RefundNote, { nullable: true })
-  @Property({ ref: () => RefundNote, autopopulate: true })
+  @Property({ ref: RefundNote, autopopulate: true })
   refundNote: Ref<RefundNote>
 
   @Field()

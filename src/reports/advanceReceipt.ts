@@ -75,24 +75,15 @@ export async function generateAdvanceReceipt(
 
     let details = ''
     let amount = 0
-    if (shipment.status === EShipmentStatus.DELIVERED) {
-      // กรณีงานสำเร็จ: แสดงเป็นค่าขนส่งปกติ
-      const dropoffs = tail(shipment.destinations)
-      const latestQuotation = last(sortBy(shipment.quotations, 'createdAt')) as Quotation | undefined
-      details = `ค่าขนส่ง${vehicle.name} ${pickup.name} ไปยัง ${reduce(
-        dropoffs,
-        (prev, curr) => (prev ? `${prev}, ${curr.name}` : curr.name),
-        '',
-      )}`
-      amount = latestQuotation?.price?.total || 0
-    } else if (shipment.status === EShipmentStatus.CANCELLED && shipment.cancellationFee > 0) {
-      // กรณีงานยกเลิกและมีค่าปรับ: แสดงเป็นค่าปรับ
-      details = `ค่าปรับจากการยกเลิกงาน #${shipment.trackingNumber}`
-      amount = shipment.cancellationFee
-    } else {
-      // กรณีอื่นๆ (เช่น งานยกเลิกแต่ไม่มีค่าปรับ) จะไม่แสดงในรายการ
-      return null
-    }
+    // กรณีงานสำเร็จ: แสดงเป็นค่าขนส่งปกติ
+    const dropoffs = tail(shipment.destinations)
+    const latestQuotation = last(sortBy(shipment.quotations, 'createdAt')) as Quotation | undefined
+    details = `ค่าขนส่ง${vehicle.name} ${pickup.name} ไปยัง ${reduce(
+      dropoffs,
+      (prev, curr) => (prev ? `${prev}, ${curr.name}` : curr.name),
+      '',
+    )}`
+    amount = latestQuotation?.price?.total || 0
 
     return {
       no: { label: String(no), options },

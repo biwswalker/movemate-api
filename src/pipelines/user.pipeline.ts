@@ -384,7 +384,15 @@ export const GET_USERS = (
     ...(status && status !== EUserCriterialStatus.ALL ? { status: status } : {}),
     ...(userNumber ? { userNumber: { $regex: userNumber, $options: 'i' } } : {}),
     ...(username ? { username: { $regex: username, $options: 'i' } } : {}),
-    ...(parentId ? { $or: [{ parents: { $in: [parentId] } }, { requestedParents: { $in: [parentId] } }] } : {}),
+    ...(parentId
+      ? {
+          $or: [
+            { parents: { $in: [parentId] } },
+            { requestedParents: { $in: [parentId] } },
+            { rejectedRequestParents: { $in: [parentId] } },
+          ],
+        }
+      : {}),
   }
 
   const prematch: PipelineStage = {

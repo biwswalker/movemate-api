@@ -114,11 +114,11 @@ export async function getNewAllAvailableShipmentForDriver(
   const generatedQuery = await getNewAllAvailableShipmentForDriverQuery(session, driverId)
   const queryOptions = Object.assign(options, { sort: { bookingDateTime: 1 }, session })
   const query = isEmpty(generatedQuery) ? {} : generatedQuery
-  const shipments = await ShipmentModel.find(query, undefined, queryOptions).exec()
-  if (!shipments) {
+  if (isEmpty(query)) {
     return []
   }
-  return shipments
+  const shipments = await ShipmentModel.find(query, undefined, queryOptions).exec()
+  return shipments || []
 }
 
 export async function publishDriverMatchingShipment(

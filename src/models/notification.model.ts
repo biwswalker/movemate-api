@@ -168,7 +168,15 @@ export class Notification extends TimeStamps {
 
   static async sendFCMNotification(data: Message | Message[]): Promise<void> {
     if (isArray(data)) {
-      await admin.messaging().sendEach(data)
+      await admin
+        .messaging()
+        .sendEach(data)
+        .catch((error) => {
+          console.error(JSON.stringify(error))
+          // TODO: Resolve this
+          // เคสเมื่อ driver logout และ fcm token ไม่ถูกเคลีย/หรือเคสอื่นๆ
+          // throw error
+        })
     } else if (typeof data === 'object') {
       await admin
         .messaging()

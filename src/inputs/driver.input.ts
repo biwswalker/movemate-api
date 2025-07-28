@@ -70,6 +70,12 @@ export class DriverDetailInput {
 
   @Field(() => [String])
   serviceVehicleTypes: string[]
+
+  @Field()
+  licensePlateProvince: string
+
+  @Field()
+  licensePlateNumber: string
 }
 
 @InputType()
@@ -130,9 +136,15 @@ export class ReDriverDetailInput {
 
   @Field(() => [String])
   serviceVehicleTypes: string[]
-  
+
   @Field(() => FileInput, { nullable: true })
   profileImage: FileInput
+
+  @Field()
+  licensePlateProvince: string
+
+  @Field()
+  licensePlateNumber: string
 }
 
 @InputType()
@@ -262,6 +274,12 @@ export class EmployeeDetailInput {
 
   @Field(() => [String])
   serviceVehicleTypes: string[]
+
+  @Field()
+  licensePlateProvince: string
+
+  @Field()
+  licensePlateNumber: string
 }
 
 @InputType()

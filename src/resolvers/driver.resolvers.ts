@@ -144,7 +144,9 @@ export default class DriverResolver {
       if (result === 'accept') {
         await driver.updateOne({ $pull: { requestedParents: agentId }, $push: { parents: agentId } }).session(session)
       } else if (result === 'reject') {
-        await driver.updateOne({ $pull: { requestedParents: agentId } }).session(session)
+        await driver
+          .updateOne({ $pull: { requestedParents: agentId }, $push: { rejectedRequestParents: agentId } })
+          .session(session)
       } else {
         const message = 'ไม่มีสถานะการยืนยันนี้'
         throw new GraphQLError(message)
@@ -314,6 +316,8 @@ export default class DriverResolver {
         bankNumber: detail.bankNumber,
         serviceVehicleTypes: detail.serviceVehicleTypes,
         documents: driverDocument,
+        licensePlateNumber: detail.licensePlateNumber,
+        licensePlateProvince: detail.licensePlateProvince,
       })
       await driverDetailModel.save({ session })
 
@@ -478,26 +482,33 @@ export default class DriverResolver {
       )
 
       // 3. Detail
-      await DriverDetailModel.findByIdAndUpdate(driverDetail._id, {
-        title: detail.title,
-        otherTitle: detail.otherTitle,
-        firstname: detail.firstname,
-        lastname: detail.lastname,
-        businessName: detail.businessName,
-        businessBranch: detail.businessBranch,
-        taxNumber: detail.taxNumber,
-        lineId: detail.lineId,
-        address: detail.address,
-        province: detail.province,
-        district: detail.district,
-        subDistrict: detail.subDistrict,
-        postcode: detail.postcode,
-        bank: detail.bank,
-        bankBranch: detail.bankBranch,
-        bankName: detail.bankName,
-        bankNumber: detail.bankNumber,
-        serviceVehicleTypes: detail.serviceVehicleTypes,
-      }, { session })
+      await DriverDetailModel.findByIdAndUpdate(
+        driverDetail._id,
+        {
+          title: detail.title,
+          otherTitle: detail.otherTitle,
+          firstname: detail.firstname,
+          lastname: detail.lastname,
+          businessName: detail.businessName,
+          businessBranch: detail.businessBranch,
+          taxNumber: detail.taxNumber,
+          lineId: detail.lineId,
+          address: detail.address,
+          province: detail.province,
+          district: detail.district,
+          subDistrict: detail.subDistrict,
+          postcode: detail.postcode,
+          bank: detail.bank,
+          bankBranch: detail.bankBranch,
+          bankName: detail.bankName,
+          bankNumber: detail.bankNumber,
+          phoneNumber: detail.phoneNumber,
+          serviceVehicleTypes: detail.serviceVehicleTypes,
+          licensePlateNumber: detail.licensePlateNumber,
+          licensePlateProvince: detail.licensePlateProvince,
+        },
+        { session },
+      )
 
       // 4. User
       const profileImage = detail.profileImage ? new FileModel({ ...detail.profileImage }) : null
@@ -517,12 +528,16 @@ export default class DriverResolver {
       )
 
       // Notification
-      await NotificationModel.sendNotification({
-        userId: driverId,
-        varient: ENotificationVarient.MASTER,
-        title: 'มีการเปลี่ยนแปลงข้อมูลส่วนตัว',
-        message: [`ผู้ดูแลระบบเปลี่ยนแปลงข้อมูลส่วนตัวของท่าน`],
-      }, session, true)
+      await NotificationModel.sendNotification(
+        {
+          userId: driverId,
+          varient: ENotificationVarient.MASTER,
+          title: 'มีการเปลี่ยนแปลงข้อมูลส่วนตัว',
+          message: [`ผู้ดูแลระบบเปลี่ยนแปลงข้อมูลส่วนตัวของท่าน`],
+        },
+        session,
+        true,
+      )
 
       await pubsub.publish(USERS.STATUS, updatedUser._id, updatedUser.status)
 
@@ -549,12 +564,17 @@ export default class DriverResolver {
     const { detail, documents } = data
     try {
       if (driverId) {
-        const isEmployee = await UserModel.findOne({ _id: new Types.ObjectId(driverId), parents: { $in: [userId] } }).session(session)
+        const isEmployee = await UserModel.findOne({
+          _id: new Types.ObjectId(driverId),
+          parents: { $in: [userId] },
+        }).session(session)
         if (!isEmployee) {
           throw new GraphQLError('คุณไม่มีสิทธิ์เปลี่ยนแปลงข้่อมูลคนขับคนนี้')
         }
       }
-      const driver = await UserModel.findById(driverId || userId).session(session).lean()
+      const driver = await UserModel.findById(driverId || userId)
+        .session(session)
+        .lean()
       if (!driver) {
         throw new GraphQLError('ไม่พบข้อมูลของท่าน')
       }
@@ -644,6 +664,8 @@ export default class DriverResolver {
         bankName: detail.bankName,
         bankNumber: detail.bankNumber,
         serviceVehicleTypes: detail.serviceVehicleTypes,
+        licensePlateNumber: detail.licensePlateNumber,
+        licensePlateProvince: detail.licensePlateProvince,
       }).session(session)
 
       // 4. User
@@ -654,12 +676,15 @@ export default class DriverResolver {
       }).session(session)
 
       // Notification
-      await NotificationModel.sendNotification({
-        userId: driver._id,
-        varient: ENotificationVarient.INFO,
-        title: 'ขอบคุณที่ส่งข้อมูล',
-        message: [`คุณได้ส่งข้อมูลเพื่อสมัคคนขับ Movemate อีกครั้ง โปรดรอเจ้าหน้าที่ตรวจสอบบัญชีของท่าน`],
-      }, session)
+      await NotificationModel.sendNotification(
+        {
+          userId: driver._id,
+          varient: ENotificationVarient.INFO,
+          title: 'ขอบคุณที่ส่งข้อมูล',
+          message: [`คุณได้ส่งข้อมูลเพื่อสมัคคนขับ Movemate อีกครั้ง โปรดรอเจ้าหน้าที่ตรวจสอบบัญชีของท่าน`],
+        },
+        session,
+      )
 
       return true
     } catch (error) {
@@ -783,6 +808,9 @@ export default class DriverResolver {
         subDistrict: detail.subDistrict,
         postcode: detail.postcode,
         documents: driverDocument,
+        serviceVehicleTypes: detail.serviceVehicleTypes,
+        licensePlateNumber: detail.licensePlateNumber,
+        licensePlateProvince: detail.licensePlateProvince,
       })
       await driverDetailModel.save({ session })
 
@@ -873,7 +901,7 @@ export default class DriverResolver {
       if (userId) {
         const agent = await UserModel.findById(userId).session(session)
         if (!driverId) {
-          const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
+          const message = 'ไม่สามารถลบข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
           throw new GraphQLError(message, {
             extensions: {
               code: 'NOT_FOUND',
@@ -881,9 +909,18 @@ export default class DriverResolver {
             },
           })
         }
-        const driver = await UserModel.findOne({ _id: new Types.ObjectId(driverId), parents: { $in: [userId] } }).session(session).lean()
+        const driver = await UserModel.findOne({
+          _id: new Types.ObjectId(driverId),
+          $or: [
+            { parents: { $in: [userId] } },
+            { requestedParents: { $in: [userId] } },
+            { rejectedRequestParents: { $in: [userId] } },
+          ],
+        })
+          .session(session)
+          .lean()
         if (!driver) {
-          const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน'
+          const message = 'ไม่สามารถลบข้อมูลคนขับได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน'
           throw new GraphQLError(message, {
             extensions: {
               code: 'NOT_FOUND',
@@ -907,18 +944,25 @@ export default class DriverResolver {
             await DriverDetailModel.deleteOne({ _id: driverDetail._id }).session(session)
             await UserModel.deleteOne({ _id: driver._id }).session(session)
           } else {
-            await UserModel.findByIdAndUpdate(driverId, { $pull: { parents: userId } }).session(session)
+            await UserModel.findByIdAndUpdate(driverId, {
+              $pull: { parents: userId, requestedParents: userId, rejectedRequestParents: userId },
+            }).session(session)
             /**
              * Notification
              */
             const title = `นายหน้าได้ลบคุณออกจากรายชื่อคนขับ`
             const message = `${agent.fullname} ลบคุณออกจากรายชื่อคนขับของนายหน้า`
-            await NotificationModel.sendNotification({
-              userId: driver._id,
-              varient: ENotificationVarient.INFO,
-              title: title,
-              message: [message],
-            }, session, true, { navigation: ENavigationType.INDEX })
+            await NotificationModel.sendNotification(
+              {
+                userId: driver._id,
+                varient: ENotificationVarient.INFO,
+                title: title,
+                message: [message],
+              },
+              session,
+              true,
+              { navigation: ENavigationType.INDEX },
+            )
           }
         } else {
           const message = 'ไม่สามารถแก้ไขข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
@@ -944,13 +988,94 @@ export default class DriverResolver {
     }
   }
 
+  @Mutation(() => Boolean)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  async resentEmployee(@Ctx() ctx: GraphQLContext, @Arg('driverId') driverId: string): Promise<boolean> {
+    const session = ctx.session
+    try {
+      const userId = ctx.req.user_id
+      if (userId) {
+        const agent = await UserModel.findById(userId).session(session)
+        if (!driverId) {
+          const message = 'ไม่สามารถเพิ่มข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+          throw new GraphQLError(message, {
+            extensions: {
+              code: 'NOT_FOUND',
+              errors: [{ message }],
+            },
+          })
+        }
+        const driver = await UserModel.findOne({
+          _id: new Types.ObjectId(driverId),
+          $or: [
+            { parents: { $in: [userId] } },
+            { requestedParents: { $in: [userId] } },
+            { rejectedRequestParents: { $in: [userId] } },
+          ],
+        })
+          .session(session)
+          .lean()
+        if (!driver) {
+          const message = 'ไม่สามารถเพิ่มข้อมูลคนขับได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน'
+          throw new GraphQLError(message, {
+            extensions: {
+              code: 'NOT_FOUND',
+              errors: [{ message }],
+            },
+          })
+        }
+        const driverDetail = await DriverDetailModel.findById(driver.driverDetail).session(session).lean()
+        if (driverDetail) {
+          await UserModel.findByIdAndUpdate(driverId, {
+            $push: { requestedParents: userId },
+            $pull: { parents: userId, rejectedRequestParents: userId },
+          }).session(session)
+          /**
+           * Notification
+           */
+          const title = `นายหน้าได้ขอเพิ่มคุณไปยังรายชื่อคนขับ`
+          const message = `${agent.fullname} ได้เพิ่มคุณไปยังรายชื่อคนขับของนายหน้า`
+          await NotificationModel.sendNotification(
+            {
+              userId: driver._id,
+              varient: ENotificationVarient.INFO,
+              title: title,
+              message: [message],
+            },
+            session,
+            true,
+            { navigation: ENavigationType.INDEX },
+          )
+        } else {
+          const message = 'ไม่สามารถเพิ่มข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
+          throw new GraphQLError(message, {
+            extensions: {
+              code: 'NOT_FOUND',
+              errors: [{ message }],
+            },
+          })
+        }
+        return true
+      }
+      const message = 'ไม่สามารถเพิ่มข้อมูลคนขับได้ เนื่องจากไม่พบเลขที่ผู้ใช้งาน'
+      throw new GraphQLError(message, {
+        extensions: {
+          code: 'NOT_FOUND',
+          errors: [{ message }],
+        },
+      })
+    } catch (errors) {
+      console.log('error: ', errors)
+      throw errors
+    }
+  }
+
   @Query(() => [User])
   @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async getAvailableDrivers(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<User[]> {
     const userId = ctx.req.user_id
 
-    const employeeIds = await UserModel.find({ parents: { $in: [userId] } }).distinct('_id')
-    console.log('=> employeeIds :', employeeIds)
     const shipment = await ShipmentModel.findById(shipmentId).lean()
     if (!shipment) {
       const message = 'ไม่สามารถหาข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
@@ -991,11 +1116,8 @@ export default class DriverResolver {
       const driverDetail = get(driver, 'driverDetail', undefined) as DriverDetail | undefined
 
       if (driverDetail) {
-        console.log('1. checkAvailableToWork --------->', includes(driverDetail.driverType, EDriverType.BUSINESS))
         if (includes(driverDetail.driverType, EDriverType.BUSINESS)) {
           const childrens = await UserModel.find({ parents: { $in: [userId] } }).lean()
-          console.log('2. checkAvailableToWork --------->', childrens)
-          console.log('---childrens---', childrens)
           if (isEmpty(childrens)) {
             return false
           }
@@ -1007,6 +1129,30 @@ export default class DriverResolver {
       }
 
       return false
+    } catch (error) {
+      console.log('error: ', error)
+      if (error instanceof ValidationError) {
+        throw yupValidationThrow(error)
+      }
+      throw error
+    }
+  }
+
+  @Query(() => [String], { nullable: true })
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
+  async getParentNames(@Ctx() ctx: GraphQLContext): Promise<string[]> {
+    try {
+      const userId = ctx.req.user_id
+      const driver = await UserModel.findById(userId).lean()
+
+      if (!driver || !driver?.parents || driver?.parents?.length === 0) {
+        return []
+      }
+
+      const parents = await UserModel.find({ _id: { $in: driver?.parents } })
+      const parentNames = parents?.map((parent) => parent.fullname)
+
+      return parentNames
     } catch (error) {
       console.log('error: ', error)
       if (error instanceof ValidationError) {

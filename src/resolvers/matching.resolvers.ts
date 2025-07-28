@@ -3,7 +3,7 @@ import { LoadmoreArgs } from '@inputs/query.input'
 import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
-import UserModel from '@models/user.model'
+import UserModel, { User } from '@models/user.model'
 import { filter, find, get, head, includes, isEmpty, last, map, reduce, sortBy, tail, uniq } from 'lodash'
 import DriverDetailModel, { DriverDetail } from '@models/driverDetail.model'
 import { GraphQLError } from 'graphql'
@@ -18,7 +18,7 @@ import {
   NextShipmentStepInput,
   SentPODDocumentShipmentStepInput,
 } from '@inputs/matching.input'
-import { addSeconds, format } from 'date-fns'
+import { addSeconds, format, isBefore, parseISO } from 'date-fns'
 import pubsub, { NOTFICATIONS, SHIPMENTS } from '@configs/pubsub'
 import { Repeater } from '@graphql-yoga/subscription'
 import addEmailQueue from '@utils/email.utils'
@@ -32,6 +32,7 @@ import StepDefinitionModel, {
   EStepDefinition,
   EStepDefinitionName,
   EStepStatus,
+  StepDefinition,
 } from '@models/shipmentStepDefinition.model'
 import RetryTransactionMiddleware, { WithTransaction } from '@middlewares/RetryTransaction'
 import { generateMonthlySequenceNumber } from '@utils/string.utils'
@@ -103,6 +104,7 @@ export default class MatchingResolver {
         const driverDetail = await DriverDetailModel.findById(user.driverDetail).lean()
 
         const userPayload = payload.filter((item) => {
+          console.log(item.trackingNumber, item.status)
           const isIgnoreShipment = find(ignoreShipmets, ['_id', item._id])
           if (isIgnoreShipment) {
             return false
@@ -110,7 +112,6 @@ export default class MatchingResolver {
           const vehicleId = get(item, 'vehicleId._id', '')
           const normalizeVehicleTypes = map(driverDetail.serviceVehicleTypes, (type) => type.toString())
           const isMatchedService = includes(normalizeVehicleTypes, vehicleId.toString())
-          console.log('isMatchedService: ', isMatchedService, vehicleId, normalizeVehicleTypes)
           return isMatchedService
         })
         return userPayload
@@ -509,11 +510,13 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   async assignShipment(
     @Ctx() ctx: GraphQLContext,
     @Arg('shipmentId') shipmentId: string,
     @Arg('driverId') driverId: string,
+    @Arg('isChanged', { nullable: true }) isChanged: boolean,
   ): Promise<boolean> {
     const session = ctx.session
     const userId = ctx.req.user_id
@@ -521,18 +524,18 @@ export default class MatchingResolver {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
-    const user = await UserModel.findById(userId).lean()
+    const user = await UserModel.findById(userId).session(session).lean()
     if (!user) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
-    const shipment = await ShipmentModel.findById(shipmentId)
+    const shipment = await ShipmentModel.findById(shipmentId).session(session)
     if (!shipment) {
       const message = 'ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    const driver = await UserModel.findById(driverId).lean()
+    const driver = await UserModel.findById(driverId).session(session).lean()
     if (!driver) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -543,16 +546,94 @@ export default class MatchingResolver {
     }
 
     if (
-      !shipment.driver &&
+      // !shipment.driver &&
       shipment.status === EShipmentStatus.PROGRESSING &&
       shipment.driverAcceptanceStatus === EDriverAcceptanceStatus.ACCEPTED
     ) {
       const isBusinessUser = user.userType === EUserType.BUSINESS
       if (isBusinessUser) {
-        await ShipmentModel.findByIdAndUpdate(shipmentId, { driver: driverId }, { session })
-        await nextStep(shipment._id, undefined, session)
-        await UserModel.findByIdAndUpdate(driverId, { drivingStatus: EDriverStatus.WORKING }, { session })
-        const customerId = get(shipment, 'customer._id', '')
+        if (shipment.driver) {
+          if (isChanged) {
+            const now = new Date()
+            const bookingTime = new Date(shipment.bookingDateTime)
+
+            if (!isBefore(now, bookingTime)) {
+              throw new GraphQLError('ไม่สามารถเปลี่ยนคนขับได้ เนื่องจากเกินเวลาเริ่มงานแล้ว')
+            }
+
+            // 2. ตรวจสอบเงื่อนไขด้านขั้นตอน: ต้องอยู่ก่อน step 'confirm_datetime'
+            const confirmStep = find(shipment.steps as StepDefinition[], { step: EStepDefinition.CONFIRM_DATETIME })
+            if (!confirmStep) {
+              throw new GraphQLError('ไม่พบขั้นตอนยืนยันวันเวลาในระบบ')
+            }
+
+            const isCannotChangeDriver = includes([EStepStatus.DONE, EStepStatus.CANCELLED], confirmStep.stepStatus)
+            if (isCannotChangeDriver) {
+              throw new GraphQLError('ไม่สามารถเปลี่ยนคนขับได้ เนื่องจากเกินเวลาเริ่มงานแล้ว')
+            }
+
+            const oldDriver = shipment.driver as User
+            await ShipmentModel.findByIdAndUpdate(shipmentId, { driver: driverId }, { session })
+            await UserModel.findOneAndUpdate(
+              { _id: oldDriver._id, drivingStatus: { $in: [EDriverStatus.IDLE, EDriverStatus.WORKING] } },
+              { drivingStatus: EDriverStatus.IDLE },
+              { session },
+            )
+
+            if (oldDriver.fcmToken) {
+              const token = decryption(driver.fcmToken)
+              // Sent app Notiification to Driver
+              await NotificationModel.sendNotification(
+                {
+                  userId: oldDriver._id,
+                  varient: ENotificationVarient.MASTER,
+                  title: `งานขนส่งหมายเลข ${shipment.trackingNumber} มีการเปลี่ยนแปลงคนขับ`,
+                  message: [
+                    `🔔 นายหน้า ${user.fullname} ได้เปลี่ยนคนขับของงานหมายเลข ${shipment.trackingNumber} โปรดตรวจสอบข้อมูลใหม่`,
+                  ],
+                },
+                session,
+                true,
+                { navigation: ENavigationType.SHIPMENT, trackingNumber: shipment.trackingNumber },
+              )
+            }
+            const customerId = get(shipment, 'customer._id', '')
+            if (customerId) {
+              await NotificationModel.sendNotification(
+                {
+                  userId: customerId,
+                  varient: ENotificationVarient.MASTER,
+                  title: `งานขนส่งหมายเลข ${shipment.trackingNumber} มีการเปลี่ยนแปลงคนขับ`,
+                  message: [
+                    `งานขนส่งหมายเลข ${shipment.trackingNumber} มีการเปลี่ยนแปลงคนขับ คนขับจะติดต่อหาท่านเพื่อนัดหมาย`,
+                  ],
+                },
+                session,
+              )
+            }
+          } else {
+            const message = 'ไม่สามารถรับงานขนส่งนี้ได้ เนื่องจากงานขนส่งดังกล่าวมีผู้รับไปแล้ว'
+            throw new GraphQLError(message, {
+              extensions: { code: REPONSE_NAME.EXISTING_SHIPMENT_DRIVER, errors: [{ message }] },
+            })
+          }
+        } else {
+          await ShipmentModel.findByIdAndUpdate(shipmentId, { driver: driverId }, { session })
+          await nextStep(shipment._id, undefined, session)
+          await UserModel.findByIdAndUpdate(driverId, { drivingStatus: EDriverStatus.WORKING }, { session })
+          const customerId = get(shipment, 'customer._id', '')
+          if (customerId) {
+            await NotificationModel.sendNotification({
+              userId: customerId,
+              varient: ENotificationVarient.MASTER,
+              title: `${shipment.trackingNumber} คนขับตอบรับแล้ว`,
+              message: [
+                `งานขนส่งเลขที่ ${shipment.trackingNumber} ได้รับการตอบรับจากคนขับแล้ว คนขับจะติดต่อหาท่านเพื่อนัดหมาย`,
+              ],
+            })
+          }
+        }
+
         if (driver.fcmToken) {
           const token = decryption(driver.fcmToken)
           const dateText = format(shipment.bookingDateTime, 'dd MMM HH:mm', { locale: th })
@@ -568,16 +649,6 @@ export default class MatchingResolver {
             token,
             data: { navigation: ENavigationType.SHIPMENT, trackingNumber: shipment.trackingNumber },
             notification: { title: NOTIFICATION_TITLE, body: message },
-          })
-        }
-        if (customerId) {
-          await NotificationModel.sendNotification({
-            userId: customerId,
-            varient: ENotificationVarient.MASTER,
-            title: `${shipment.trackingNumber} คนขับตอบรับแล้ว`,
-            message: [
-              `งานขนส่งเลขที่ ${shipment.trackingNumber} ได้รับการตอบรับจากคนขับแล้ว คนขับจะติดต่อหาท่านเพื่อนัดหมาย`,
-            ],
           })
         }
       }

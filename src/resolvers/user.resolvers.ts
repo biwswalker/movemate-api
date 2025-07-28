@@ -150,10 +150,7 @@ export default class UserResolver {
 
       const driverDetail = await DriverDetailModel.findOne({
         phoneNumber: phonenumber,
-        $or: [
-          { driverType: { $in: [EDriverType.INDIVIDUAL_DRIVER] } },
-          { driverType: { $in: [EDriverType.BUSINESS_DRIVER] } },
-        ],
+        driverType: { $in: [EDriverType.INDIVIDUAL_DRIVER, EDriverType.BUSINESS_DRIVER] },
       })
       if (!driverDetail) {
         const message = `ไม่พบผู้ใช้ ${phonenumber}`
@@ -183,22 +180,22 @@ export default class UserResolver {
   ): Promise<boolean> {
     try {
       const lookupUserId = ctx.req.user_id
-
       const driverDetail = await DriverDetailModel.findOne({
         phoneNumber: phonenumber,
         $or: [
           { driverType: { $in: [EDriverType.INDIVIDUAL_DRIVER] } },
           { driverType: { $in: [EDriverType.BUSINESS_DRIVER] } },
         ],
-      })
+      }).lean()
+
       if (!driverDetail) {
         return false
       }
 
       const user = await UserModel.findOne({
         userRole: EUserRole.DRIVER,
-        driverDetail,
-        parents: { $in: [lookupUserId] },
+        driverDetail: driverDetail._id,
+        $or: [{ requestedParents: { $in: [lookupUserId] } }, { rejectedRequestParents: { $in: [lookupUserId] } }],
       })
 
       if (!user) {

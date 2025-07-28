@@ -112,6 +112,16 @@ export class DriverDetail {
   @Property({ autopopulate: true, ref: 'VehicleType', default: [] })
   serviceVehicleTypes: Ref<VehicleType>[]
 
+  @Field({ nullable: true })
+  @IsString()
+  @Property()
+  licensePlateProvince: string
+
+  @Field({ nullable: true })
+  @IsString()
+  @Property()
+  licensePlateNumber: string
+
   @Field({ defaultValue: 0 })
   @Property({ default: 0 })
   balance: number

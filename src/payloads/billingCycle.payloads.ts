@@ -121,7 +121,7 @@ export class BillingInfoPayload {
   @Field({ nullable: true })
   billingNumber?: string
 
-  @Field(() => EBillingState, { nullable: true })
+  @Field(() => EBillingStatus, { nullable: true })
   billingStatus?: EBillingStatus
 
   @Field(() => EBillingState, { nullable: true })

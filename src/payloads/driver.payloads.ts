@@ -1,5 +1,5 @@
-import { EDriverType } from "@enums/users";
-import { Field, Int, ObjectType } from "type-graphql";
+import { EDriverType } from '@enums/users'
+import { Field, Int, ObjectType } from 'type-graphql'
 
 @ObjectType()
 export class RegisterPayload {
@@ -13,70 +13,76 @@ export class RegisterPayload {
 @ObjectType()
 export class DriverVerifiedPayload {
   @Field(() => Int)
-  policyVersion: number;
+  policyVersion: number
 
   @Field(() => EDriverType)
-  driverType: EDriverType;
+  driverType: EDriverType
 
   @Field()
-  title: string;
+  title: string
 
   @Field({ nullable: true })
-  otherTitle?: string;
+  otherTitle?: string
 
   @Field({ nullable: true })
-  firstname: string;
+  firstname: string
 
   @Field({ nullable: true })
-  lastname: string;
+  lastname: string
 
   @Field({ nullable: true })
-  businessName: string;
+  businessName: string
 
   @Field({ nullable: true })
-  businessBranch: string;
+  businessBranch: string
 
   @Field()
-  taxNumber: string;
+  taxNumber: string
 
   @Field()
-  phoneNumber: string;
+  phoneNumber: string
 
   @Field()
-  lineId: string;
+  lineId: string
 
   @Field()
-  password: string;
+  password: string
 
   @Field()
-  address: string;
+  address: string
 
   @Field()
-  province: string;
+  province: string
 
   @Field()
-  district: string;
+  district: string
 
   @Field()
-  subDistrict: string;
+  subDistrict: string
 
   @Field()
-  postcode: string;
+  postcode: string
 
   @Field()
-  bank: string;
+  bank: string
 
   @Field()
-  bankBranch: string;
+  bankBranch: string
 
   @Field()
-  bankName: string;
+  bankName: string
 
   @Field()
-  bankNumber: string;
+  bankNumber: string
 
   @Field(() => [String])
   serviceVehicleTypes: string[]
+
+  @Field({ nullable: true })
+  licensePlateProvince: string
+
+  @Field({ nullable: true })
+  licensePlateNumber: string
 }
 
 @ObjectType()
@@ -92,7 +98,7 @@ export class EmployeeDetailPayload {
 
   @Field({ nullable: true })
   lastname: string
-  
+
   @Field()
   taxNumber: string
 
@@ -119,4 +125,10 @@ export class EmployeeDetailPayload {
 
   @Field(() => [String])
   serviceVehicleTypes: string[]
+
+  @Field({ nullable: true })
+  licensePlateProvince: string
+
+  @Field({ nullable: true })
+  licensePlateNumber: string
 }

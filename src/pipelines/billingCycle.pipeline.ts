@@ -150,7 +150,7 @@ export const BILLING_CYCLE_LIST = (
           $cond: {
             if: { $eq: ['$user.userType', 'BUSINESS'] },
             then: '$user.businessDetail.businessName',
-            else: { $concat: ['$user.individualDetail.firstname', ' ', '$customer.individualDetail.lastname'] },
+            else: { $concat: ['$user.individualDetail.firstname', ' ', '$user.individualDetail.lastname'] },
           },
         },
         latestQuotationTax: {
@@ -391,14 +391,15 @@ export const BILLING_CYCLE_LIST = (
       },
     },
     ...query,
-    ...projects,
-    ...postQuery,
     {
       $sort: {
         statusWeight: 1,
         stateWeight: 1,
-        ...sort,
+        createdAt: -1,
       },
     },
+    ...projects,
+    ...postQuery,
+    ...(!isEmpty(sort) ? [{ $sort: sort }] : []),
   ]
 }

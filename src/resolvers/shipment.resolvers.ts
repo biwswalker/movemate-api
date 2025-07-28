@@ -6,7 +6,7 @@ import Aigle from 'aigle'
 import { GraphQLError } from 'graphql'
 import { PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
-import lodash, { find, get, map, omit, sum } from 'lodash'
+import lodash, { find, get, map, omit, sortBy, sum } from 'lodash'
 import { ShipmentListPayload, ShipmentTimeCheckPayload, TotalRecordPayload } from '@payloads/shipment.payloads'
 import { LoadmoreArgs } from '@inputs/query.input'
 import { reformPaginate } from '@utils/pagination.utils'
@@ -59,7 +59,8 @@ export default class ShipmentResolver {
         const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
         throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
       }
-      return shipment
+      const _steps = sortBy(shipment.steps, ['seq'])
+      return Object.assign(shipment, { steps: _steps })
     } catch (error) {
       console.log(error)
       throw error

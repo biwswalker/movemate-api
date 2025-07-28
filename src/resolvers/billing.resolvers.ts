@@ -29,7 +29,7 @@ import {
 import { BILLING_CYCLE_LIST } from '@pipelines/billingCycle.pipeline'
 import { reformPaginate } from '@utils/pagination.utils'
 import { GraphQLError } from 'graphql'
-import { get, head, includes, last, map, reduce, sortBy, tail, toNumber, toString, uniq } from 'lodash'
+import { get, head, includes, isEmpty, last, map, reduce, sortBy, tail, toNumber, toString, uniq } from 'lodash'
 import { PaginateOptions, Types } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
@@ -61,6 +61,8 @@ import { Quotation } from '@models/finance/quotation.model'
 import PaymentModel from '@models/finance/payment.model'
 import ReceiptModel, { Receipt } from '@models/finance/receipt.model'
 import { generateMonthlySequenceNumber } from '@utils/string.utils'
+import { generateAdvanceReceipt } from 'reports/advanceReceipt'
+import { GraphQLJSONObject } from 'graphql-type-json'
 
 @Resolver()
 export default class BillingResolver {
@@ -131,14 +133,21 @@ export default class BillingResolver {
 
   @Query(() => Billing)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.CUSTOMER]))
-  async getBilling(@Ctx() ctx: GraphQLContext, @Arg('billingNumber') billingNumber: string): Promise<Billing> {
+  async getBilling(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('billingNumber') billingNumber: string,
+    @Arg('project', () => GraphQLJSONObject, { nullable: true }) project: object,
+  ): Promise<Billing> {
     const user_id = ctx.req.user_id
     const user_role = ctx.req.user_role
     try {
-      const _billing = await BillingModel.findOne({
-        billingNumber,
-        ...(user_role === EUserRole.CUSTOMER ? { user: user_id } : {}),
-      })
+      const _billing = await BillingModel.findOne(
+        {
+          billingNumber,
+          ...(user_role === EUserRole.CUSTOMER ? { user: user_id } : {}),
+        },
+        !isEmpty(project) ? project : undefined,
+      )
       if (!_billing) {
         const message = `ไม่สามารถเรียกข้อมูลใบแจ้งหนี้`
         throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
@@ -490,6 +499,10 @@ export default class BillingResolver {
             tax: _billing.amount.tax,
             updatedBy: adminId,
           })
+
+          // 2. (Optional) สร้าง PDF ใบรับเงินล่วงหน้าเก็บไว้
+          const { document } = await generateAdvanceReceipt(_billing, _advanceReceipt, session)
+          _advanceReceipt.document = document._id
           await _advanceReceipt.save({ session })
 
           // --- อัปเดต Billing ---
@@ -504,8 +517,6 @@ export default class BillingResolver {
             },
             { session, new: true },
           )
-          // 2. (Optional) สร้าง PDF ใบรับเงินล่วงหน้าเก็บไว้
-          // await generateAdvanceReceiptPDF(_billing._id, _advanceReceipt._id, session);
         }
       }
 
@@ -697,9 +708,9 @@ export default class BillingResolver {
       }
     }
 
-    const billing = await BillingModel.findOne({ shipments: shipmentId }).lean()
+    const billing = await BillingModel.findOne({ shipments: { $in: shipmentId } }).lean()
+        if (billing) {
 
-    if (billing) {
       // Billing record found, return it
       return {
         paymentMethod: shipment.paymentMethod,

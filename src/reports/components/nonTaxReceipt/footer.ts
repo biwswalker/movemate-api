@@ -61,9 +61,9 @@ export function NonTaxReceiptFooterComponent(doc: PDFDocument, receipt: Receipt)
 
   // After transfer detail
   doc.font(FONTS.SARABUN_MEDIUM).fontSize(9).text(CONSTANTS.REMARK, marginLeft).moveDown(0.8)
-  doc.moveDown(4)
-
   doc.font(FONTS.SARABUN_LIGHT).fontSize(7).text(receipt.remarks, marginLeft)
+
+  doc.moveDown(16)
 
   /**
    * Signature
@@ -104,5 +104,5 @@ export function NonTaxReceiptFooterComponent(doc: PDFDocument, receipt: Receipt)
     .fillColor(COLORS.TEXT_PRIMARY)
     .text(CONSTANTS.CUSTOMER_LABEL, signatureX, doc.y - 9, { width: signatureWidth, align: 'center' })
   doc.image(ASSETS.SIGNATURE, signatureX + 108, doc.y - 90, { width: 78 })
-  doc.image(ASSETS.THEPPAWNCHAI, signatureX + 100 + 78, doc.y - (94 + 64), { width: 100 })
+  doc.image(ASSETS.THEPPAWNCHAI, signatureX + 100 + 40, doc.y - (94 + 46), { width: 100 })
 }

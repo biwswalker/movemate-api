@@ -85,24 +85,24 @@ export function NonTaxReceiptHeaderComponent(
   doc.fontSize(8)
   doc
     .font(FONTS.SARABUN_MEDIUM)
-    .text(CONSTANTS.RECEIPT_NO, docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-  doc.font(FONTS.SARABUN_LIGHT).text(receipt.receiptNumber, 499, doc.y - 10, { align: 'left' })
+    .text(CONSTANTS.RECEIPT_NO, docNumberReactX + 2, doc.y, { align: 'right', width: (docNumberRectWidth + 45) / 2 - 4 }) // 81
+  doc.font(FONTS.SARABUN_LIGHT).text(receipt.receiptNumber, 520, doc.y - 10, { align: 'left' })
   // ---
   doc.moveDown(0.3)
   doc
     .font(FONTS.SARABUN_MEDIUM)
-    .text(CONSTANTS.ADVANCE_RECEIPT_DATE, docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-  doc.font(FONTS.SARABUN_LIGHT).text(receipt?.refReceiptNumber || '-', 499, doc.y - 10, { align: 'left' })
+    .text(CONSTANTS.ADVANCE_RECEIPT_DATE, docNumberReactX + 2, doc.y, { align: 'right', width: (docNumberRectWidth + 45) / 2 - 4 }) // 81
+  doc.font(FONTS.SARABUN_LIGHT).text(receipt?.refReceiptNumber || '-', 520, doc.y - 10, { align: 'left' })
   // ---
   const receiptInBEDateMonth = fDate(receipt.receiptDate, 'dd/MM')
   const receiptInBEYear = toNumber(fDate(receipt.receiptDate, 'yyyy')) + 543
   doc.moveDown(0.3)
   doc
     .font(FONTS.SARABUN_MEDIUM)
-    .text(CONSTANTS.RECEIPT_DATE, docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-  doc.font(FONTS.SARABUN_LIGHT).text(`${receiptInBEDateMonth}/${receiptInBEYear}`, 499, doc.y - 10, { align: 'left' })
+    .text(CONSTANTS.RECEIPT_DATE, docNumberReactX + 2, doc.y, { align: 'right', width: (docNumberRectWidth + 45) / 2 - 4 }) // 81
+  doc.font(FONTS.SARABUN_LIGHT).text(`${receiptInBEDateMonth}/${receiptInBEYear}`, 520, doc.y - 10, { align: 'left' })
   // ---
-  doc.rect(docNumberReactX, 54, docNumberRectWidth, 70).lineWidth(2).stroke()
+  doc.rect(docNumberReactX, 54, docNumberRectWidth, 85).lineWidth(2).stroke()
   // doc.moveDown(0.5)
   doc
     .lineCap('butt')

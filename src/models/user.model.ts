@@ -191,6 +191,10 @@ export class User extends TimeStamps {
   @Property({ default: [], allowMixed: Severity.ALLOW })
   requestedParents?: string[]
 
+  @Field(() => [String], { nullable: true, defaultValue: [] })
+  @Property({ default: [], allowMixed: Severity.ALLOW })
+  rejectedRequestParents?: string[]
+
   @Field({ nullable: true })
   @Property({ required: false, default: '' })
   validationRejectedMessage?: string
@@ -354,7 +358,15 @@ export class User extends TimeStamps {
           | IndividualCustomer
           | undefined
         if (_individualDetail) {
-          return `${_individualDetail.address} แขวง/ตำบล ${_individualDetail.subDistrict} เขต/อำเภอ ${_individualDetail.district} จังหวัด ${_individualDetail.province} ${_individualDetail.postcode}`
+          return [
+            _individualDetail.address || '',
+            _individualDetail.subDistrict ? ` แขวง/ตำบล ${_individualDetail.subDistrict}` : '',
+            _individualDetail.district ? ` เขต/อำเภอ ${_individualDetail.district}` : '',
+            _individualDetail.province ? ` จังหวัด ${_individualDetail.province}` : '',
+            _individualDetail.postcode ? ` ${_individualDetail.postcode}` : '',
+          ]
+            .join('')
+            .trim()
         }
       } else if (userType === EUserType.BUSINESS) {
         const _businessDetail = (get(this, '_doc.businessDetail', '') || this.businessDetail) as
@@ -363,9 +375,25 @@ export class User extends TimeStamps {
         if (_businessDetail) {
           if (_businessDetail.paymentMethod === EPaymentMethod.CREDIT) {
             const creditPayment = _businessDetail.creditPayment as BusinessCustomerCreditPayment | undefined
-            return `${creditPayment.financialAddress} แขวง/ตำบล ${creditPayment.financialSubDistrict} เขต/อำเภอ ${creditPayment.financialDistrict} จังหวัด ${creditPayment.financialProvince} ${creditPayment.financialPostcode}`
+            return [
+              creditPayment.financialAddress || '',
+              creditPayment.financialSubDistrict ? ` แขวง/ตำบล ${creditPayment.financialSubDistrict}` : '',
+              creditPayment.financialDistrict ? ` เขต/อำเภอ ${creditPayment.financialDistrict}` : '',
+              creditPayment.financialProvince ? ` จังหวัด ${creditPayment.financialProvince}` : '',
+              creditPayment.financialPostcode ? ` ${creditPayment.financialPostcode}` : '',
+            ]
+              .join('')
+              .trim()
           } else {
-            return `${_businessDetail.address} แขวง/ตำบล ${_businessDetail.subDistrict} เขต/อำเภอ ${_businessDetail.district} จังหวัด ${_businessDetail.province} ${_businessDetail.postcode}`
+            return [
+              _businessDetail.address || '',
+              _businessDetail.subDistrict ? ` แขวง/ตำบล ${_businessDetail.subDistrict}` : '',
+              _businessDetail.district ? ` เขต/อำเภอ ${_businessDetail.district}` : '',
+              _businessDetail.province ? ` จังหวัด ${_businessDetail.province}` : '',
+              _businessDetail.postcode ? ` ${_businessDetail.postcode}` : '',
+            ]
+              .join('')
+              .trim()
           }
         }
       }

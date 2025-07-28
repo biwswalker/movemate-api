@@ -18,7 +18,7 @@ export class RefundNote {
   refAdvanceReceiptNo: string
 
   @Field(() => Billing)
-  @Property({ ref: () => Billing, required: true })
+  @Property({ ref: 'Billing', required: true })
   billing: Ref<Billing>
 
   @Field(() => ERefundAmountType)
@@ -33,9 +33,9 @@ export class RefundNote {
   @Property({ required: false })
   refundDate: Date // วันที่ทำการคืนเงิน
 
-  @Field({ nullable: true })
+ @Field(() => BillingDocument, { nullable: true }) // Explicitly provide the type function
   @Property({ ref: () => BillingDocument })
-  document?: Ref<BillingDocument>
+  document?: Ref<BillingDocument>;
 
   @Field({ nullable: true })
   @Property({ required: false })
