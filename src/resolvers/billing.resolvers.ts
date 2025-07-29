@@ -540,11 +540,7 @@ export default class BillingResolver {
         const _shipment = head(_billing.shipments) as Shipment
         if (_shipment) {
           const currentShipmentState = await ShipmentModel.findById(_shipment._id).session(session).lean()
-          if (
-            currentShipmentState &&
-            currentShipmentState.status === EShipmentStatus.IDLE &&
-            currentShipmentState.adminAcceptanceStatus === EAdminAcceptanceStatus.PENDING
-          ) {
+          if (currentShipmentState && currentShipmentState.status === EShipmentStatus.IDLE) {
             await ShipmentModel.findByIdAndUpdate(
               _shipment._id,
               {
@@ -709,8 +705,7 @@ export default class BillingResolver {
     }
 
     const billing = await BillingModel.findOne({ shipments: { $in: shipmentId } }).lean()
-        if (billing) {
-
+    if (billing) {
       // Billing record found, return it
       return {
         paymentMethod: shipment.paymentMethod,

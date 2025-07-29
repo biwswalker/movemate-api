@@ -1124,7 +1124,7 @@ export default class DriverResolver {
           return true
         } else {
           // Individual
-          return false
+          return true
         }
       }
 

@@ -580,8 +580,7 @@ export default class MatchingResolver {
               { session },
             )
 
-            if (oldDriver.fcmToken) {
-              const token = decryption(driver.fcmToken)
+            if (oldDriver) {
               // Sent app Notiification to Driver
               await NotificationModel.sendNotification(
                 {
@@ -634,8 +633,7 @@ export default class MatchingResolver {
           }
         }
 
-        if (driver.fcmToken) {
-          const token = decryption(driver.fcmToken)
+        if (driver) {
           const dateText = format(shipment.bookingDateTime, 'dd MMM HH:mm', { locale: th })
           const vehicleText = get(shipment, 'vehicleId.name', '')
           const pickup = head(shipment.destinations)
@@ -645,16 +643,22 @@ export default class MatchingResolver {
           const dropoffsText = `${firstDropoff.name}${dropoffs.length > 1 ? `และอีก ${dropoffs.length - 1} จุด` : ''}`
           // Sent app Notiification to Driver
           const message = `🔔 งานใหม่จากนายหน้า! ${dateText} ${vehicleText} 📦 ${pickupText} 📍 ${dropoffsText}`
-          await NotificationModel.sendFCMNotification({
-            token,
-            data: { navigation: ENavigationType.SHIPMENT, trackingNumber: shipment.trackingNumber },
-            notification: { title: NOTIFICATION_TITLE, body: message },
-          })
+          await NotificationModel.sendNotification(
+            {
+              userId: driver._id,
+              varient: ENotificationVarient.MASTER,
+              title: `งานใหม่จากนายหน้า ${user.fullname} งานขนส่งเลขที่ ${shipment.trackingNumber}`,
+              message: [message],
+            },
+            session,
+            true,
+            { navigation: ENavigationType.SHIPMENT, trackingNumber: shipment.trackingNumber },
+          )
         }
       }
-      const newShipments = await getNewAllAvailableShipmentForDriver()
-      await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
 
+      // Shipment socket
+      await publishDriverMatchingShipment(undefined, undefined, session)
       // Sent admin noti count updates
       await getAdminMenuNotificationCount(session)
       return true

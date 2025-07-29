@@ -34,7 +34,7 @@ import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { decryption } from '@utils/encryption'
 import { th } from 'date-fns/locale'
 import { Message } from 'firebase-admin/messaging'
-import { getNewAllAvailableShipmentForDriver } from './shipmentGet'
+import { publishDriverMatchingShipment } from './shipmentGet'
 import DriverDetailModel from '@models/driverDetail.model'
 import { isDriverAvailableForShipment } from './driver'
 
@@ -56,8 +56,7 @@ export async function shipmentNotify(shipmentId: string) {
 
   // Sent Socket to driver
   console.log(`[Subscription] Trigger get shipment: (${shipmentId}) to driver: (${requestedDriverStringId})`)
-  const newShipments = await getNewAllAvailableShipmentForDriver(requestedDriverStringId)
-  await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
+  await publishDriverMatchingShipment(requestedDriverStringId)
 
   // If Requested driver
   if (requestedDriverStringId) {
@@ -282,8 +281,7 @@ export const cancelShipmentIfNotInterested = async (
     infoLink: `/general/shipments/${shipment.trackingNumber}`,
   })
 
-  const newShipments = await getNewAllAvailableShipmentForDriver()
-  await pubsub.publish(SHIPMENTS.GET_MATCHING_SHIPMENT, newShipments)
+  await publishDriverMatchingShipment()
   console.log(`Shipment ${shipmentId} is cancelled.`)
 }
 
