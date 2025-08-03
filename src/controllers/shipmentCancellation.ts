@@ -19,14 +19,14 @@ import TransactionModel, {
   ETransactionStatus,
   ETransactionType,
 } from '@models/transaction.model'
-import UserModel from '@models/user.model'
+import UserModel, { User } from '@models/user.model'
 import { VehicleType } from '@models/vehicleType.model'
 import { generateMonthlySequenceNumber, generateRandomNumberPattern, generateTrackingNumber } from '@utils/string.utils'
 import Aigle from 'aigle'
 import { REPONSE_NAME } from 'constants/status'
 import { differenceInMinutes, format } from 'date-fns'
 import { GraphQLError } from 'graphql'
-import lodash, { find, get, includes } from 'lodash'
+import lodash, { find, get, includes, last } from 'lodash'
 import { ClientSession } from 'mongoose'
 import { publishDriverMatchingShipment } from './shipmentGet'
 import { EUserRole, EUserType } from '@enums/users'
@@ -35,9 +35,8 @@ import { initialStepDefinition } from './steps'
 import { clearShipmentJobQueues } from './shipmentJobQueue'
 import { addCustomerCreditUsage } from './customer'
 import RefundNoteModel from '@models/finance/refundNote.model'
-import ReceiptModel, { Receipt } from '@models/finance/receipt.model'
-import { generateAdvanceReceipt } from 'reports/advanceReceipt'
-import { generateNonTaxReceipt } from 'reports/nonTaxReceipt'
+import ReceiptModel from '@models/finance/receipt.model'
+import { generateCashReceipt } from 'reports/cashReceipt'
 
 Aigle.mixin(lodash, {})
 
@@ -75,7 +74,7 @@ export function calculateCancellationFee(shipment: Shipment, isPaymentComplete: 
       [EDriverAcceptanceStatus.IDLE, EDriverAcceptanceStatus.PENDING, EDriverAcceptanceStatus.UNINTERESTED],
       shipment.driverAcceptanceStatus,
     )
-
+    
   if (isDriverNotAccepted) {
     // ไม่คิดค่าบริการ -> คืนเงิน 100%
     return {
@@ -159,10 +158,11 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
   } = calculateCancellationFee(_shipment, isCompletePayment)
 
   // Update step definitions
-  const currentStep = lodash.find(_shipment.steps, ['seq', _shipment.currentStepSeq]) as StepDefinition | undefined
-  const lastStep = lodash.last(lodash.sortBy(_shipment.steps, ['seq'])) as StepDefinition
+  const currentStep = _shipment.currentStepId as StepDefinition | undefined
+  const _steps = (_shipment.steps || []) as StepDefinition[]
+  // const lastStep = lodash.last(lodash.sortBy(_shipment.steps, ['seq'])) as StepDefinition
 
-  const deniedSteps = lodash.filter(_shipment.steps as StepDefinition[], (step) => step.seq >= currentStep.seq)
+  const deniedSteps = lodash.filter(_steps, (step) => step.seq >= currentStep.seq)
   await Aigle.forEach(deniedSteps, async (step) => {
     await StepDefinitionModel.findByIdAndUpdate(step._id, { stepStatus: EStepStatus.CANCELLED }, { session })
   })
@@ -172,7 +172,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
    */
   const cancellationTime = new Date()
   let stepIds = []
-  let _newLatestSeq = lastStep.seq + 1
+  let _newLatestSeq = _steps.length + 1
   const _customerCancelledStep = new StepDefinitionModel({
     step: EStepDefinition.CUSTOMER_CANCELLED,
     seq: _newLatestSeq,
@@ -198,7 +198,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
       // **[Corrected Logic]** Only enter refund flow if there is an amount to refund.
       finalShipmentStatus = EShipmentStatus.REFUND
       // Add refund step
-      _newLatestSeq++
+      _newLatestSeq = _newLatestSeq + 1
       const refundStep = new StepDefinitionModel({
         step: EStepDefinition.REFUND,
         seq: _newLatestSeq,
@@ -244,13 +244,20 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
         const _refundNoteNumber = await generateMonthlySequenceNumber('refundnote')
         const _advanceReceipt = _billing.advanceReceipt
         const _advanceReceiptNumber = _advanceReceipt?.receiptNumber || ''
+
+        const isBusiness = (_shipment.customer as User)?.userType === EUserType.BUSINESS
+        const _tax = isBusiness ? forCustomer * 0.01 : 0
+        const _total = forCustomer - _tax
         const _refundNote = new RefundNoteModel({
           refundNoteNumber: _refundNoteNumber,
           refAdvanceReceiptNo: _advanceReceiptNumber,
           billing: _billing._id,
-          amount: forCustomer,
+          amount: _total,
+          subtotal: forCustomer,
+          tax: _tax,
+          total: _total,
           amountType: ERefundAmountType.FULL_AMOUNT,
-          remark: 'ลูกค้ายกเลิกการใช้บริการก่อนวันให้บริิการจริง คืนเงินเต็มจำนวนตามเงื่อนไขบริษัท',
+          remark: 'ลูกค้ายกเลิกการใช้บริการก่อนวันให้บริการจริง คืนเงินเต็มจำนวนตามเงื่อนไขบริษัท',
         })
         await _refundNote.save({ session })
         refundNoteId = _refundNote._id
@@ -265,11 +272,18 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
         const _refundNoteNumber = generateRandomNumberPattern(`DUMMYREFUNDNOTE####`)
         const _advanceReceipt = _billing.advanceReceipt
         const _advanceReceiptNumber = _advanceReceipt?.receiptNumber || ''
+
+        const isBusiness = (_shipment.customer as User)?.userType === EUserType.BUSINESS
+        const _tax = isBusiness ? forCustomer * 0.01 : 0
+        const _total = forCustomer - _tax
         const _refundNote = new RefundNoteModel({
           refundNoteNumber: _refundNoteNumber,
           refAdvanceReceiptNo: _advanceReceiptNumber,
           billing: _billing._id,
-          amount: forCustomer,
+          amount: _total,
+          subtotal: forCustomer,
+          tax: _tax,
+          total: _total,
           amountType: ERefundAmountType.HALF_AMOUNT,
           remark: 'ลูกค้ายกเลิกบริการใช้บริการ คืนเงินบางส่วนจากยอดชำระล่วงหน้าตามเงื่อนไขบริษัท',
         })
@@ -311,7 +325,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
         remarks: `ลูกค้ายกเลิกการใช้บริการ`,
         updatedBy: userId,
       })
-      const { document } = await generateNonTaxReceipt(_billing, _receipt, session)
+      const { document } = await generateCashReceipt(_billing, _receipt, session)
       _receipt.document = document._id
       await _receipt.save({ session })
       // Sent Email????
@@ -342,6 +356,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
   const customerCancellationFee = latestQuotation.price.subTotal - forCustomer
 
   // Update Shipment final status
+  const lastStepId = last(stepIds)
   await ShipmentModel.findByIdAndUpdate(
     _shipment._id,
     {
@@ -350,7 +365,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
       cancelledDate: cancellationTime,
       cancellationFee: customerCancellationFee,
       cancellationBy: userId,
-      currentStepSeq: _newLatestSeq,
+      currentStepId: lastStepId,
       $push: { steps: { $each: stepIds } },
     },
     { session },
@@ -482,11 +497,11 @@ export async function driverCancelledShipment(
   }
 
   // เงื่อนไขที่ 2: ตรวจสอบว่างานยังไม่เริ่ม (ก่อนขั้นตอน CONFIRM_DATETIME)
+  const currentStep = shipment.currentStepId as StepDefinition | undefined
   const confirmDateTimeStep = find(shipment.steps, ['step', EStepDefinition.CONFIRM_DATETIME]) as
     | StepDefinition
     | undefined
-  if (confirmDateTimeStep && shipment.currentStepSeq > confirmDateTimeStep.seq) {
-    const currentStep = find(shipment.steps, ['seq', shipment.currentStepSeq]) as StepDefinition | undefined
+  if (confirmDateTimeStep && (currentStep?.seq || 0) > confirmDateTimeStep.seq) {
     throw new GraphQLError(`ไม่สามารถยกเลิกงานในขั้นตอนปัจจุบันได้ (${currentStep?.stepName})`, {
       extensions: { code: REPONSE_NAME.BAD_REQUEST },
     })
@@ -504,7 +519,7 @@ export async function driverCancelledShipment(
       driverAcceptanceStatus: EDriverAcceptanceStatus.PENDING,
       cancellationReason: reason,
       cancelledDate: cancellationTime,
-      currentStepSeq: 0,
+      currentStepId: undefined,
       cancellationBy: driverId,
       steps: [],
     },

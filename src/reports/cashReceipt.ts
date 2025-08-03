@@ -1,13 +1,13 @@
 import fs from 'fs'
 import path from 'path'
-import { get, reduce, head, tail, clone, round, last, sortBy } from 'lodash'
+import { get, reduce, head, tail, clone, round } from 'lodash'
 import PDFDocument, { Table, DataOptions } from 'pdfkit-table'
 import { fCurrency } from '@utils/formatNumber'
 import { fDate } from '@utils/formatTime'
 import { Shipment } from '@models/shipment.model'
 import { VehicleType } from '@models/vehicleType.model'
-import { NonTaxReceiptHeaderComponent } from './components/nonTaxReceipt/header'
-import { NonTaxReceiptFooterComponent } from './components/nonTaxReceipt/footer'
+import { CashReceiptHeaderComponent } from './components/cashReceipt/header'
+import { CashReceiptFooterComponent } from './components/cashReceipt/footer'
 import { COLORS, FONTS } from './components/constants'
 import { Billing } from '@models/finance/billing.model'
 import { Receipt } from '@models/finance/receipt.model'
@@ -16,7 +16,6 @@ import BillingDocumentModel, { BillingDocument } from '@models/finance/documents
 import { ClientSession } from 'mongoose'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
-import { EShipmentStatus } from '@enums/shipments'
 import { User } from '@models/user.model'
 
 interface GenerateReceiptResponse {
@@ -25,7 +24,7 @@ interface GenerateReceiptResponse {
   document: BillingDocument
 }
 
-export async function generateNonTaxReceipt(
+export async function generateCashReceipt(
   billing: Billing,
   receipt: Receipt,
   session?: ClientSession,
@@ -73,24 +72,22 @@ export async function generateNonTaxReceipt(
       separation: false,
     }
 
-    let details = ''
-    let amount = 0
     const dropoffs = tail(shipment.destinations)
-    const latestQuotation = last(sortBy(shipment.quotations, 'createdAt')) as Quotation | undefined
-    details = `ค่าขนส่ง${vehicle.name} ${pickup.name} ไปยัง ${reduce(
+    const details = `ค่าขนส่ง${vehicle.name} ${pickup.name} ไปยัง ${reduce(
       dropoffs,
       (prev, curr) => (prev ? `${prev}, ${curr.name}` : curr.name),
       '',
     )}`
-    amount = latestQuotation?.price?.total || 0
+    // const amount = latestQuotation?.price?.total || 0
+    const amount = receipt.subTotal || 0
 
     return {
       no: { label: String(no), options },
       bookingDateTime: { label: fDate(shipment.bookingDateTime, 'dd/MM/yyyy'), options },
       trackingNumber: { label: shipment.trackingNumber, options },
       details: { label: details, options: { ...options, align: 'left' } },
-      subtotal: { label: fCurrency(amount), options },
-      total: { label: fCurrency(amount), options },
+      subtotal: { label: fCurrency(amount, true), options },
+      total: { label: fCurrency(amount, true), options },
     }
   })
 
@@ -122,12 +119,12 @@ export async function generateNonTaxReceipt(
   let isOiginal = true
   let currentPage = 1
   const headerHeight = clone(doc.y - doc.page.margins.top)
-  NonTaxReceiptHeaderComponent(doc, _user, receipt, currentPage, currentPage, isOiginal)
+  CashReceiptHeaderComponent(doc, _user, receipt, currentPage, currentPage, isOiginal)
 
   await doc.on('pageAdded', () => {
     currentPage++
     if (!nomoredata) {
-      NonTaxReceiptHeaderComponent(doc, _user, receipt, currentPage, currentPage, isOiginal)
+      CashReceiptHeaderComponent(doc, _user, receipt, currentPage, currentPage, isOiginal)
       doc.moveDown(2)
     } else {
       doc.moveDown(10)
@@ -145,25 +142,25 @@ export async function generateNonTaxReceipt(
   })
 
   nomoredata = true
-  NonTaxReceiptFooterComponent(doc, receipt)
-  // isOiginal = false
+  CashReceiptFooterComponent(doc, receipt)
+  isOiginal = false
 
   // // Copy section
-  // await doc.addPage()
-  // nomoredata = false
-  // NonTaxReceiptHeaderComponent(doc, _user, receipt, currentPage, currentPage, isOiginal)
+  await doc.addPage()
+  nomoredata = false
+  CashReceiptHeaderComponent(doc, _user, receipt, currentPage, currentPage, isOiginal)
 
-  // await doc.table(table, {
-  //   minHeaderHeight: headerHeight,
-  //   minRowTHHeight: 16,
-  //   divider: {
-  //     header: { disabled: false, width: 1, opacity: 1 },
-  //     horizontal: { disabled: true },
-  //   },
-  //   prepareHeader: () => doc.font(FONTS.SARABUN_MEDIUM).fontSize(7),
-  // })
-  // nomoredata = true
-  // NonTaxReceiptHeaderComponent(doc, receipt)
+  await doc.table(table, {
+    minHeaderHeight: headerHeight,
+    minRowTHHeight: 16,
+    divider: {
+      header: { disabled: false, width: 1, opacity: 1 },
+      horizontal: { disabled: true },
+    },
+    prepareHeader: () => doc.font(FONTS.SARABUN_MEDIUM).fontSize(7),
+  })
+  nomoredata = true
+  CashReceiptFooterComponent(doc, receipt)
 
   doc.end()
   await new Promise((resolve) => writeStream.on('finish', resolve))

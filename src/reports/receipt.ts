@@ -111,8 +111,8 @@ export async function generateReceipt(billing: Billing, receipt?: Receipt, sessi
       bookingDateTime: { label: fDate(shipment.bookingDateTime, 'dd/MM/yyyy'), options },
       trackingNumber: { label: shipment.trackingNumber, options },
       details: { label: details, options: { ...options, align: 'left' } },
-      subtotal: { label: fCurrency(amount), options },
-      total: { label: fCurrency(amount), options },
+      subtotal: { label: fCurrency(amount, true), options },
+      total: { label: fCurrency(amount, true), options },
     }
   })
 

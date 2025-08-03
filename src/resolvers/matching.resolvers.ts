@@ -52,6 +52,7 @@ import { EAuditActions } from '@enums/audit'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import { clearShipmentJobQueues } from '@controllers/shipmentJobQueue'
 import { EReceiptType } from '@enums/billing'
+import { fCurrency } from '@utils/formatNumber'
 
 @Resolver()
 export default class MatchingResolver {
@@ -249,7 +250,8 @@ export default class MatchingResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseMiddleware(AuthGuard([EUserRole.DRIVER]), RetryTransactionMiddleware)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
   @UseMiddleware(
     AuditLogDecorator({
       action: EAuditActions.ACCEPT_SHIPMENT,
@@ -265,12 +267,12 @@ export default class MatchingResolver {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
-    const user = await UserModel.findById(userId).lean()
+    const user = await UserModel.findById(userId).session(session).lean()
     if (!user) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
-    const shipment = await ShipmentModel.findById(shipmentId)
+    const shipment = await ShipmentModel.findById(shipmentId).session(session)
     if (!shipment) {
       const message = 'ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -295,16 +297,17 @@ export default class MatchingResolver {
         /**
          * Trigger add waiting assign driver step
          */
-        const assignShipmentStepSeq = shipment.currentStepSeq + 1
+        const currentShipmentStep = shipment.currentStepId as StepDefinition
+        const nextSeq = currentShipmentStep.seq + 1
         const assignShipmentStep = new StepDefinitionModel({
           step: EStepDefinition.ASSIGN_SHIPMENT,
-          seq: assignShipmentStepSeq,
+          seq: nextSeq,
           stepName: EStepDefinitionName.ASSIGN_SHIPMENT,
           customerMessage: EStepDefinitionName.ASSIGN_SHIPMENT,
           driverMessage: 'บริษัทมอบหมายงานให้พนักงาน',
           stepStatus: EStepStatus.IDLE,
         })
-        await addStep(shipmentId, assignShipmentStep, session)
+        await addStep(shipmentId, assignShipmentStep, nextSeq, session)
       }
 
       /**
@@ -450,12 +453,25 @@ export default class MatchingResolver {
       const _billing = await BillingModel.findOne({ billingNumber: shipment.trackingNumber }).session(session)
 
       if (_billing) {
-        // _billing.rec
         const _advanceReceipts = filter(_billing.receipts, { receiptType: EReceiptType.ADVANCE })
         const _advanceReceipt = last(sortBy(_advanceReceipts, 'createdAt')) as Receipt | undefined
         const today = new Date()
         const _receiptNumber = await generateMonthlySequenceNumber('receipt')
         const _quotation = _billing.quotation
+
+        let remarks = ""
+        if (_quotation?.price?.acturePrice !== _quotation?.price?.total && !(_advanceReceipts.length > 1)) {
+          const _priceDifference = _quotation.price.acturePrice
+          if (_priceDifference > 0) {
+            const _tax = _quotation.price.tax > 0 ? _priceDifference * (1 / (100 - 1)) : 0
+            const _newSubTotal = _priceDifference + _tax
+            remarks = `เพิ่มค่าใช้จ่าย ${fCurrency(Math.abs(_newSubTotal))} บาท เนื่องจากเปลี่ยนแปลงการใช้บริการ`
+          } else if (_priceDifference < 0) {
+            // const _tax = _quotation.price.tax > 0 ? _priceDifference * (1 / (100 - 1)) : 0
+            // const _newSubTotal = _priceDifference + _tax
+            remarks = `คืนเงินลูกค้า ${fCurrency(Math.abs(_priceDifference))} บาท เนื่องจากเปลี่ยนแปลงการใช้บริการ`
+          }
+        }
 
         const _receipt = new ReceiptModel({
           receiptNumber: _receiptNumber,
@@ -466,6 +482,7 @@ export default class MatchingResolver {
           total: _quotation.total,
           tax: _quotation.tax,
           refReceiptNumber: _advanceReceipt?.receiptNumber,
+          ...(remarks ? { remarks } : {}),
         })
         await _receipt.save({ session })
 

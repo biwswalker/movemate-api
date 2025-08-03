@@ -8,6 +8,8 @@ import { Receipt } from '@models/finance/receipt.model'
 
 const CONSTANTS = {
   TOTAL: 'รวมที่ต้องชำระทั้งสิ้น :',
+  SUBTOTAL: 'รวมเป็นเงิน :',
+  TAX: 'ภาษีหัก ณ ที่จ่าย 1% :',
   REMARK: 'หมายเหตุ',
   CUSTOMER_LABEL: '(ผู้ใช้บริการ)',
 }
@@ -37,6 +39,29 @@ export function AdvanceReceiptFooterComponent(doc: PDFDocument, receipt: Receipt
 
   doc.moveDown(2.6).fillColor(COLORS.TEXT_PRIMARY)
 
+  if (receipt.tax > 0) {
+    doc
+      .fontSize(8)
+      .font(FONTS.SARABUN_MEDIUM)
+      .text(CONSTANTS.SUBTOTAL, 0, doc.y - 10, { width: 400, align: 'right' })
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .fontSize(8)
+      .text(fCurrency(receipt.subTotal, true), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+      .moveDown(1.5)
+
+    doc
+      .fontSize(8)
+      .font(FONTS.SARABUN_MEDIUM)
+      .text(CONSTANTS.TAX, 0, doc.y - 10, { width: 400, align: 'right' })
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .fontSize(8)
+      .text(fCurrency(receipt.tax, true), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+
+    doc.moveDown(2.6)
+  }
+
   doc
     .fontSize(8)
     .font(FONTS.SARABUN_MEDIUM)
@@ -44,7 +69,7 @@ export function AdvanceReceiptFooterComponent(doc: PDFDocument, receipt: Receipt
   doc
     .font(FONTS.SARABUN_SEMI_BOLD)
     .fontSize(10)
-    .text(fCurrency(receipt.total), 400, doc.y - 12, { align: 'right', width: maxWidth - 400 })
+    .text(fCurrency(receipt.total, true), 400, doc.y - 12, { align: 'right', width: maxWidth - 400 })
   doc
     .lineCap('butt')
     .lineWidth(1)
@@ -65,10 +90,7 @@ export function AdvanceReceiptFooterComponent(doc: PDFDocument, receipt: Receipt
     .font(FONTS.SARABUN_LIGHT)
     .fontSize(7)
     .text('เอกสารนี้เป็นหลักฐานการรับเงินล่วงหน้า เพื่อใช้สำหรับการให้บริการในอนาคต', marginLeft)
-  doc
-    .font(FONTS.SARABUN_LIGHT)
-    .fontSize(7)
-    .text('เอกสารนี้ไม่ใช่ใบเสร็จรับเงิน หรือใบกำกับภาษี', marginLeft)
+  doc.font(FONTS.SARABUN_LIGHT).fontSize(7).text('เอกสารนี้ไม่ใช่ใบเสร็จรับเงิน หรือใบกำกับภาษี', marginLeft)
   doc
     .font(FONTS.SARABUN_LIGHT)
     .fontSize(7)

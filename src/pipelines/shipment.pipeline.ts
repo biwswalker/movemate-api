@@ -62,16 +62,8 @@ const GET_SHIPMENT_LIST_LOOKUPs: PipelineStage[] = [
   {
     $lookup: {
       from: 'stepdefinitions',
-      let: { currentStepSeq: '$currentStepSeq', steps: '$steps' },
-      pipeline: [
-        {
-          $match: {
-            $expr: {
-              $and: [{ $in: ['$_id', '$$steps'] }, { $eq: ['$seq', '$$currentStepSeq'] }],
-            },
-          },
-        },
-      ],
+      localField: 'currentStepId',
+      foreignField: '_id',
       as: 'step',
     },
   },

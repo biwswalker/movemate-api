@@ -24,8 +24,22 @@ import Aigle from 'aigle'
 import { REPONSE_NAME } from 'constants/status'
 import { differenceInMinutes } from 'date-fns'
 import { GraphQLError } from 'graphql'
-import lodash, { filter, find, get, head, includes, isEmpty, isEqual, last, map, reduce, sortBy, tail } from 'lodash'
-import { ClientSession } from 'mongoose'
+import lodash, {
+  filter,
+  find,
+  findIndex,
+  get,
+  head,
+  includes,
+  isEmpty,
+  isEqual,
+  last,
+  map,
+  reduce,
+  sortBy,
+  tail,
+} from 'lodash'
+import { ClientSession, Types } from 'mongoose'
 import { CancellationPolicyDetail, CancellationPreview } from '@payloads/cancellation.payload'
 import { fDateTime } from '@utils/formatTime'
 import { clearShipmentJobQueues } from './shipmentJobQueue'
@@ -33,99 +47,184 @@ import { publishDriverMatchingShipment } from './shipmentGet'
 
 Aigle.mixin(lodash, {})
 
-export async function addStep(shipmentId: string, data: StepDefinition, session?: ClientSession): Promise<boolean> {
-  const shipment = await ShipmentModel.findById(shipmentId)
-  let newStep = []
-  await Aigle.forEach(shipment?.steps, async (step, index: number) => {
-    const currentStepId = get(step, '_id', '')
-    if (index < data.seq) {
-      newStep.push(currentStepId)
-    } else if (data.seq === index) {
-      const newStap = new StepDefinitionModel(data)
-      await newStap.save({ session })
-      newStep.push(newStap._id)
-      if (currentStepId) {
-        const newSeq = index + 1
-        await StepDefinitionModel.findByIdAndUpdate(currentStepId, { seq: newSeq }, { session })
-        newStep.push(currentStepId)
-      }
-    } else if (index > data.seq) {
-      if (currentStepId) {
-        const newSeq = index + 1
-        await StepDefinitionModel.findByIdAndUpdate(currentStepId, { seq: newSeq }, { session })
-        newStep.push(currentStepId)
-      }
-    }
+export async function addStep(
+  shipmentId: string,
+  stepData: Partial<StepDefinition>,
+  atIndex: number,
+  session?: ClientSession,
+): Promise<Shipment> {
+  const shipment = await ShipmentModel.findById(shipmentId).session(session)
+  if (!shipment) throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
+
+  // 1. สร้าง StepDefinition document ใหม่
+  const newStepDoc = new StepDefinitionModel(stepData)
+  await newStepDoc.save({ session })
+
+  // 2. แทรก ID ของ step ใหม่เข้าไปใน array `steps` ของ shipment
+  const _steps = sortBy(shipment.steps, 'seq')
+  const newStepsArray = [..._steps]
+  newStepsArray.splice(atIndex, 0, newStepDoc._id)
+
+  // 3. อัปเดตลำดับ (seq) ของทุก step ใหม่ทั้งหมดในครั้งเดียว
+  await Aigle.forEach(newStepsArray, async (stepId, index) => {
+    await StepDefinitionModel.findByIdAndUpdate(stepId, { seq: index }, { session })
   })
-  await ShipmentModel.findByIdAndUpdate(shipment?._id, { steps: newStep }, { session })
-  return true
+
+  // 4. อัปเดต Shipment
+  shipment.steps = newStepsArray
+  await shipment.save({ session })
+
+  return shipment
+
+  // let newStep = []
+  // await Aigle.forEach(shipment?.steps, async (step, index: number) => {
+  //   const currentStepId = get(step, '_id', '')
+  //   if (index < data.seq) {
+  //     newStep.push(currentStepId)
+  //   } else if (data.seq === index) {
+  //     const newStap = new StepDefinitionModel(data)
+  //     await newStap.save({ session })
+  //     newStep.push(newStap._id)
+  //     if (currentStepId) {
+  //       const newSeq = index + 1
+  //       await StepDefinitionModel.findByIdAndUpdate(currentStepId, { seq: newSeq }, { session })
+  //       newStep.push(currentStepId)
+  //     }
+  //   } else if (index > data.seq) {
+  //     if (currentStepId) {
+  //       const newSeq = index + 1
+  //       await StepDefinitionModel.findByIdAndUpdate(currentStepId, { seq: newSeq }, { session })
+  //       newStep.push(currentStepId)
+  //     }
+  //   }
+  // })
+  // await ShipmentModel.findByIdAndUpdate(shipment?._id, { steps: newStep }, { session })
+  // return true
 }
 
 export async function removeStep(
   shipmentId: string,
-  stepIndex: number,
+  stepIdToRemove: string,
   session?: ClientSession,
-): Promise<StepDefinition[]> {
-  const shipment = await ShipmentModel.findById(shipmentId)
-  const removeStep = get(shipment?.steps, stepIndex, undefined) as StepDefinition | undefined
-  if (removeStep) {
-    let newStep = []
-    await Aigle.forEach(shipment?.steps, async (step, index: number) => {
-      const currentStepId = get(step, '_id', '')
-      if (index < stepIndex) {
-        newStep.push(currentStepId)
-      } else if (stepIndex === index) {
-        // Skip
-      } else if (index > stepIndex) {
-        if (currentStepId) {
-          const newSeq = index - 1
-          await StepDefinitionModel.findByIdAndUpdate(currentStepId, { seq: newSeq }, { session })
-          newStep.push(currentStepId)
-        }
-      }
-    })
-    await StepDefinitionModel.findByIdAndDelete(removeStep._id, { session })
-    const _newShipment = await ShipmentModel.findByIdAndUpdate(
-      shipment?._id,
-      { steps: newStep },
-      { session, new: true },
-    )
-    return (_newShipment.steps || []) as StepDefinition[]
+): Promise<Shipment> {
+  const shipment = await ShipmentModel.findById(shipmentId).session(session)
+  if (!shipment) throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
+
+  const stepObjectIdToRemove = new Types.ObjectId(stepIdToRemove)
+
+  // 1. นำ step ที่จะลบออกจาก array `steps`
+  const _steps = sortBy(shipment.steps, 'seq')
+  const newStepsArray = _steps.filter((step: any) => !step._id.equals(stepObjectIdToRemove))
+
+  if (newStepsArray.length === _steps.length) {
+    throw new GraphQLError('ไม่พบ Step ที่ต้องการลบในงานขนส่งนี้')
   }
-  return []
+
+  // 2. อัปเดตลำดับ (seq) ของ step ที่เหลือใหม่
+  await Aigle.forEach(newStepsArray, async (stepId, index) => {
+    await StepDefinitionModel.findByIdAndUpdate(stepId, { seq: index }, { session })
+  })
+
+  // 3. อัปเดต Shipment และลบ StepDefinition document
+  shipment.steps = newStepsArray
+  await shipment.save({ session })
+  await StepDefinitionModel.findByIdAndDelete(stepIdToRemove, { session })
+
+  return shipment
+  // const shipment = await ShipmentModel.findById(shipmentId)
+  // const removeStep = get(shipment?.steps, stepIndex, undefined) as StepDefinition | undefined
+  // if (removeStep) {
+  //   let newStep = []
+  //   await Aigle.forEach(shipment?.steps, async (step, index: number) => {
+  //     const currentStepId = get(step, '_id', '')
+  //     if (index < stepIndex) {
+  //       newStep.push(currentStepId)
+  //     } else if (stepIndex === index) {
+  //       // Skip
+  //     } else if (index > stepIndex) {
+  //       if (currentStepId) {
+  //         const newSeq = index - 1
+  //         await StepDefinitionModel.findByIdAndUpdate(currentStepId, { seq: newSeq }, { session })
+  //         newStep.push(currentStepId)
+  //       }
+  //     }
+  //   })
+  //   await StepDefinitionModel.findByIdAndDelete(removeStep._id, { session })
+  //   const _newShipment = await ShipmentModel.findByIdAndUpdate(
+  //     shipment?._id,
+  //     { steps: newStep },
+  //     { session, new: true },
+  //   )
+  //   return (_newShipment.steps || []) as StepDefinition[]
+  // }
+  // return []
 }
 
 export async function replaceStep(
   shipmentId: string,
-  replaceStep: StepDefinition,
+  stepIdToReplace: string,
+  newStepData: Partial<StepDefinition>,
   session?: ClientSession,
-): Promise<StepDefinition[]> {
-  const _shipment = await ShipmentModel.findById(shipmentId).session(session).exec()
-  const oldStep = find(_shipment?.steps, ['step', replaceStep.step]) as StepDefinition | undefined
-  if (oldStep) {
-    const _newStep = new StepDefinitionModel(replaceStep)
-    await _newStep.save({ session })
-    _shipment.steps[replaceStep.step] = _newStep
-    await _shipment.save({ session })
-    await StepDefinitionModel.findByIdAndDelete(oldStep._id, { session })
-    const _newSteps = await ShipmentModel.findById(shipmentId).distinct('steps')
-    return _newSteps as StepDefinition[]
+): Promise<Shipment> {
+  const shipment = await ShipmentModel.findById(shipmentId).session(session)
+  if (!shipment) throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
+
+  const stepObjectIdToReplace = new Types.ObjectId(stepIdToReplace)
+
+  // 1. หาตำแหน่ง (index) ของ step ที่จะถูกแทนที่
+  const _steps = sortBy(shipment.steps, 'seq')
+  const stepIndex = findIndex(_steps, (step: any) => step._id.equals(stepObjectIdToReplace))
+
+  if (stepIndex === -1) {
+    throw new GraphQLError('ไม่พบ Step ที่ต้องการแทนที่ในงานขนส่งนี้')
   }
-  return _shipment.steps as StepDefinition[]
+
+  // 2. สร้าง Step document ใหม่
+  const newStepDoc = new StepDefinitionModel({ ...newStepData, seq: stepIndex }) // กำหนด seq ให้ตรงกับตำแหน่ง
+  await newStepDoc.save({ session })
+
+  // 3. แทนที่ใน array `steps`
+  const newStepsArray = [..._steps]
+  newStepsArray[stepIndex] = newStepDoc._id
+  shipment.steps = newStepsArray
+
+  // 4. บันทึก shipment และลบ step เก่า
+  await shipment.save({ session })
+  await StepDefinitionModel.findByIdAndDelete(stepIdToReplace, { session })
+
+  return shipment
+  //   const _shipment = await ShipmentModel.findById(shipmentId).session(session).exec()
+  //   const oldStep = find(_shipment?.steps, ['step', replaceStep.step]) as StepDefinition | undefined
+  //   if (oldStep) {
+  //     const _newStep = new StepDefinitionModel(replaceStep)
+  //     await _newStep.save({ session })
+  //     _shipment.steps[replaceStep.step] = _newStep
+  //     await _shipment.save({ session })
+  //     await StepDefinitionModel.findByIdAndDelete(oldStep._id, { session })
+  //     const _newSteps = await ShipmentModel.findById(shipmentId).distinct('steps')
+  //     return _newSteps as StepDefinition[]
+  //   }
+  //   return _shipment.steps as StepDefinition[]
 }
 
 export async function nextStep(shipmentId: string, images?: FileInput[], session?: ClientSession): Promise<boolean> {
   const shipment = await ShipmentModel.findById(shipmentId).session(session)
-  const currentStep = find(shipment?.steps, ['seq', shipment?.currentStepSeq])
+  if (!shipment) throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
+
+  const currentStep = shipment.currentStepId as StepDefinition
+  const currentStepId = currentStep._id
+
+  if (!currentStep) throw new GraphQLError('ไม่พบขั้นตอนปัจจุบัน')
+
   const uploadedFiles = await Aigle.map(images, async (image) => {
     const fileModel = new FileModel(image)
     await fileModel.save({ session })
-    const file = await FileModel.findById(fileModel._id).session(session)
-    return file
+    return fileModel._id
   })
 
-  const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', '')).session(session)
-  await stepDefinitionModel.updateOne(
+  // อัปเดต Step ปัจจุบัน
+  await StepDefinitionModel.findByIdAndUpdate(
+    currentStepId,
     {
       stepStatus: EStepStatus.DONE,
       images: uploadedFiles,
@@ -133,15 +232,48 @@ export async function nextStep(shipmentId: string, images?: FileInput[], session
     },
     { session },
   )
-  const nextStepDeifinition = find(shipment?.steps, ['seq', shipment?.currentStepSeq + 1])
-  const nextStepId = get(nextStepDeifinition, '_id', '')
-  if (nextStepId) {
-    const nextStepDefinitionModel = await StepDefinitionModel.findById(nextStepId).session(session)
-    await nextStepDefinitionModel.updateOne({ stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() }, { session })
-    await ShipmentModel.findByIdAndUpdate(shipment?._id, { currentStepSeq: nextStepDefinitionModel.seq }, { session })
+
+  // หา Step ถัดไปจาก Index + 1
+  const _steps = (sortBy(shipment.steps, 'seq') || []) as StepDefinition[]
+  const nextStepDoc = find(_steps, ['seq', currentStep.seq + 1]) as StepDefinition | undefined
+  // ถ้ามี Step ถัดไป
+  if (nextStepDoc) {
+    await StepDefinitionModel.findByIdAndUpdate(nextStepDoc._id, { stepStatus: EStepStatus.PROGRESSING }, { session })
+    // อัปเดต currentStepId ใน Shipment ให้เป็น ID ของ Step ถัดไป
+    await ShipmentModel.findByIdAndUpdate(shipmentId, { currentStepId: nextStepDoc._id }, { session })
     return true
   }
+
+  // ไม่มี Step ถัดไปแล้ว
   return false
+
+  // const shipment = await ShipmentModel.findById(shipmentId).session(session)
+  // const currentStep = find(shipment?.steps, ['seq', shipment?.currentStepSeq])
+  // const uploadedFiles = await Aigle.map(images, async (image) => {
+  //   const fileModel = new FileModel(image)
+  //   await fileModel.save({ session })
+  //   const file = await FileModel.findById(fileModel._id).session(session)
+  //   return file
+  // })
+
+  // const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', '')).session(session)
+  // await stepDefinitionModel.updateOne(
+  //   {
+  //     stepStatus: EStepStatus.DONE,
+  //     images: uploadedFiles,
+  //     updatedAt: new Date(),
+  //   },
+  //   { session },
+  // )
+  // const nextStepDeifinition = find(shipment?.steps, ['seq', shipment?.currentStepSeq + 1])
+  // const nextStepId = get(nextStepDeifinition, '_id', '')
+  // if (nextStepId) {
+  //   const nextStepDefinitionModel = await StepDefinitionModel.findById(nextStepId).session(session)
+  //   await nextStepDefinitionModel.updateOne({ stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() }, { session })
+  //   await ShipmentModel.findByIdAndUpdate(shipment?._id, { currentStepSeq: nextStepDefinitionModel.seq }, { session })
+  //   return true
+  // }
+  // return false
 }
 
 export async function podSent(
@@ -152,179 +284,342 @@ export async function podSent(
   session?: ClientSession,
 ): Promise<boolean> {
   const shipment = await ShipmentModel.findById(shipmentId).session(session)
-  const currentStep = find(shipment?.steps, ['seq', shipment?.currentStepSeq])
-  const uploadedFiles = await Aigle.map(images, async (image) => {
-    const fileModel = new FileModel(image)
-    await fileModel.save({ session })
-    const file = await FileModel.findById(fileModel._id).session(session)
-    return file
-  })
-  const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', '')).session(session)
-  if (stepDefinitionModel.step === EStepDefinition.POD) {
-    await stepDefinitionModel.updateOne(
-      {
-        stepStatus: EStepStatus.DONE,
-        images: uploadedFiles,
-        updatedAt: new Date(),
-      },
-      { session },
-    )
-    const nextStep = find(shipment?.steps, ['seq', shipment?.currentStepSeq + 1])
-    const nextStepId = get(nextStep, '_id', '')
-    const shipmentModel = await ShipmentModel.findById(shipment?._id).session(session)
-    if (nextStepId) {
-      const nextStepDefinitionModel = await StepDefinitionModel.findById(nextStepId).session(session)
-      await nextStepDefinitionModel.updateOne(
-        { stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() },
-        { session },
-      )
-      await shipmentModel.updateOne(
-        {
-          currentStepSeq: nextStepDefinitionModel.seq,
-          podDetail: Object.assign(shipmentModel.podDetail, { trackingNumber, provider }),
-        },
-        { session },
-      )
-    } else {
-      await shipmentModel.updateOne(
-        {
-          podDetail: Object.assign(shipmentModel.podDetail, { trackingNumber, provider }),
-        },
-        { session },
-      )
-    }
-    return true
-  } else {
-    const message = 'ยังไม่ถึงขึ้นตอนการส่ง POD'
+  if (!shipment) throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
+
+  const currentStep = shipment.currentStepId as StepDefinition | undefined
+
+  // 1. ตรวจสอบว่าอยู่ในขั้นตอน POD จริงๆ
+  if (!currentStep || currentStep.step !== EStepDefinition.POD) {
+    const message = 'ยังไม่ถึงขั้นตอนการส่ง POD'
     throw new GraphQLError(message, {
       extensions: { code: REPONSE_NAME.SHIPMENT_NOT_FINISH, errors: [{ message }] },
     })
   }
+
+  // 2. อัปเดต podDetail ใน Shipment
+  await ShipmentModel.findByIdAndUpdate(
+    shipmentId,
+    { podDetail: Object.assign(shipment.podDetail, { trackingNumber, provider }) },
+    { session },
+  )
+
+  await nextStep(shipmentId, images, session)
+
+  return true
+  // const uploadedFiles = await Aigle.map(images, async (image) => {
+  //   const fileModel = new FileModel(image)
+  //   await fileModel.save({ session })
+  //   const file = await FileModel.findById(fileModel._id).session(session)
+  //   return file
+  // })
+  // const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', '')).session(session)
+  // if (stepDefinitionModel.step === EStepDefinition.POD) {
+  //   await stepDefinitionModel.updateOne(
+  //     {
+  //       stepStatus: EStepStatus.DONE,
+  //       images: uploadedFiles,
+  //       updatedAt: new Date(),
+  //     },
+  //     { session },
+  //   )
+  //   const nextStep = find(shipment?.steps, ['seq', shipment?.currentStepSeq + 1])
+  //   const nextStepId = get(nextStep, '_id', '')
+  //   const shipmentModel = await ShipmentModel.findById(shipment?._id).session(session)
+  //   if (nextStepId) {
+  //     const nextStepDefinitionModel = await StepDefinitionModel.findById(nextStepId).session(session)
+  //     await nextStepDefinitionModel.updateOne(
+  //       { stepStatus: EStepStatus.PROGRESSING, updatedAt: new Date() },
+  //       { session },
+  //     )
+  //     await shipmentModel.updateOne(
+  //       {
+  //         currentStepSeq: nextStepDefinitionModel.seq,
+  //         podDetail: Object.assign(shipmentModel.podDetail, { trackingNumber, provider }),
+  //       },
+  //       { session },
+  //     )
+  //   } else {
+  //     await shipmentModel.updateOne(
+  //       {
+  //         podDetail: Object.assign(shipmentModel.podDetail, { trackingNumber, provider }),
+  //       },
+  //       { session },
+  //     )
+  //   }
+  //   return true
+  // } else {
+  //   const message = 'ยังไม่ถึงขึ้นตอนการส่ง POD'
+  //   throw new GraphQLError(message, {
+  //     extensions: { code: REPONSE_NAME.SHIPMENT_NOT_FINISH, errors: [{ message }] },
+  //   })
+  // }
 }
 
 export async function finishJob(shipmentId: string, session?: ClientSession): Promise<boolean> {
   const shipment = await ShipmentModel.findById(shipmentId).session(session)
-  const currentStep = find(shipment?.steps, ['seq', shipment?.currentStepSeq])
-  const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', '')).session(session)
-  const currentDate = new Date()
-  if (stepDefinitionModel.step === EStepDefinition.FINISH) {
-    await stepDefinitionModel.updateOne(
-      {
-        stepStatus: EStepStatus.DONE,
-        customerMessage: 'ดำเนินการเสร็จสิ้น',
-        driverMessage: 'ดำเนินการเสร็จสิ้น',
-        updatedAt: currentDate,
-      },
-      { session },
-    )
-    await ShipmentModel.findByIdAndUpdate(
-      shipment?._id,
-      {
-        currentStepSeq: stepDefinitionModel.seq,
-        status: EShipmentStatus.DELIVERED,
-        deliveredDate: currentDate,
-      },
-      { session },
-    )
+  if (!shipment) throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
 
-    const pickup = head(shipment?.destinations)
-    const dropoffs = tail(shipment?.destinations)
-    const description = `ค่าขนส่ง #${shipment?.trackingNumber} ค่าขนส่งจาก ${pickup.name} ไปยัง ${reduce(
-      dropoffs,
-      (prev, curr) => (prev ? `${prev}, ${curr.name}` : curr.name),
-      '',
-    )}`
+  const currentStep = shipment.currentStepId as StepDefinition | undefined
 
-    /**
-     * TRANSACTIONS
-     * Calculate WHT 1% for driver here
-     */
-    // ตรวจสอบว่ามี transaction จากการ finish job นี้แล้วหรือยัง
-    const existingFinishTransaction = await TransactionModel.findOne({
-      refId: shipment?._id,
-      refType: ERefType.SHIPMENT,
-      transactionType: ETransactionType.INCOME, // ตรวจสอบเฉพาะรายรับที่เกิดจากการจบงาน
-    }).session(session)
-
-    if (existingFinishTransaction) {
-      console.warn(`[finishJob] Transaction for shipment ${shipmentId} already exists. Skipping creation.`)
-      // อาจจะคืนค่า true ไปเลย เพราะถือว่าจบงานสำเร็จแล้ว แต่ transaction ถูกสร้างไปก่อนหน้า
-      return true
-    }
-
-    const lastPayment = last(sortBy(shipment?.quotations, ['createdAt'])) as Quotation
-    const cost = lastPayment?.cost
-    const isAgentDriver = !isEmpty(shipment?.agentDriver)
-    const ownerDriverId = isAgentDriver ? get(shipment, 'agentDriver._id', '') : get(shipment, 'driver._id', '')
-
-    const driver = await UserModel.findById(ownerDriverId).session(session)
-
-    if (isAgentDriver && get(this, 'driver._id', '')) {
-      /**
-       * Update employee transaction
-       */
-      const employeeTransaction = new TransactionModel({
-        amountTax: 0, // WHT
-        amountBeforeTax: 0,
-        amount: 0,
-        ownerId: get(this, 'driver._id', ''),
-        ownerType: ETransactionOwner.BUSINESS_DRIVER,
-        description: `${shipment?.trackingNumber} งานจาก ${driver.fullname}`,
-        refId: shipment?._id,
-        refType: ERefType.SHIPMENT,
-        transactionType: ETransactionType.INCOME,
-        status: ETransactionStatus.COMPLETE,
-      })
-      await employeeTransaction.save({ session })
-    }
-    /**
-     * Add transaction for shipment driver owner
-     */
-    const driverTransaction = new TransactionModel({
-      amountTax: cost.tax, // WHT
-      amountBeforeTax: cost.subTotal,
-      amount: cost.total,
-      ownerId: ownerDriverId,
-      ownerType: ETransactionOwner.DRIVER,
-      description: description,
-      refId: shipment?._id,
-      refType: ERefType.SHIPMENT,
-      transactionType: ETransactionType.INCOME,
-      status: ETransactionStatus.PENDING,
-    })
-    await driverTransaction.save({ session })
-
-    /**
-     * Update driver balance
-     */
-    if (driver) {
-      const driverDetail = await DriverDetailModel.findById(driver.driverDetail)
-      await driverDetail.updateBalance(session)
-    }
-
-    /**
-     * Notification
-     */
-    const _customerId = get(shipment, 'customer._id', '')
-    await NotificationModel.sendNotification({
-      userId: _customerId,
-      varient: ENotificationVarient.SUCCESS,
-      title: 'งานขนส่งสำเร็จ',
-      message: [
-        `เราขอประกาศด้วยความยินดีว่าการขนส่งเลขที่ ${shipment?.trackingNumber} ของท่านได้เสร็จสมบูรณ์!`,
-        `สินค้าของท่านถูกนำส่งไปยังปลายทางเรียบร้อยแล้ว`,
-      ],
-      infoText: 'ดูสรุปการจองและค่าใช้จ่าย',
-      infoLink: `/main/tracking?tracking_number=${shipment?.trackingNumber}`,
-    })
-
-    return true
-  } else {
-    const message = 'ยังไม่ถึงขึ้นตอนการจบงาน'
+  // 1. ตรวจสอบว่าอยู่ในขั้นตอน FINISH จริงๆ
+  if (!currentStep || currentStep.step !== EStepDefinition.FINISH) {
+    const message = 'ยังไม่ถึงขั้นตอนการจบงาน'
     throw new GraphQLError(message, {
       extensions: { code: REPONSE_NAME.SHIPMENT_NOT_FINISH, errors: [{ message }] },
     })
   }
+
+  const currentDate = new Date()
+
+  // 2. ตรวจสอบ Transaction ที่มีอยู่แล้ว (เหมือนเดิม)
+  const existingTransaction = await TransactionModel.findOne({
+    refId: shipment._id,
+    refType: ERefType.SHIPMENT,
+    transactionType: ETransactionType.INCOME,
+  }).session(session)
+
+  if (existingTransaction) {
+    console.warn(`[finishJob] Transaction for shipment ${shipmentId} already exists. Skipping creation.`)
+    return true // ถือว่าสำเร็จไปแล้ว
+  }
+
+  // 3. อัปเดต Step ปัจจุบัน (FINISH) ให้เป็น DONE
+  await StepDefinitionModel.findByIdAndUpdate(
+    currentStep._id,
+    {
+      stepStatus: EStepStatus.DONE,
+      customerMessage: 'ดำเนินการเสร็จสิ้น',
+      driverMessage: 'ดำเนินการเสร็จสิ้น',
+      updatedAt: currentDate,
+    },
+    { session },
+  )
+
+  // 4. อัปเดตสถานะ Shipment เป็น DELIVERED
+  await ShipmentModel.findByIdAndUpdate(
+    shipmentId,
+    {
+      status: EShipmentStatus.DELIVERED,
+      deliveredDate: currentDate,
+    },
+    { session },
+  )
+
+  // Email
+  const pickup = head(shipment?.destinations)
+  const dropoffs = tail(shipment?.destinations)
+  const description = `ค่าขนส่ง #${shipment?.trackingNumber} ค่าขนส่งจาก ${pickup.name} ไปยัง ${reduce(
+    dropoffs,
+    (prev, curr) => (prev ? `${prev}, ${curr.name}` : curr.name),
+    '',
+  )}`
+
+  /**
+   * TRANSACTIONS
+   * Calculate WHT 1% for driver here
+   */
+  // ตรวจสอบว่ามี transaction จากการ finish job นี้แล้วหรือยัง
+  const existingFinishTransaction = await TransactionModel.findOne({
+    refId: shipment?._id,
+    refType: ERefType.SHIPMENT,
+    transactionType: ETransactionType.INCOME, // ตรวจสอบเฉพาะรายรับที่เกิดจากการจบงาน
+  }).session(session)
+
+  if (existingFinishTransaction) {
+    console.warn(`[finishJob] Transaction for shipment ${shipmentId} already exists. Skipping creation.`)
+    // อาจจะคืนค่า true ไปเลย เพราะถือว่าจบงานสำเร็จแล้ว แต่ transaction ถูกสร้างไปก่อนหน้า
+    return true
+  }
+
+  const lastPayment = last(sortBy(shipment?.quotations, ['createdAt'])) as Quotation
+  const cost = lastPayment?.cost
+  const isAgentDriver = !isEmpty(shipment?.agentDriver)
+  const ownerDriverId = isAgentDriver ? get(shipment, 'agentDriver._id', '') : get(shipment, 'driver._id', '')
+
+  const driver = await UserModel.findById(ownerDriverId).session(session)
+
+  if (isAgentDriver && get(this, 'driver._id', '')) {
+    /**
+     * Update employee transaction
+     */
+    const employeeTransaction = new TransactionModel({
+      amountTax: 0, // WHT
+      amountBeforeTax: 0,
+      amount: 0,
+      ownerId: get(this, 'driver._id', ''),
+      ownerType: ETransactionOwner.BUSINESS_DRIVER,
+      description: `${shipment?.trackingNumber} งานจาก ${driver.fullname}`,
+      refId: shipment?._id,
+      refType: ERefType.SHIPMENT,
+      transactionType: ETransactionType.INCOME,
+      status: ETransactionStatus.COMPLETE,
+    })
+    await employeeTransaction.save({ session })
+  }
+  /**
+   * Add transaction for shipment driver owner
+   */
+  const driverTransaction = new TransactionModel({
+    amountTax: cost.tax, // WHT
+    amountBeforeTax: cost.subTotal,
+    amount: cost.total,
+    ownerId: ownerDriverId,
+    ownerType: ETransactionOwner.DRIVER,
+    description: description,
+    refId: shipment?._id,
+    refType: ERefType.SHIPMENT,
+    transactionType: ETransactionType.INCOME,
+    status: ETransactionStatus.PENDING,
+  })
+  await driverTransaction.save({ session })
+
+  /**
+   * Update driver balance
+   */
+  if (driver) {
+    const driverDetail = await DriverDetailModel.findById(driver.driverDetail)
+    await driverDetail.updateBalance(session)
+  }
+
+  /**
+   * Notification
+   */
+  const _customerId = get(shipment, 'customer._id', '')
+  await NotificationModel.sendNotification({
+    userId: _customerId,
+    varient: ENotificationVarient.SUCCESS,
+    title: 'งานขนส่งสำเร็จ',
+    message: [
+      `เราขอประกาศด้วยความยินดีว่าการขนส่งเลขที่ ${shipment?.trackingNumber} ของท่านได้เสร็จสมบูรณ์!`,
+      `สินค้าของท่านถูกนำส่งไปยังปลายทางเรียบร้อยแล้ว`,
+    ],
+    infoText: 'ดูสรุปการจองและค่าใช้จ่าย',
+    infoLink: `/main/tracking?tracking_number=${shipment?.trackingNumber}`,
+  })
+
+  return true
+  // const shipment = await ShipmentModel.findById(shipmentId).session(session)
+  // const currentStep = find(shipment?.steps, ['seq', shipment?.currentStepSeq])
+  // const stepDefinitionModel = await StepDefinitionModel.findById(get(currentStep, '_id', '')).session(session)
+  // const currentDate = new Date()
+  // if (stepDefinitionModel.step === EStepDefinition.FINISH) {
+  //   await stepDefinitionModel.updateOne(
+  //     {
+  //       stepStatus: EStepStatus.DONE,
+  //       customerMessage: 'ดำเนินการเสร็จสิ้น',
+  //       driverMessage: 'ดำเนินการเสร็จสิ้น',
+  //       updatedAt: currentDate,
+  //     },
+  //     { session },
+  //   )
+  // await ShipmentModel.findByIdAndUpdate(
+  //   shipment?._id,
+  //   {
+  //     currentStepSeq: stepDefinitionModel.seq,
+  //     status: EShipmentStatus.DELIVERED,
+  //     deliveredDate: currentDate,
+  //   },
+  //   { session },
+  // )
+
+  // const pickup = head(shipment?.destinations)
+  // const dropoffs = tail(shipment?.destinations)
+  // const description = `ค่าขนส่ง #${shipment?.trackingNumber} ค่าขนส่งจาก ${pickup.name} ไปยัง ${reduce(
+  //   dropoffs,
+  //   (prev, curr) => (prev ? `${prev}, ${curr.name}` : curr.name),
+  //   '',
+  // )}`
+
+  // /**
+  //  * TRANSACTIONS
+  //  * Calculate WHT 1% for driver here
+  //  */
+  // // ตรวจสอบว่ามี transaction จากการ finish job นี้แล้วหรือยัง
+  // const existingFinishTransaction = await TransactionModel.findOne({
+  //   refId: shipment?._id,
+  //   refType: ERefType.SHIPMENT,
+  //   transactionType: ETransactionType.INCOME, // ตรวจสอบเฉพาะรายรับที่เกิดจากการจบงาน
+  // }).session(session)
+
+  // if (existingFinishTransaction) {
+  //   console.warn(`[finishJob] Transaction for shipment ${shipmentId} already exists. Skipping creation.`)
+  //   // อาจจะคืนค่า true ไปเลย เพราะถือว่าจบงานสำเร็จแล้ว แต่ transaction ถูกสร้างไปก่อนหน้า
+  //   return true
+  // }
+
+  // const lastPayment = last(sortBy(shipment?.quotations, ['createdAt'])) as Quotation
+  // const cost = lastPayment?.cost
+  // const isAgentDriver = !isEmpty(shipment?.agentDriver)
+  // const ownerDriverId = isAgentDriver ? get(shipment, 'agentDriver._id', '') : get(shipment, 'driver._id', '')
+
+  // const driver = await UserModel.findById(ownerDriverId).session(session)
+
+  // if (isAgentDriver && get(this, 'driver._id', '')) {
+  //   /**
+  //    * Update employee transaction
+  //    */
+  //   const employeeTransaction = new TransactionModel({
+  //     amountTax: 0, // WHT
+  //     amountBeforeTax: 0,
+  //     amount: 0,
+  //     ownerId: get(this, 'driver._id', ''),
+  //     ownerType: ETransactionOwner.BUSINESS_DRIVER,
+  //     description: `${shipment?.trackingNumber} งานจาก ${driver.fullname}`,
+  //     refId: shipment?._id,
+  //     refType: ERefType.SHIPMENT,
+  //     transactionType: ETransactionType.INCOME,
+  //     status: ETransactionStatus.COMPLETE,
+  //   })
+  //   await employeeTransaction.save({ session })
+  // }
+  // /**
+  //  * Add transaction for shipment driver owner
+  //  */
+  // const driverTransaction = new TransactionModel({
+  //   amountTax: cost.tax, // WHT
+  //   amountBeforeTax: cost.subTotal,
+  //   amount: cost.total,
+  //   ownerId: ownerDriverId,
+  //   ownerType: ETransactionOwner.DRIVER,
+  //   description: description,
+  //   refId: shipment?._id,
+  //   refType: ERefType.SHIPMENT,
+  //   transactionType: ETransactionType.INCOME,
+  //   status: ETransactionStatus.PENDING,
+  // })
+  // await driverTransaction.save({ session })
+
+  // /**
+  //  * Update driver balance
+  //  */
+  // if (driver) {
+  //   const driverDetail = await DriverDetailModel.findById(driver.driverDetail)
+  //   await driverDetail.updateBalance(session)
+  // }
+
+  // /**
+  //  * Notification
+  //  */
+  // const _customerId = get(shipment, 'customer._id', '')
+  // await NotificationModel.sendNotification({
+  //   userId: _customerId,
+  //   varient: ENotificationVarient.SUCCESS,
+  //   title: 'งานขนส่งสำเร็จ',
+  //   message: [
+  //     `เราขอประกาศด้วยความยินดีว่าการขนส่งเลขที่ ${shipment?.trackingNumber} ของท่านได้เสร็จสมบูรณ์!`,
+  //     `สินค้าของท่านถูกนำส่งไปยังปลายทางเรียบร้อยแล้ว`,
+  //   ],
+  //   infoText: 'ดูสรุปการจองและค่าใช้จ่าย',
+  //   infoLink: `/main/tracking?tracking_number=${shipment?.trackingNumber}`,
+  // })
+
+  // return true
+  // } else {
+  //   const message = 'ยังไม่ถึงขึ้นตอนการจบงาน'
+  //   throw new GraphQLError(message, {
+  //     extensions: { code: REPONSE_NAME.SHIPMENT_NOT_FINISH, errors: [{ message }] },
+  //   })
+  // }
 }
 
 /**
@@ -345,7 +640,7 @@ export async function revertShipmentRejection(
     return
   }
 
-  const originalSteps = _shipment.steps as StepDefinition[]
+  const originalSteps = sortBy(_shipment.steps || [], 'seq') as StepDefinition[]
 
   // 1. ค้นหาและลบ Step ที่เกิดขึ้นหลังจากการปฏิเสธ (REJECTED_PAYMENT, REFUND)
   const stepsToRemove = filter(originalSteps, (step) => includes([EStepDefinition.REFUND], step.step))
@@ -383,7 +678,7 @@ export async function revertShipmentRejection(
       status: EShipmentStatus.IDLE,
       adminAcceptanceStatus: EAdminAcceptanceStatus.PENDING, // สำคัญมาก: ต้องกลับมารอ Admin approve ใหม่
       driverAcceptanceStatus: EDriverAcceptanceStatus.IDLE,
-      currentStepSeq: rejectedPaymentStep.seq, // ตั้งค่าให้ Step ปัจจุบันกลับมาที่การตรวจสอบสลิป
+      currentStepId: rejectedPaymentStep._id, // ตั้งค่าให้ Step ปัจจุบันกลับมาที่การตรวจสอบสลิป
       steps: map(newSteps, '_id'), // อัปเดต Array ของ Step IDs
       cancellationReason: undefined,
       cancellationDetail: undefined,

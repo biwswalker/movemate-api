@@ -5,7 +5,7 @@ import StepDefinitionModel, {
   EStepDefinitionName,
   EStepStatus,
 } from '@models/shipmentStepDefinition.model'
-import { filter, flatten, get, isEqual, map, range, values } from 'lodash'
+import { filter, find, flatten, get, isEqual, map, range, values } from 'lodash'
 import { ClientSession } from 'mongoose'
 
 export async function initialStepDefinition(
@@ -116,7 +116,9 @@ export async function initialStepDefinition(
                 seq: 0,
                 stepName: EStepDefinitionName.ARRIVAL_DROPOFF,
                 customerMessage: isMultiple ? `ถึงจุดส่งสินค้าที่ ${seq}` : 'ถึงจุดส่งสินค้า',
-                driverMessage: isMultiple ? `ถึงจุดส่งสินค้าจุดที่ ${seq}${isLatest ? ' (จุดสุดท้าย)' : ''}` : 'ถึงจุดส่งสินค้า',
+                driverMessage: isMultiple
+                  ? `ถึงจุดส่งสินค้าจุดที่ ${seq}${isLatest ? ' (จุดสุดท้าย)' : ''}`
+                  : 'ถึงจุดส่งสินค้า',
                 stepStatus: EStepStatus.IDLE,
                 meta: seq,
               },
@@ -129,7 +131,9 @@ export async function initialStepDefinition(
                 seq: 0,
                 stepName: EStepDefinitionName.DROPOFF,
                 customerMessage: isMultiple ? `จัดส่งสินค้าจุดที่ ${seq}` : 'จัดส่งสินค้า',
-                driverMessage: isMultiple ? `ลงสินค้าจุดที่ ${seq}${isLatest ? ' (จุดสุดท้าย)' : ''}` : 'ลงสินค้าที่จุดส่งสินค้า',
+                driverMessage: isMultiple
+                  ? `ลงสินค้าจุดที่ ${seq}${isLatest ? ' (จุดสุดท้าย)' : ''}`
+                  : 'ลงสินค้าที่จุดส่งสินค้า',
                 stepStatus: EStepStatus.IDLE,
                 meta: seq,
               },
@@ -208,12 +212,29 @@ export async function initialStepDefinition(
   }))
 
   const stepDefinitionResult = await StepDefinitionModel.bulkWrite(reSequenceBulkOperation, { session })
-  const _stepDefinitionIds = values(stepDefinitionResult.insertedIds)
+  const insertedDocs = await StepDefinitionModel.find({ _id: { $in: values(stepDefinitionResult.insertedIds) } })
+    .session(session)
+    .sort({ seq: 1 })
+
+  // ค้นหา Step แรกที่ควรจะเริ่มทำงาน (PROGRESSING)
+  const firstProgressingStep = find(insertedDocs, { stepStatus: EStepStatus.PROGRESSING })
+
   await ShipmentModel.findByIdAndUpdate(
     _shipment._id,
-    { steps: _stepDefinitionIds, currentStepSeq: isReMatching ? (isCashMethod ? 2 : 1) : 1 },
+    {
+      steps: map(insertedDocs, '_id'),
+      currentStepId: firstProgressingStep ? firstProgressingStep._id : null, // กำหนด ID ของ Step ปัจจุบัน
+    },
     { session },
   )
+
+  // const stepDefinitionResult = await StepDefinitionModel.bulkWrite(reSequenceBulkOperation, { session })
+  // const _stepDefinitionIds = values(stepDefinitionResult.insertedIds)
+  // await ShipmentModel.findByIdAndUpdate(
+  //   _shipment._id,
+  //   { steps: _stepDefinitionIds, currentStepSeq: isReMatching ? (isCashMethod ? 2 : 1) : 1 },
+  //   { session },
+  // )
 
   return true
 }

@@ -171,9 +171,9 @@ export class Shipment extends TimeStamps {
   @Property({ ref: () => StepDefinition, default: [], autopopulate: true })
   steps: Ref<StepDefinition>[]
 
-  @Field(() => Int)
-  @Property({ default: 0 })
-  currentStepSeq: number
+  @Field(() => StepDefinition, { nullable: true })
+  @Property({ ref: () => StepDefinition, default: null, autopopulate: true })
+  currentStepId?: Ref<StepDefinition>
 
   @Field(() => EPaymentMethod)
   @Property()

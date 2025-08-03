@@ -30,7 +30,7 @@ import { BILLING_CYCLE_LIST } from '@pipelines/billingCycle.pipeline'
 import { reformPaginate } from '@utils/pagination.utils'
 import { GraphQLError } from 'graphql'
 import { get, head, includes, isEmpty, last, map, reduce, sortBy, tail, toNumber, toString, uniq } from 'lodash'
-import { PaginateOptions, Types } from 'mongoose'
+import { PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import BillingDocumentModel, { BillingDocument } from '@models/finance/documents.model'
@@ -63,6 +63,9 @@ import ReceiptModel, { Receipt } from '@models/finance/receipt.model'
 import { generateMonthlySequenceNumber } from '@utils/string.utils'
 import { generateAdvanceReceipt } from 'reports/advanceReceipt'
 import { GraphQLJSONObject } from 'graphql-type-json'
+import { generateCashReceipt } from 'reports/cashReceipt'
+import RefundNoteModel from '@models/finance/refundNote.model'
+import { generateRefundReceipt } from 'reports/refundReceipt'
 
 @Resolver()
 export default class BillingResolver {
@@ -442,7 +445,30 @@ export default class BillingResolver {
     const session = ctx.session
     const _billing = await BillingModel.findById(billingId).session(session)
     const _receipt = await ReceiptModel.findById(receiptId).session(session)
-    await generateReceipt(_billing, _receipt, session)
+    if (_billing.paymentMethod === EPaymentMethod.CASH) {
+      if (_receipt.receiptType === EReceiptType.ADVANCE) {
+        await generateAdvanceReceipt(_billing, _receipt, session)
+      } else {
+        await generateCashReceipt(_billing, _receipt, session)
+      }
+    } else {
+      await generateReceipt(_billing, _receipt, session)
+    }
+    return true
+  }
+
+  @Mutation(() => Boolean)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async regenerateRefundReceipt(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('billingId') billingId: string,
+    @Arg('refundId') refundId: string,
+  ): Promise<boolean> {
+    const session = ctx.session
+    const _billing = await BillingModel.findById(billingId).session(session)
+    const _refund = await RefundNoteModel.findById(refundId).session(session)
+    await generateRefundReceipt(_billing, _refund, session)
     return true
   }
 
@@ -474,7 +500,6 @@ export default class BillingResolver {
         session,
       )
 
-      const userType = get(_billing, 'user.userType', '')
       if (_billing.paymentMethod === EPaymentMethod.CASH) {
         const _shipment = await ShipmentModel.findOne({ trackingNumber: _billing.billingNumber })
           .session(session)
@@ -487,7 +512,7 @@ export default class BillingResolver {
           const lastReceipt = last(sortBy(_billing.receipts, 'createdAt')) as Receipt
           const documentId = await generateBillingReceipt(_billing._id, true, session)
           await ReceiptModel.findByIdAndUpdate(lastReceipt._id, { document: documentId }, { session })
-        } else if (userType === EUserType.INDIVIDUAL) {
+        } else if (_shipment.status === EShipmentStatus.IDLE) {
           // 1. สร้าง "ใบรับเงินล่วงหน้า" เสมอ
           const _advanceReceiptNumber = await generateMonthlySequenceNumber('advancereceipt') // แนะนำให้ใช้ sequence แยก
           const _advanceReceipt = new ReceiptModel({
@@ -496,7 +521,7 @@ export default class BillingResolver {
             receiptDate: new Date(paymentDate), // <-- ใช้วันที่ได้รับเงินจริง
             total: _billing.amount.total,
             subTotal: _billing.amount.subTotal,
-            tax: _billing.amount.tax,
+            tax: _billing.amount.tax, //
             updatedBy: adminId,
           })
 

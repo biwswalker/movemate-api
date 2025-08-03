@@ -11,7 +11,7 @@ import { format } from 'date-fns'
 import { GraphQLError } from 'graphql'
 import { get, head, last, reduce, sortBy, tail, uniq } from 'lodash'
 import { ClientSession } from 'mongoose'
-import { generateNonTaxReceipt } from 'reports/nonTaxReceipt'
+import { generateCashReceipt } from 'reports/cashReceipt'
 import { generateReceipt } from 'reports/receipt'
 
 export async function generateBillingReceipt(billingId: string, sentEmail?: boolean, session?: ClientSession) {
@@ -27,9 +27,9 @@ export async function generateBillingReceipt(billingId: string, sentEmail?: bool
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
   }
   const { filePath, fileName, document } =
-    _billing.paymentMethod === EPaymentMethod.CASH && _customer.userType === EUserType.INDIVIDUAL
-      ? await generateNonTaxReceipt(_billing, _receipt, session)
-      : await generateReceipt(_billing, undefined, session)
+    _billing.paymentMethod === EPaymentMethod.CASH
+      ? await generateCashReceipt(_billing, _receipt, session)
+      : await generateReceipt(_billing, _receipt, session)
 
   console.log('Generate receipt document: ', document)
   /**

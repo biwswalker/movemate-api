@@ -284,8 +284,6 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
       billingEndDate: today,
     })
     await _billing.save({ session })
-
-    
   } else {
     /**
      * Update Customer Balance
@@ -441,13 +439,19 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
   // ====================================================================
   // --- 3. จัดการ Logic การเงินตามประเภทการชำระเงิน (สำคัญที่สุด) ---
   // ====================================================================
-  const priceDifference = _newQuotationData.price.acturePrice
+  const _price = _newQuotationData.price
+  const _priceDifference = _price.acturePrice
+  const _tax = _price.tax > 0 ? _priceDifference * (1 / (100 - 1)) : 0
+  const _newSubTotal = _priceDifference + _tax
+
+  // const priceDifference = _newQuotationData.price.tax
+  // const priceDifference = _newQuotationData.price.acturePrice
 
   if (_shipment.paymentMethod === EPaymentMethod.CREDIT) {
     // ** LOGIC สำหรับงานเครดิต: ปรับปรุง Credit Usage **
     // ไม่ว่างานจะกำลังทำหรือจบแล้ว (แต่ยังไม่ถึงรอบบิล) ให้ปรับที่ยอด Credit Usage โดยตรง
-    if (priceDifference !== 0) {
-      await addCustomerCreditUsage(_customer._id.toString(), priceDifference, session)
+    if (_priceDifference !== 0) {
+      await addCustomerCreditUsage(_customer._id.toString(), _priceDifference, session)
     }
   } else {
     // ** LOGIC สำหรับงานเงินสด **
@@ -456,8 +460,8 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
 
     if (_lastPayment && _lastPayment.status === EPaymentStatus.COMPLETE) {
       // ** กรณีจ่ายเงินแล้ว: สร้าง Payment ใหม่ "เฉพาะส่วนต่าง" **
-      if (priceDifference !== 0) {
-        const isRefund = priceDifference < 0
+      if (_priceDifference !== 0) {
+        const isRefund = _priceDifference < 0
         const paymentType = isRefund ? EPaymentType.REFUND : EPaymentType.PAY
         const trackingText = isRefund ? 'PAYRFU' : 'PAYCAS' // Refund vs Cash
 
@@ -466,17 +470,18 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
           quotations: [_newQuotation._id],
           paymentMethod: EPaymentMethod.CASH,
           paymentNumber: _paymentNumber,
-          status: priceDifference === 0 ? EPaymentStatus.COMPLETE : EPaymentStatus.PENDING,
+          status: _priceDifference === 0 ? EPaymentStatus.COMPLETE : EPaymentStatus.PENDING,
           type: paymentType,
-          total: Math.abs(priceDifference), // ยอดเงินเป็นบวกเสมอ
-          subTotal: Math.abs(priceDifference),
+          total: Math.abs(_priceDifference), // ยอดเงินเป็นบวกเสมอ
+          subTotal: Math.abs(_newSubTotal),
+          tax: Math.abs(_tax),
           updatedBy: adminId,
         })
         await _newPayment.save({ session })
 
         const refundReason: BillingReason | undefined = isRefund
           ? {
-              detail: `ยอดชำระเกิน ${fCurrency(Math.abs(priceDifference))} บาท`,
+              detail: `ยอดชำระเกิน ${fCurrency(Math.abs(_priceDifference))} บาท`,
               type: EBillingReason.REFUND_PAYMENT,
             }
           : undefined
@@ -485,7 +490,7 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
         await BillingModel.findByIdAndUpdate(
           _cashBilling._id,
           {
-            status: EBillingStatus.VERIFY,
+            status: isRefund ? EBillingStatus.VERIFY : EBillingStatus.PENDING,
             updatedBy: adminId,
             $push: { payments: _newPayment._id, ...(refundReason ? { reasons: refundReason } : {}) },
           },
@@ -668,12 +673,12 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
     /**
      * Updating Step Definition
      */
-    const _steps = _updatedShipment.steps
+    const _steps = sortBy(_updatedShipment.steps, 'seq')
     if (_isExistingPODService && !_isPODServiceIncluded) {
       const existingPOD = find(_steps, ['step', EStepDefinition.POD]) as StepDefinition | undefined
       if (existingPOD) {
         // Removal POD step
-        await removeStep(_updatedShipment._id, existingPOD.seq, session)
+        await removeStep(_updatedShipment._id, existingPOD._id, session)
       }
     } else if (!_isExistingPODService && _isPODServiceIncluded) {
       // Add POD step
@@ -681,16 +686,16 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
       if (!existingPOD) {
         const dropoffLocationSteps = filter(_steps, (step: StepDefinition) => step.step === EStepDefinition.DROPOFF)
         const lastDropoff = last(sortBy(dropoffLocationSteps, 'seq')) as StepDefinition | undefined
-        const _index = lastDropoff.seq || 0
+        const _seq = (lastDropoff.seq || 0) + 1
         const podStep = new StepDefinitionModel({
-          seq: _index + 1,
+          seq: _seq,
           step: EStepDefinition.POD,
           stepName: EStepDefinitionName.POD,
           customerMessage: 'แนบเอกสารและส่งเอกสาร POD',
           driverMessage: 'แนบเอกสารและส่งเอกสาร POD',
           stepStatus: EStepStatus.IDLE,
         })
-        await addStep(_updatedShipment._id, podStep, session)
+        await addStep(_updatedShipment._id, podStep, _seq, session)
       }
     }
 
@@ -711,8 +716,9 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
         )
         const lastDropoff = last(sortBy(dropoffLocationSteps, 'seq')) as StepDefinition | undefined
         if (lastDropoff) {
+          const _arrivalDropoffStepSeq = lastDropoff.seq + 1
           const _arrivalDropoffStep = new StepDefinitionModel({
-            seq: lastDropoff.seq + 1,
+            seq: _arrivalDropoffStepSeq,
             step: EStepDefinition.ARRIVAL_DROPOFF,
             stepName: EStepDefinitionName.ARRIVAL_DROPOFF,
             customerMessage: 'ถึงจุดส่งสินค้ากลับ',
@@ -720,9 +726,10 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
             stepStatus: EStepStatus.IDLE,
             meta: -1,
           })
-          await addStep(_updatedShipment._id, _arrivalDropoffStep, session)
+          await addStep(_updatedShipment._id, _arrivalDropoffStep, _arrivalDropoffStepSeq, session)
+          const __dropoffStepSeq = lastDropoff.seq + 2
           const _dropoffStep = new StepDefinitionModel({
-            seq: lastDropoff.seq + 2,
+            seq: __dropoffStepSeq,
             step: EStepDefinition.DROPOFF,
             stepName: EStepDefinitionName.DROPOFF,
             customerMessage: 'จัดส่งสินค้ากลับ',
@@ -730,7 +737,7 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
             stepStatus: EStepStatus.IDLE,
             meta: -1,
           })
-          await addStep(_updatedShipment._id, _dropoffStep, session)
+          await addStep(_updatedShipment._id, _dropoffStep, __dropoffStepSeq, session)
         }
       } else {
         /**
@@ -739,12 +746,10 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
         const existingArrivalDropoff = find(_roundedSteps, { step: EStepDefinition.ARRIVAL_DROPOFF, meta: -1 })
         const existingDropoff = find(_roundedSteps, { step: EStepDefinition.DROPOFF, meta: -1 })
         if (existingArrivalDropoff && existingDropoff) {
-          const arrivalDropoff = existingArrivalDropoff as StepDefinition
-          const _removeStepIndex = arrivalDropoff.seq
-          // Remove ARRIVAL_DROPOFF
-          await removeStep(_updatedShipment._id, _removeStepIndex, session)
-          // Remove DROPOFF
-          await removeStep(_updatedShipment._id, _removeStepIndex, session)
+          const _arrivalDropoff = existingArrivalDropoff as StepDefinition
+          const _dropoff = existingDropoff as StepDefinition
+          await removeStep(_updatedShipment._id, _arrivalDropoff._id, session) // Remove ARRIVAL_DROPOFF
+          await removeStep(_updatedShipment._id, _dropoff._id, session) // Remove DROPOFF
         }
       }
     }
@@ -765,7 +770,7 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
       const newLength = locations.length
       const differenceLength = oldLength - newLength
 
-      const _dropoffStepsSort = sortBy(_dropoffStepsFilter, ['seq', 'meta'])
+      const _dropoffStepsSort = sortBy(_dropoffStepsFilter, ['seq', 'meta']) as StepDefinition[]
       const _lastDropoffSteps = last(_dropoffStepsSort) as StepDefinition
       const lastSeq = _lastDropoffSteps.seq
       const lastMeta = _lastDropoffSteps.meta
@@ -789,7 +794,8 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
             stepStatus: EStepStatus.IDLE,
             meta: newMeta,
           })
-          await addStep(_updatedShipment._id, _newArrivalDropoffStep, session)
+          await addStep(_updatedShipment._id, _newArrivalDropoffStep, newSeq, session)
+          const _newDropoffStepSeq = newSeq + 1
           const _newDropoffStep = new StepDefinitionModel({
             step: EStepDefinition.DROPOFF,
             seq: newSeq + 1,
@@ -801,7 +807,7 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
             stepStatus: EStepStatus.IDLE,
             meta: newMeta,
           })
-          await addStep(_updatedShipment._id, _newDropoffStep, session)
+          await addStep(_updatedShipment._id, _newDropoffStep, _newDropoffStepSeq, session)
         })
       } else if (differenceLength < 0) {
         /**
@@ -809,13 +815,8 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
          */
         const startRemovalMeta = lastMeta - Math.abs(differenceLength) + 1
         const removalSteps = filter(_dropoffStepsSort, (step: StepDefinition) => step.meta >= startRemovalMeta)
-        const _removalStepGroup = groupBy(removalSteps, 'meta')
-        const _removalValues = values(_removalStepGroup)
-        await Aigle.map(_removalValues, async (_) => {
-          // Remove ARRIVAL_DROPOFF
-          await removeStep(_updatedShipment._id, startRemovalMeta, session)
-          // Remove DROPOFF
-          await removeStep(_updatedShipment._id, startRemovalMeta, session)
+        await Aigle.map(removalSteps, async (_removalStep) => {
+          await removeStep(_updatedShipment._id, _removalStep._id, session)
         })
       }
     }

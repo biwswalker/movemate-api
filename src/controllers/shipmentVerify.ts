@@ -7,7 +7,7 @@ import StepDefinitionModel, {
 } from '@models/shipmentStepDefinition.model'
 import { REPONSE_NAME } from 'constants/status'
 import { GraphQLError } from 'graphql'
-import lodash, { filter, find, get, last } from 'lodash'
+import lodash, { filter, get, last, sortBy } from 'lodash'
 import { ClientSession } from 'mongoose'
 import { nextStep } from './shipmentOperation'
 import UpdateHistoryModel from '@models/updateHistory.model'
@@ -33,7 +33,7 @@ export async function markShipmentVerified(input: MarkShipmentVerifiedInput, adm
   }
 
   if (result === 'approve') {
-    const currentStep = find(_shipment.steps, ['seq', _shipment.currentStepSeq]) as StepDefinition | undefined
+    const currentStep = _shipment.currentStepId as StepDefinition | undefined
     if (currentStep) {
       if (currentStep.step === EStepDefinition.CASH_VERIFY) {
         await nextStep(shipmentId, undefined, session)
@@ -89,10 +89,11 @@ export async function markShipmentVerified(input: MarkShipmentVerifiedInput, adm
       const message = 'ไม่สามารถทำรายการได้ เนื่องจากไม่พบเหตุผลการไม่อนุมัติ'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
-    const currentStep = find(_shipment.steps, ['seq', _shipment.currentStepSeq]) as StepDefinition | undefined
-    const lastStep = last(_shipment.steps) as StepDefinition
+    const _steps = sortBy(_shipment.steps || [], 'seq') as StepDefinition[]
+    const currentStep = _shipment.currentStepId as StepDefinition | undefined
+    const lastStep = last(_steps)
     if (currentStep) {
-      const deniedSteps = filter(_shipment.steps as StepDefinition[], (step) => step.seq >= currentStep.seq)
+      const deniedSteps = filter(_steps, (step) => step.seq >= currentStep.seq)
       const steps = await Aigle.map(deniedSteps, async (step) => {
         const isCashVerifyStep = step.step === EStepDefinition.CASH_VERIFY && step.seq === currentStep.seq
         const cashVerifyStepChangeData = isCashVerifyStep
@@ -114,10 +115,9 @@ export async function markShipmentVerified(input: MarkShipmentVerifiedInput, adm
         return { ...step, stepStatus: EStepStatus.CANCELLED, ...cashVerifyStepChangeData }
       })
       // Add refund step
-      const newLatestSeq = lastStep.seq + 1
       const refundStep = new StepDefinitionModel({
         step: EStepDefinition.REFUND,
-        seq: newLatestSeq,
+        seq: lastStep.seq + 1,
         stepName: EStepDefinitionName.REFUND,
         customerMessage: EStepDefinitionName.REFUND,
         driverMessage: EStepDefinitionName.REFUND,
@@ -143,7 +143,7 @@ export async function markShipmentVerified(input: MarkShipmentVerifiedInput, adm
         {
           status: EShipmentStatus.REFUND,
           adminAcceptanceStatus: EAdminAcceptanceStatus.REJECTED,
-          currentStepSeq: newLatestSeq,
+          currentStepId: refundStep._id,
           $push: { history: _shipmentUpdateHistory, steps: refundStep._id },
         },
         { session },
@@ -180,7 +180,7 @@ export async function markShipmentAsRefunded(shipmentId: string, adminId: string
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
   }
 
-  const currentStep = find(_shipment.steps, ['seq', _shipment.currentStepSeq]) as StepDefinition | undefined
+  const currentStep = _shipment.currentStepId as StepDefinition | undefined
   if (currentStep) {
     if (currentStep.step === EStepDefinition.REFUND) {
       await StepDefinitionModel.findByIdAndUpdate(
@@ -222,7 +222,7 @@ export async function markShipmentAsNoRefund(shipmentId: string, adminId: string
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
   }
 
-  const currentStep = find(_shipment.steps, ['seq', _shipment.currentStepSeq]) as StepDefinition | undefined
+  const currentStep = _shipment.currentStepId as StepDefinition | undefined
   if (currentStep) {
     if (currentStep.step === 'REFUND') {
       await StepDefinitionModel.findByIdAndUpdate(currentStep._id, { stepStatus: EStepStatus.CANCELLED }, { session })

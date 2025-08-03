@@ -1,9 +1,11 @@
 import { Field, Float, ID, ObjectType } from 'type-graphql'
-import { prop as Property, Ref, getModelForClass } from '@typegoose/typegoose'
+import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import { Billing } from './billing.model'
 import { BillingDocument } from './documents.model'
 import { ERefundAmountType } from '@enums/billing'
+import mongooseAutoPopulate from 'mongoose-autopopulate'
 
+@plugin(mongooseAutoPopulate)
 @ObjectType()
 export class RefundNote {
   @Field(() => ID)
@@ -29,12 +31,24 @@ export class RefundNote {
   @Property({ required: true })
   amount: number // ยอดเงินที่คืน
 
+  @Field(() => Float)
+  @Property({ required: true })
+  subtotal: number // ยอดเงินที่คืน
+
+  @Field(() => Float)
+  @Property({ required: true })
+  tax: number // ยอดเงินที่คืน
+
+  @Field(() => Float)
+  @Property({ required: true })
+  total: number // ยอดเงินที่คืน
+
   @Field({ nullable: true })
   @Property({ required: false })
   refundDate: Date // วันที่ทำการคืนเงิน
 
  @Field(() => BillingDocument, { nullable: true }) // Explicitly provide the type function
-  @Property({ ref: () => BillingDocument })
+  @Property({ ref: () => BillingDocument, autopopulate: true })
   document?: Ref<BillingDocument>;
 
   @Field({ nullable: true })

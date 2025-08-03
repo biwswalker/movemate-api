@@ -8,6 +8,8 @@ import { Receipt } from '@models/finance/receipt.model'
 import { RefundNote } from '@models/finance/refundNote.model'
 
 const CONSTANTS = {
+  SUBTOTAL: 'รวมเป็นเงิน :',
+  TAX: 'ภาษีหัก ณ ที่จ่าย 1% :',
   TOTAL: 'รวมที่ต้องชำระทั้งสิ้น :',
   REMARK: 'หมายเหตุ',
   CUSTOMER_LABEL: '(ผู้ใช้บริการ)',
@@ -38,6 +40,29 @@ export function NonTaxRefundReceiptFooterComponent(doc: PDFDocument, refundNote:
 
   doc.moveDown(2.6).fillColor(COLORS.TEXT_PRIMARY)
 
+  if (refundNote.tax > 0) {
+    doc
+      .fontSize(8)
+      .font(FONTS.SARABUN_MEDIUM)
+      .text(CONSTANTS.SUBTOTAL, 0, doc.y - 10, { width: 400, align: 'right' })
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .fontSize(8)
+      .text(fCurrency(refundNote.subtotal, true), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+      .moveDown(1.5)
+
+    doc
+      .fontSize(8)
+      .font(FONTS.SARABUN_MEDIUM)
+      .text(CONSTANTS.TAX, 0, doc.y - 10, { width: 400, align: 'right' })
+    doc
+      .font(FONTS.SARABUN_LIGHT)
+      .fontSize(8)
+      .text(fCurrency(refundNote.tax, true), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+
+    doc.moveDown(2.6)
+  }
+
   doc
     .fontSize(8)
     .font(FONTS.SARABUN_MEDIUM)
@@ -45,26 +70,25 @@ export function NonTaxRefundReceiptFooterComponent(doc: PDFDocument, refundNote:
   doc
     .font(FONTS.SARABUN_SEMI_BOLD)
     .fontSize(10)
-    .text(fCurrency(refundNote.amount), 400, doc.y - 12, { align: 'right', width: maxWidth - 400 })
+    .text(fCurrency(refundNote.total, true), 400, doc.y - 12, { align: 'right', width: maxWidth - 400 })
   doc
     .lineCap('butt')
     .lineWidth(1)
     .moveTo(432, doc.y + 3)
     .lineTo(maxWidth, doc.y + 3)
     .stroke()
+
   doc
     .fontSize(7)
     .font(FONTS.SARABUN_LIGHT)
-    .text(`( ${ThaiBahtText(refundNote.amount)} )`, 0, doc.y + 8, {
+    .text(`( ${ThaiBahtText(refundNote.total)} )`, 0, doc.y + 8, {
       align: 'right',
       width: maxWidth,
     })
 
   // After transfer detail
   doc.font(FONTS.SARABUN_MEDIUM).fontSize(9).text(CONSTANTS.REMARK, marginLeft).moveDown(0.8)
-  doc.moveDown(4)
-
-  doc.font(FONTS.SARABUN_LIGHT).fontSize(7).text(refundNote.remark, marginLeft)
+  doc.font(FONTS.SARABUN_LIGHT).fontSize(7).text(refundNote.remark, marginLeft).moveDown(10)
 
   /**
    * Signature
@@ -105,5 +129,5 @@ export function NonTaxRefundReceiptFooterComponent(doc: PDFDocument, refundNote:
     .fillColor(COLORS.TEXT_PRIMARY)
     .text(CONSTANTS.CUSTOMER_LABEL, signatureX, doc.y - 9, { width: signatureWidth, align: 'center' })
   doc.image(ASSETS.SIGNATURE, signatureX + 108, doc.y - 90, { width: 78 })
-  doc.image(ASSETS.THEPPAWNCHAI, signatureX + 100 + 78, doc.y - (94 + 64), { width: 100 })
+  doc.image(ASSETS.THEPPAWNCHAI, signatureX + 100 + 40, doc.y - (94 + 46), { width: 100 })
 }

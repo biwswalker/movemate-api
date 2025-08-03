@@ -77,21 +77,20 @@ export async function generateAdvanceReceipt(
     let amount = 0
     // กรณีงานสำเร็จ: แสดงเป็นค่าขนส่งปกติ
     const dropoffs = tail(shipment.destinations)
-    const latestQuotation = last(sortBy(shipment.quotations, 'createdAt')) as Quotation | undefined
     details = `ค่าขนส่ง${vehicle.name} ${pickup.name} ไปยัง ${reduce(
       dropoffs,
       (prev, curr) => (prev ? `${prev}, ${curr.name}` : curr.name),
       '',
     )}`
-    amount = latestQuotation?.price?.total || 0
+    amount = receipt.subTotal
 
     return {
       no: { label: String(no), options },
       bookingDateTime: { label: fDate(shipment.bookingDateTime, 'dd/MM/yyyy'), options },
       trackingNumber: { label: shipment.trackingNumber, options },
       details: { label: details, options: { ...options, align: 'left' } },
-      subtotal: { label: fCurrency(amount), options },
-      total: { label: fCurrency(amount), options },
+      subtotal: { label: fCurrency(amount, true), options },
+      total: { label: fCurrency(amount, true), options },
     }
   })
 

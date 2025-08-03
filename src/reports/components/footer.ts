@@ -248,7 +248,7 @@ export async function InvoiceFooterComponent(doc: PDFDocument, billing: Billing,
     doc
       .font(FONTS.SARABUN_LIGHT)
       .fontSize(8)
-      .text(fCurrency(billing.amount.subTotal), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+      .text(fCurrency(billing.amount.subTotal, true), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
       .moveDown(1.5)
     doc
       .fontSize(8)
@@ -257,7 +257,7 @@ export async function InvoiceFooterComponent(doc: PDFDocument, billing: Billing,
     doc
       .font(FONTS.SARABUN_LIGHT)
       .fontSize(8)
-      .text(fCurrency(billing.amount.tax), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+      .text(fCurrency(billing.amount.tax, true), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
 
     doc.moveDown(2) //.fillColor(COLORS.TEXT_PRIMARY)
   }
@@ -269,7 +269,7 @@ export async function InvoiceFooterComponent(doc: PDFDocument, billing: Billing,
   doc
     .font(FONTS.SARABUN_SEMI_BOLD)
     .fontSize(10)
-    .text(fCurrency(billing.amount.total), 400, doc.y - 12, { align: 'right', width: maxWidth - 400 })
+    .text(fCurrency(billing.amount.total, true), 400, doc.y - 12, { align: 'right', width: maxWidth - 400 })
   doc
     .lineCap('butt')
     .lineWidth(1)

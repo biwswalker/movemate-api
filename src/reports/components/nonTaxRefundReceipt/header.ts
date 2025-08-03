@@ -1,10 +1,11 @@
 import PDFDocument from 'pdfkit-table'
 import { ASSETS, FONTS } from '../constants'
 import { fDate } from '@utils/formatTime'
-import { toNumber } from 'lodash'
+import { get, toNumber } from 'lodash'
 import { User } from '@models/user.model'
 import { Receipt } from '@models/finance/receipt.model'
 import { RefundNote } from '@models/finance/refundNote.model'
+import { EUserType } from '@enums/users'
 
 const CONSTANTS = {
   // Movemate Company Info
@@ -26,6 +27,7 @@ const CONSTANTS = {
   CUSTOMER_NAME: 'ชื่อลูกค้า :',
   CUSTOMER_EMAIL: 'อีเมล :',
   CUSTOMER_ADDRESS: 'ที่อยู่ :',
+  CUSTOMER_TAXID: 'เลขประจำตัวผู้เสียภาษี :',
   //
   TABLE_TITLE: 'รายละเอียด',
   TABLE_PAGE: 'Page :',
@@ -70,7 +72,7 @@ export function NonTaxRefundReceiptHeaderComponent(
   })
   doc.moveDown(0.3)
   doc.font(FONTS.SARABUN_LIGHT).fontSize(9)
-  doc.text(`${CONSTANTS.DOCUMENT_TH_NAME} ${isOriginal ? CONSTANTS.ORIGIN : CONSTANTS.COPY}`, docNumberReactX, doc.y, {
+  doc.text(`${CONSTANTS.DOCUMENT_TH_NAME}`, docNumberReactX, doc.y, {
     align: 'center',
     width: docNumberRectWidth,
   })
@@ -84,26 +86,30 @@ export function NonTaxRefundReceiptHeaderComponent(
 
   // Doc: Number, Date
   doc.fontSize(8)
-  doc
-    .font(FONTS.SARABUN_MEDIUM)
-    .text(CONSTANTS.RECEIPT_NO, docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-  doc.font(FONTS.SARABUN_LIGHT).text(refundNote.refundNoteNumber, 499, doc.y - 10, { align: 'left' })
+  doc.font(FONTS.SARABUN_MEDIUM).text(CONSTANTS.RECEIPT_NO, docNumberReactX + 2, doc.y, {
+    align: 'right',
+    width: (docNumberRectWidth + 45) / 2 - 4,
+  }) // 81
+  doc.font(FONTS.SARABUN_LIGHT).text(refundNote.refundNoteNumber, 520, doc.y - 10, { align: 'left' })
   // ---
   doc.moveDown(0.3)
-  doc
-    .font(FONTS.SARABUN_MEDIUM)
-    .text(CONSTANTS.ADVANCE_RECEIPT_DATE, docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-  doc.font(FONTS.SARABUN_LIGHT).text(refundNote?.refAdvanceReceiptNo || '-', 499, doc.y - 10, { align: 'left' })
+  doc.font(FONTS.SARABUN_MEDIUM).text(CONSTANTS.ADVANCE_RECEIPT_DATE, docNumberReactX + 2, doc.y, {
+    align: 'right',
+    width: (docNumberRectWidth + 45) / 2 - 4,
+  }) // 81
+  doc.font(FONTS.SARABUN_LIGHT).text(refundNote.refAdvanceReceiptNo || '-', 520, doc.y - 10, { align: 'left' })
   // ---
   const receiptInBEDateMonth = fDate(refundNote.refundDate, 'dd/MM')
   const receiptInBEYear = toNumber(fDate(refundNote.refundDate, 'yyyy')) + 543
   doc.moveDown(0.3)
-  doc
-    .font(FONTS.SARABUN_MEDIUM)
-    .text(CONSTANTS.RECEIPT_DATE, docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-  doc.font(FONTS.SARABUN_LIGHT).text(`${receiptInBEDateMonth}/${receiptInBEYear}`, 499, doc.y - 10, { align: 'left' })
+  doc.font(FONTS.SARABUN_MEDIUM).text(CONSTANTS.RECEIPT_DATE, docNumberReactX + 2, doc.y, {
+    align: 'right',
+    width: (docNumberRectWidth + 45) / 2 - 4,
+  }) // 81
+  doc.font(FONTS.SARABUN_LIGHT).text(`${receiptInBEDateMonth}/${receiptInBEYear}`, 520, doc.y - 10, { align: 'left' })
   // ---
-  doc.rect(docNumberReactX, 54, docNumberRectWidth, 70).lineWidth(2).stroke()
+  doc.rect(docNumberReactX, 54, docNumberRectWidth, 85).lineWidth(2).stroke()
+
   // doc.moveDown(0.5)
   doc
     .lineCap('butt')
@@ -114,17 +120,24 @@ export function NonTaxRefundReceiptHeaderComponent(
   doc.moveDown(2.2)
   // Seperate line
 
+  const isBusiness = user.userType === EUserType.BUSINESS
   const address = user.address || '-'
-  const email = user.email || '-'
+  const email = user.email || ''
+  const taxId = user.taxId || ''
 
   // Customer detail
   doc.font(FONTS.SARABUN_MEDIUM).fontSize(7)
   doc.text(CONSTANTS.CUSTOMER_NAME, 22)
   doc.text(user.fullname, 110, doc.y - 9)
   doc.font(FONTS.SARABUN_LIGHT)
+  if (isBusiness) {
+    const businessBranch = get(user, 'businessDetail.businessBranch', '-')
+    doc.text('สาขา :', 280, doc.y - 9)
+    doc.text(businessBranch || '-', 308, doc.y - 9)
+  }
   doc.moveDown(0.6)
-  doc.font(FONTS.SARABUN_MEDIUM).text(CONSTANTS.CUSTOMER_EMAIL, 22)
-  doc.font(FONTS.SARABUN_LIGHT).text(email, 110, doc.y - 9)
+  doc.font(FONTS.SARABUN_MEDIUM).text(isBusiness ? CONSTANTS.CUSTOMER_TAXID : CONSTANTS.CUSTOMER_EMAIL, 22)
+  doc.font(FONTS.SARABUN_LIGHT).text((isBusiness ? taxId : email) || '-', 110, doc.y - 9)
   doc.moveDown(0.6)
   doc.font(FONTS.SARABUN_MEDIUM).text(CONSTANTS.CUSTOMER_ADDRESS, 22)
   doc.font(FONTS.SARABUN_LIGHT).text(address || '-', 110, doc.y - 9)
