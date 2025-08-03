@@ -35,6 +35,10 @@ export class Quotation extends PaymentAmounts {
   @Property({ default: EQuotationStatus.ACTIVE })
   status: EQuotationStatus
 
+  @Field(() => String, { nullable: true })
+  @Property()
+  remark: string
+
   @Field()
   @Property({ default: Date.now })
   createdAt: Date

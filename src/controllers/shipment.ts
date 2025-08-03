@@ -404,7 +404,7 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
  * @param session
  */
 export async function updateShipment(data: UpdateShipmentInput, adminId: string, session?: ClientSession) {
-  const { isRounded, locations, vehicleTypeId, serviceIds, discountId, shipmentId, podDetail, quotation } = data
+  const { isRounded, locations, vehicleTypeId, serviceIds, discountId, shipmentId, podDetail, remark, quotation } = data
 
   const _shipment = await ShipmentModel.findById(shipmentId).session(session)
   if (!_shipment) throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
@@ -432,6 +432,7 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
     subTotal: _newQuotationData.subTotal,
     tax: _newQuotationData.tax,
     total: _newQuotationData.total,
+    remark: remark,
     updatedBy: adminId,
   })
   await _newQuotation.save({ session })

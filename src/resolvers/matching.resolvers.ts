@@ -52,7 +52,8 @@ import { EAuditActions } from '@enums/audit'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import { clearShipmentJobQueues } from '@controllers/shipmentJobQueue'
 import { EReceiptType } from '@enums/billing'
-import { fCurrency } from '@utils/formatNumber'
+import { Payment } from '@models/finance/payment.model'
+import { Quotation } from '@models/finance/quotation.model'
 
 @Resolver()
 export default class MatchingResolver {
@@ -457,21 +458,29 @@ export default class MatchingResolver {
         const _advanceReceipt = last(sortBy(_advanceReceipts, 'createdAt')) as Receipt | undefined
         const today = new Date()
         const _receiptNumber = await generateMonthlySequenceNumber('receipt')
-        const _quotation = _billing.quotation
 
-        let remarks = ""
-        if (_quotation?.price?.acturePrice !== _quotation?.price?.total && !(_advanceReceipts.length > 1)) {
-          const _priceDifference = _quotation.price.acturePrice
-          if (_priceDifference > 0) {
-            const _tax = _quotation.price.tax > 0 ? _priceDifference * (1 / (100 - 1)) : 0
-            const _newSubTotal = _priceDifference + _tax
-            remarks = `เพิ่มค่าใช้จ่าย ${fCurrency(Math.abs(_newSubTotal))} บาท เนื่องจากเปลี่ยนแปลงการใช้บริการ`
-          } else if (_priceDifference < 0) {
-            // const _tax = _quotation.price.tax > 0 ? _priceDifference * (1 / (100 - 1)) : 0
-            // const _newSubTotal = _priceDifference + _tax
-            remarks = `คืนเงินลูกค้า ${fCurrency(Math.abs(_priceDifference))} บาท เนื่องจากเปลี่ยนแปลงการใช้บริการ`
-          }
-        }
+        const _payments = sortBy(_billing.payments as Payment[], 'createdAt').filter(
+          (_payment) => !isEmpty(_payment.quotations),
+        )
+        const lastPayment = last(_payments)
+        const _quotation = last(sortBy(lastPayment.quotations, 'createdAt')) as Quotation | undefined
+
+        // if (_quotation?.price?.acturePrice !== _quotation?.price?.total && !(_advanceReceipts.length > 1)) {
+        //   const _priceDifference = _quotation.price.acturePrice
+        //   if (_priceDifference > 0) {
+        //     const _tax = _quotation.price.tax > 0 ? _priceDifference * (1 / (100 - 1)) : 0
+        //     const _newSubTotal = _priceDifference + _tax
+
+        //     // Not using this any more after changed price have remark
+        //     remarks = `เพิ่มค่าใช้จ่าย ${fCurrency(Math.abs(_newSubTotal))} บาท เนื่องจากเปลี่ยนแปลงการใช้บริการ`
+        //   } else if (_priceDifference < 0) {
+        //     // const _tax = _quotation.price.tax > 0 ? _priceDifference * (1 / (100 - 1)) : 0
+        //     // const _newSubTotal = _priceDifference + _tax
+
+        //     // Not using this any more after changed price have remark
+        //     remarks = `คืนเงินลูกค้า ${fCurrency(Math.abs(_priceDifference))} บาท เนื่องจากเปลี่ยนแปลงการใช้บริการ`
+        //   }
+        // }
 
         const _receipt = new ReceiptModel({
           receiptNumber: _receiptNumber,
@@ -482,7 +491,7 @@ export default class MatchingResolver {
           total: _quotation.total,
           tax: _quotation.tax,
           refReceiptNumber: _advanceReceipt?.receiptNumber,
-          ...(remarks ? { remarks } : {}),
+          remarks: _quotation.remark || '',
         })
         await _receipt.save({ session })
 

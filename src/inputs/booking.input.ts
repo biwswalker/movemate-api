@@ -171,4 +171,7 @@ export class UpdateShipmentInput {
 
   @Field(() => QuotationEditorDetailInput, { nullable: true })
   quotation?: QuotationEditorDetailInput
+
+  @Field(() => String, { nullable: true })
+  remark?: string
 }
