@@ -4,28 +4,22 @@ import { AuthContext, GraphQLContext } from '@configs/graphQL.config'
 import { AuthGuard } from '@guards/auth.guards'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import UserModel, { User } from '@models/user.model'
-import { filter, find, get, head, includes, isEmpty, last, map, reduce, sortBy, tail, uniq } from 'lodash'
+import { filter, find, get, head, includes, isEmpty, last, map, sortBy, tail } from 'lodash'
 import DriverDetailModel, { DriverDetail } from '@models/driverDetail.model'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
-import NotificationModel, {
-  ENavigationType,
-  ENotificationVarient,
-  NOTIFICATION_TITLE,
-} from '@models/notification.model'
+import NotificationModel, { ENavigationType, ENotificationVarient } from '@models/notification.model'
 import {
   ConfirmShipmentDateInput,
   NextShipmentStepInput,
   SentPODDocumentShipmentStepInput,
 } from '@inputs/matching.input'
 import { addSeconds, format, isBefore, parseISO } from 'date-fns'
-import pubsub, { NOTFICATIONS, SHIPMENTS } from '@configs/pubsub'
+import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { Repeater } from '@graphql-yoga/subscription'
-import addEmailQueue from '@utils/email.utils'
-import { EPaymentMethod } from '@enums/payments'
+import { EPaymentMethod, EPaymentStatus } from '@enums/payments'
 import { EDriverAcceptanceStatus, EShipmentMatchingCriteria, EShipmentStatus } from '@enums/shipments'
 import { EDriverStatus, EUserRole, EUserStatus, EUserType } from '@enums/users'
-import { decryption } from '@utils/encryption'
 import { th } from 'date-fns/locale'
 import { FilterQuery } from 'mongoose'
 import StepDefinitionModel, {
@@ -317,7 +311,7 @@ export default class MatchingResolver {
       const freshShipment = await ShipmentModel.findById(shipmentId)
       await nextStep(shipmentId, undefined, session)
       if (!isBusinessUser) {
-        await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.WORKING }, { session })
+        // await UserModel.findByIdAndUpdate(userId, { drivingStatus: EDriverStatus.WORKING }, { session })
         // Notification
         const customerId = get(freshShipment, 'customer._id', '')
         if (customerId) {
@@ -440,7 +434,7 @@ export default class MatchingResolver {
   async markAsFinish(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
     const session = ctx.session
 
-    const shipment = await ShipmentModel.findById(shipmentId)
+    const shipment = await ShipmentModel.findById(shipmentId).session(session)
     if (!shipment) {
       const message = 'ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -452,17 +446,22 @@ export default class MatchingResolver {
 
     if (paymentMethod === EPaymentMethod.CASH) {
       const _billing = await BillingModel.findOne({ billingNumber: shipment.trackingNumber }).session(session)
-
       if (_billing) {
+        const _payments = sortBy((_billing.payments || []) as Payment[], 'createdAt')
+        const isWaitingPaidOrApproval = _payments.some((_payment) => _payment.status === EPaymentStatus.PENDING)
+        if (isWaitingPaidOrApproval) {
+          const message = 'ไม่สามารถดำเนินการสำเร็จได้ เนื่องลูกค้ายังไม่ได้ชำระเงิน'
+          throw new GraphQLError(message, {
+            extensions: { code: REPONSE_NAME.INSUFFICIENT_FUNDS, errors: [{ message }] },
+          })
+        }
+
         const _advanceReceipts = filter(_billing.receipts, { receiptType: EReceiptType.ADVANCE })
         const _advanceReceipt = last(sortBy(_advanceReceipts, 'createdAt')) as Receipt | undefined
         const today = new Date()
-        const _receiptNumber = await generateMonthlySequenceNumber('receipt')
 
-        const _payments = sortBy(_billing.payments as Payment[], 'createdAt').filter(
-          (_payment) => !isEmpty(_payment.quotations),
-        )
-        const lastPayment = last(_payments)
+        const _paymentQoutations = _payments.filter((_payment) => !isEmpty(_payment.quotations))
+        const lastPayment = last(_paymentQoutations)
         const _quotation = last(sortBy(lastPayment.quotations, 'createdAt')) as Quotation | undefined
 
         // if (_quotation?.price?.acturePrice !== _quotation?.price?.total && !(_advanceReceipts.length > 1)) {
@@ -481,6 +480,8 @@ export default class MatchingResolver {
         //     remarks = `คืนเงินลูกค้า ${fCurrency(Math.abs(_priceDifference))} บาท เนื่องจากเปลี่ยนแปลงการใช้บริการ`
         //   }
         // }
+
+        const _receiptNumber = await generateMonthlySequenceNumber('receipt')
 
         const _receipt = new ReceiptModel({
           receiptNumber: _receiptNumber,
@@ -600,11 +601,11 @@ export default class MatchingResolver {
 
             const oldDriver = shipment.driver as User
             await ShipmentModel.findByIdAndUpdate(shipmentId, { driver: driverId }, { session })
-            await UserModel.findOneAndUpdate(
-              { _id: oldDriver._id, drivingStatus: { $in: [EDriverStatus.IDLE, EDriverStatus.WORKING] } },
-              { drivingStatus: EDriverStatus.IDLE },
-              { session },
-            )
+            // await UserModel.findOneAndUpdate(
+            //   { _id: oldDriver._id, drivingStatus: { $in: [EDriverStatus.IDLE, EDriverStatus.WORKING] } },
+            //   { drivingStatus: EDriverStatus.IDLE },
+            //   { session },
+            // )
 
             if (oldDriver) {
               // Sent app Notiification to Driver
@@ -645,7 +646,6 @@ export default class MatchingResolver {
         } else {
           await ShipmentModel.findByIdAndUpdate(shipmentId, { driver: driverId }, { session })
           await nextStep(shipment._id, undefined, session)
-          await UserModel.findByIdAndUpdate(driverId, { drivingStatus: EDriverStatus.WORKING }, { session })
           const customerId = get(shipment, 'customer._id', '')
           if (customerId) {
             await NotificationModel.sendNotification({

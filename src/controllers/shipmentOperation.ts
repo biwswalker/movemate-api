@@ -44,6 +44,7 @@ import { CancellationPolicyDetail, CancellationPreview } from '@payloads/cancell
 import { fDateTime } from '@utils/formatTime'
 import { clearShipmentJobQueues } from './shipmentJobQueue'
 import { publishDriverMatchingShipment } from './shipmentGet'
+import { EDriverStatus } from '@enums/users'
 
 Aigle.mixin(lodash, {})
 
@@ -233,6 +234,16 @@ export async function nextStep(shipmentId: string, images?: FileInput[], session
     { session },
   )
 
+  if (currentStep.step === EStepDefinition.CONFIRM_DATETIME) {
+    /**
+     * เมื่ือมีการ CONFIRM_DATETIME แล้วให้เปลี่ยนสถานะเป็น Working
+     */
+    const driverId = get(shipment, 'driver._id', '')
+    if (driverId) {
+      await UserModel.findByIdAndUpdate(driverId, { drivingStatus: EDriverStatus.WORKING }, { session })
+    }
+  }
+
   // หา Step ถัดไปจาก Index + 1
   const _steps = (sortBy(shipment.steps, 'seq') || []) as StepDefinition[]
   const nextStepDoc = find(_steps, ['seq', currentStep.seq + 1]) as StepDefinition | undefined
@@ -378,10 +389,10 @@ export async function finishJob(shipmentId: string, session?: ClientSession): Pr
     transactionType: ETransactionType.INCOME,
   }).session(session)
 
-  if (existingTransaction) {
-    console.warn(`[finishJob] Transaction for shipment ${shipmentId} already exists. Skipping creation.`)
-    return true // ถือว่าสำเร็จไปแล้ว
-  }
+  // if (existingTransaction) {
+  //   console.warn(`[finishJob] Transaction for shipment ${shipmentId} already exists. Skipping creation.`)
+  //   return true // ถือว่าสำเร็จไปแล้ว
+  // }
 
   // 3. อัปเดต Step ปัจจุบัน (FINISH) ให้เป็น DONE
   await StepDefinitionModel.findByIdAndUpdate(
@@ -425,77 +436,81 @@ export async function finishJob(shipmentId: string, session?: ClientSession): Pr
     transactionType: ETransactionType.INCOME, // ตรวจสอบเฉพาะรายรับที่เกิดจากการจบงาน
   }).session(session)
 
-  if (existingFinishTransaction) {
-    console.warn(`[finishJob] Transaction for shipment ${shipmentId} already exists. Skipping creation.`)
-    // อาจจะคืนค่า true ไปเลย เพราะถือว่าจบงานสำเร็จแล้ว แต่ transaction ถูกสร้างไปก่อนหน้า
-    return true
-  }
-
   const lastPayment = last(sortBy(shipment?.quotations, ['createdAt'])) as Quotation
   const cost = lastPayment?.cost
   const isAgentDriver = !isEmpty(shipment?.agentDriver)
+  const driverId = get(shipment, 'driver._id', '')
   const ownerDriverId = isAgentDriver ? get(shipment, 'agentDriver._id', '') : get(shipment, 'driver._id', '')
+  const ownerDriver = await UserModel.findById(ownerDriverId).session(session)
 
-  const driver = await UserModel.findById(ownerDriverId).session(session)
-
-  if (isAgentDriver && get(this, 'driver._id', '')) {
+  if (existingFinishTransaction) {
+    console.warn(`[finishJob] Transaction for shipment ${shipmentId} already exists. Skipping creation.`)
+    // อาจจะคืนค่า true ไปเลย เพราะถือว่าจบงานสำเร็จแล้ว แต่ transaction ถูกสร้างไปก่อนหน้า
+    // return true
+  } else {
+    if (isAgentDriver && driverId) {
+      /**
+       * Update employee transaction
+       */
+      const employeeTransaction = new TransactionModel({
+        amountTax: 0, // WHT
+        amountBeforeTax: 0,
+        amount: 0,
+        ownerId: driverId,
+        ownerType: ETransactionOwner.BUSINESS_DRIVER,
+        description: `${shipment?.trackingNumber} งานจาก ${ownerDriver.fullname}`,
+        refId: shipment?._id,
+        refType: ERefType.SHIPMENT,
+        transactionType: ETransactionType.INCOME,
+        status: ETransactionStatus.COMPLETE,
+      })
+      await employeeTransaction.save({ session })
+    }
     /**
-     * Update employee transaction
+     * Add transaction for shipment driver owner
      */
-    const employeeTransaction = new TransactionModel({
-      amountTax: 0, // WHT
-      amountBeforeTax: 0,
-      amount: 0,
-      ownerId: get(this, 'driver._id', ''),
-      ownerType: ETransactionOwner.BUSINESS_DRIVER,
-      description: `${shipment?.trackingNumber} งานจาก ${driver.fullname}`,
+    const driverTransaction = new TransactionModel({
+      amountTax: cost.tax, // WHT
+      amountBeforeTax: cost.subTotal,
+      amount: cost.total,
+      ownerId: ownerDriverId,
+      ownerType: ETransactionOwner.DRIVER,
+      description: description,
       refId: shipment?._id,
       refType: ERefType.SHIPMENT,
       transactionType: ETransactionType.INCOME,
-      status: ETransactionStatus.COMPLETE,
+      status: ETransactionStatus.PENDING,
     })
-    await employeeTransaction.save({ session })
+    await driverTransaction.save({ session })
+    /**
+     * Update driver balance
+     */
+    if (ownerDriver) {
+      const driverDetail = await DriverDetailModel.findById(ownerDriver.driverDetail).session(session)
+      await driverDetail.updateBalance(session)
+    }
   }
-  /**
-   * Add transaction for shipment driver owner
-   */
-  const driverTransaction = new TransactionModel({
-    amountTax: cost.tax, // WHT
-    amountBeforeTax: cost.subTotal,
-    amount: cost.total,
-    ownerId: ownerDriverId,
-    ownerType: ETransactionOwner.DRIVER,
-    description: description,
-    refId: shipment?._id,
-    refType: ERefType.SHIPMENT,
-    transactionType: ETransactionType.INCOME,
-    status: ETransactionStatus.PENDING,
-  })
-  await driverTransaction.save({ session })
 
-  /**
-   * Update driver balance
-   */
-  if (driver) {
-    const driverDetail = await DriverDetailModel.findById(driver.driverDetail)
-    await driverDetail.updateBalance(session)
-  }
+  await UserModel.findByIdAndUpdate(driverId, { drivingStatus: EDriverStatus.IDLE }).session(session)
 
   /**
    * Notification
    */
   const _customerId = get(shipment, 'customer._id', '')
-  await NotificationModel.sendNotification({
-    userId: _customerId,
-    varient: ENotificationVarient.SUCCESS,
-    title: 'งานขนส่งสำเร็จ',
-    message: [
-      `เราขอประกาศด้วยความยินดีว่าการขนส่งเลขที่ ${shipment?.trackingNumber} ของท่านได้เสร็จสมบูรณ์!`,
-      `สินค้าของท่านถูกนำส่งไปยังปลายทางเรียบร้อยแล้ว`,
-    ],
-    infoText: 'ดูสรุปการจองและค่าใช้จ่าย',
-    infoLink: `/main/tracking?tracking_number=${shipment?.trackingNumber}`,
-  })
+  await NotificationModel.sendNotification(
+    {
+      userId: _customerId,
+      varient: ENotificationVarient.SUCCESS,
+      title: 'งานขนส่งสำเร็จ',
+      message: [
+        `เราขอประกาศด้วยความยินดีว่าการขนส่งเลขที่ ${shipment?.trackingNumber} ของท่านได้เสร็จสมบูรณ์!`,
+        `สินค้าของท่านถูกนำส่งไปยังปลายทางเรียบร้อยแล้ว`,
+      ],
+      infoText: 'ดูสรุปการจองและค่าใช้จ่าย',
+      infoLink: `/main/tracking?tracking_number=${shipment?.trackingNumber}`,
+    },
+    session,
+  )
 
   return true
   // const shipment = await ShipmentModel.findById(shipmentId).session(session)

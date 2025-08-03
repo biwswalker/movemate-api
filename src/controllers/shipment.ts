@@ -8,10 +8,8 @@ import lodash, {
   filter,
   find,
   get,
-  groupBy,
   head,
   includes,
-  isEmpty,
   isEqual,
   last,
   map,
@@ -62,13 +60,6 @@ import StepDefinitionModel, {
   EStepStatus,
   StepDefinition,
 } from '@models/shipmentStepDefinition.model'
-import TransactionModel, {
-  ERefType,
-  ETransactionOwner,
-  ETransactionStatus,
-  ETransactionType,
-} from '@models/transaction.model'
-import DriverDetailModel from '@models/driverDetail.model'
 
 Aigle.mixin(lodash, {})
 
@@ -504,61 +495,61 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
          * === Calculate WHT 1% for driver here ===
          * ========================================
          */
-        if (
-          includes([EDriverAcceptanceStatus.ACCEPTED, EDriverAcceptanceStatus.ASSIGN], _shipment.driverAcceptanceStatus)
-        ) {
-          const costDifference = _newQuotationData.cost.acturePrice
-          if (costDifference > 0) {
-            const cost = _newQuotation?.cost
-            const isAgentDriver = !isEmpty(_shipment?.agentDriver)
-            const agentDriverId = get(_shipment, 'agentDriver._id', '')
-            const driverId = get(_shipment, 'driver._id', '')
-            const ownerDriverId = isAgentDriver ? agentDriverId : driverId
+        // if (
+        //   includes([EDriverAcceptanceStatus.ACCEPTED, EDriverAcceptanceStatus.ASSIGN], _shipment.driverAcceptanceStatus)
+        // ) {
+        //   const costDifference = _newQuotationData.cost.acturePrice
+        //   if (costDifference > 0) {
+        //     const cost = _newQuotation?.cost
+        //     const isAgentDriver = !isEmpty(_shipment?.agentDriver)
+        //     const agentDriverId = get(_shipment, 'agentDriver._id', '')
+        //     const driverId = get(_shipment, 'driver._id', '')
+        //     const ownerDriverId = isAgentDriver ? agentDriverId : driverId
 
-            const driverOwner = await UserModel.findById(ownerDriverId).session(session)
-            if (isAgentDriver && driverId) {
-              /**
-               * Update employee transaction
-               */
-              const employeeTransaction = new TransactionModel({
-                amountTax: 0, // WHT
-                amountBeforeTax: 0,
-                amount: 0,
-                ownerId: get(this, 'driver._id', ''),
-                ownerType: ETransactionOwner.BUSINESS_DRIVER,
-                description: `${_shipment?.trackingNumber} งานจาก ${driverOwner.fullname}`,
-                refId: _shipment?._id,
-                refType: ERefType.SHIPMENT,
-                transactionType: ETransactionType.INCOME,
-                status: ETransactionStatus.COMPLETE,
-              })
-              await employeeTransaction.save({ session })
-            }
-            /**
-             * Add transaction for shipment driver owner
-             */
-            const driverTransaction = new TransactionModel({
-              amountTax: 0, // WHT
-              amountBeforeTax: Math.abs(_newQuotationData.cost?.acturePrice || 0),
-              amount: Math.abs(_newQuotationData.cost?.acturePrice || 0),
-              ownerId: ownerDriverId,
-              ownerType: ETransactionOwner.DRIVER,
-              description: `ค่าใช้จ่ายเพิ่มเติมจาก #${_shipment.trackingNumber}`,
-              refId: _shipment?._id,
-              refType: ERefType.SHIPMENT,
-              transactionType: ETransactionType.INCOME,
-              status: ETransactionStatus.PENDING,
-            })
-            await driverTransaction.save({ session })
+        //     const driverOwner = await UserModel.findById(ownerDriverId).session(session)
+        //     if (isAgentDriver && driverId) {
+        //       /**
+        //        * Update employee transaction
+        //        */
+        //       const employeeTransaction = new TransactionModel({
+        //         amountTax: 0, // WHT
+        //         amountBeforeTax: 0,
+        //         amount: 0,
+        //         ownerId: driverId,
+        //         ownerType: ETransactionOwner.BUSINESS_DRIVER,
+        //         description: `${_shipment?.trackingNumber} งานจาก ${driverOwner.fullname}`,
+        //         refId: _shipment?._id,
+        //         refType: ERefType.SHIPMENT,
+        //         transactionType: ETransactionType.INCOME,
+        //         status: ETransactionStatus.COMPLETE,
+        //       })
+        //       await employeeTransaction.save({ session })
+        //     }
+        //     /**
+        //      * Add transaction for shipment driver owner
+        //      */
+        //     const driverTransaction = new TransactionModel({
+        //       amountTax: 0, // WHT
+        //       amountBeforeTax: Math.abs(_newQuotationData.cost?.acturePrice || 0),
+        //       amount: Math.abs(_newQuotationData.cost?.acturePrice || 0),
+        //       ownerId: ownerDriverId,
+        //       ownerType: ETransactionOwner.DRIVER,
+        //       description: `ค่าใช้จ่ายเพิ่มเติมจาก #${_shipment.trackingNumber}`,
+        //       refId: _shipment?._id,
+        //       refType: ERefType.SHIPMENT,
+        //       transactionType: ETransactionType.INCOME,
+        //       status: ETransactionStatus.PENDING,
+        //     })
+        //     await driverTransaction.save({ session })
 
-            // Update balance
-            if (driverOwner) {
-              const driverOwnerId = get(driverOwner, 'driverDetail._id', '')
-              const driverDetail = await DriverDetailModel.findById(driverOwnerId)
-              await driverDetail.updateBalance(session)
-            }
-          }
-        }
+        //     // Update balance
+        //     if (driverOwner) {
+        //       const driverOwnerId = get(driverOwner, 'driverDetail._id', '')
+        //       const driverDetail = await DriverDetailModel.findById(driverOwnerId)
+        //       await driverDetail.updateBalance(session)
+        //     }
+        //   }
+        // }
       }
     } else {
       // ** กรณีที่ยังไม่ได้จ่าย หรือจ่ายแล้วแต่ไม่สำเร็จ: ยกเลิกของเก่า สร้างใหม่เต็มจำนวน **
