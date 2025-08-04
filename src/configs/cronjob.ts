@@ -7,7 +7,12 @@ import {
   notifyOverdueBilling,
 } from '@controllers/billing'
 import { fDateTime } from '@utils/formatTime'
+import dotenv from 'dotenv'
 import cron from 'node-cron'
+import logger from './logger'
+import { updatePendingTransactionsToOutstanding } from '@controllers/transaction'
+
+dotenv.config()
 
 export default async function configureCronjob() {
   cron.schedule(
@@ -46,6 +51,14 @@ export default async function configureCronjob() {
     },
     { timezone: 'Asia/Bangkok' },
   )
+
+  const transactionCronSchedule = process.env.TRANSACTION_OUTSTANDING_CRON_SCHEDULE || '0 0 1 * *'
+  cron.schedule(transactionCronSchedule, () => {
+    logger.info(
+      `🚀 Starting scheduled job: updatePendingTransactionsToOutstanding based on schedule: "${transactionCronSchedule}"`,
+    )
+    updatePendingTransactionsToOutstanding()
+  })
 
   console.log('🌽 Cronjob started')
 }

@@ -1,9 +1,12 @@
 import { registerEnumType } from "type-graphql";
 
 export enum ETransactionDriverStatus {
-  PENDING = 'PENDING',
-  NON_OUTSTANDING = 'NON_OUTSTANDING',
   ALL = 'ALL',
+  NON_OUTSTANDING = 'NON_OUTSTANDING',
+  PENDING = 'PENDING',
+  OUTSTANDING = 'OUTSTANDING',
+  COMPLETE = 'COMPLETE',
+  CANCELLED = 'CANCELLED',
 }
 registerEnumType(ETransactionDriverStatus, {
   name: 'ETransactionDriverStatus',

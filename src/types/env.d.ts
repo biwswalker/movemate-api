@@ -22,5 +22,6 @@ declare namespace NodeJS {
     THAIBULKSMS_API_KEY: string
     THAIBULKSMS_API_SECRET: string
     THAIBULKSMS_CREDIT_TYPE: string
+    TRANSACTION_OUTSTANDING_CRON_SCHEDULE: string
   }
 }

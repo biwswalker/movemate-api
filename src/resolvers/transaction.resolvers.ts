@@ -3,7 +3,7 @@ import { ETransactionDriverStatus } from '@enums/transactions'
 import { EUserRole, EUserType } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
 import { LoadmoreArgs, PaginationArgs } from '@inputs/query.input'
-import { GetDriverTransactionArgs, GetTransactionsArgs } from '@inputs/transactions.input'
+import { GetDriverTransactionInput, GetTransactionsArgs } from '@inputs/transactions.input'
 import DriverPaymentModel from '@models/driverPayment.model'
 import ShipmentModel from '@models/shipment.model'
 import TransactionModel, {
@@ -21,7 +21,7 @@ import {
   DriverTransactionSummaryPayload,
   TransactionDetailPayload,
 } from '@payloads/transaction.payloads'
-import { DRIVER_TRANSACTIONS, TRANSACTION_DRIVER_LIST } from '@pipelines/transaction.pipeline'
+import { DRIVER_TRANSACTIONS, GET_DRIVER_TRANSACTION_SUMMARY } from '@pipelines/transaction.pipeline'
 import { reformPaginate } from '@utils/pagination.utils'
 import { REPONSE_NAME } from 'constants/status'
 import { GraphQLError } from 'graphql'
@@ -82,7 +82,7 @@ export default class TransactionResolver {
   @Query(() => TransactionDriversAggregatePayload)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getTransactionDrivers(
-    @Arg("filters") filters: GetDriverTransactionArgs,
+    @Arg('filters') filters: GetDriverTransactionInput,
     @Args() paginates: PaginationArgs,
   ): Promise<TransactionDriversAggregatePayload> {
     const drivers = await TransactionModel.getTransactionDriverList(filters, paginates)
@@ -92,13 +92,31 @@ export default class TransactionResolver {
   @Query(() => [TransactionDriversTotalRecordPayload])
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getTransactionDriversCounting(): Promise<TransactionDriversTotalRecordPayload[]> {
-    const pendingPayment = await TransactionModel.aggregate(TRANSACTION_DRIVER_LIST({ isPending: true }))
-    const nonPayment = await TransactionModel.aggregate(TRANSACTION_DRIVER_LIST({ isPending: false }))
-    const allPayment = await TransactionModel.aggregate(TRANSACTION_DRIVER_LIST({ isPending: undefined }))
+    const allPayment = await TransactionModel.aggregate(
+      GET_DRIVER_TRANSACTION_SUMMARY({ statuses: [ETransactionDriverStatus.ALL] }),
+    )
+    const nonPayment = await TransactionModel.aggregate(
+      GET_DRIVER_TRANSACTION_SUMMARY({ statuses: [ETransactionDriverStatus.NON_OUTSTANDING] }),
+    )
+    const pendingPayment = await TransactionModel.aggregate(
+      GET_DRIVER_TRANSACTION_SUMMARY({ statuses: [ETransactionDriverStatus.PENDING] }),
+    )
+    const paidPayment = await TransactionModel.aggregate(
+      GET_DRIVER_TRANSACTION_SUMMARY({ statuses: [ETransactionDriverStatus.COMPLETE] }),
+    )
+    const outstandingPayment = await TransactionModel.aggregate(
+      GET_DRIVER_TRANSACTION_SUMMARY({ statuses: [ETransactionDriverStatus.OUTSTANDING] }),
+    )
+    const cancelledPayment = await TransactionModel.aggregate(
+      GET_DRIVER_TRANSACTION_SUMMARY({ statuses: [ETransactionDriverStatus.CANCELLED] }),
+    )
     return [
       { label: 'ทั้งหมด', count: allPayment.length, key: ETransactionDriverStatus.ALL },
-      { label: 'มียอดทำจ่าย', count: pendingPayment.length, key: ETransactionDriverStatus.PENDING },
-      { label: 'ไม่มียอด', count: nonPayment.length, key: ETransactionDriverStatus.NON_OUTSTANDING },
+      { label: 'อยู่ในรอบชำระ', count: pendingPayment.length, key: ETransactionDriverStatus.PENDING },
+      { label: 'ค้างชำระ', count: outstandingPayment.length, key: ETransactionDriverStatus.OUTSTANDING },
+      { label: 'ไม่มียอดค้างชำระ', count: nonPayment.length, key: ETransactionDriverStatus.NON_OUTSTANDING },
+      { label: 'ชำระแล้ว', count: paidPayment.length, key: ETransactionDriverStatus.COMPLETE },
+      { label: 'ยกเลิกการชำระ', count: cancelledPayment.length, key: ETransactionDriverStatus.CANCELLED },
     ]
   }
 

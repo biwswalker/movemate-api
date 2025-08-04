@@ -8,13 +8,13 @@ import {
   TransactionDriversAggregatePayload,
   TransactionPayload,
 } from '@payloads/transaction.payloads'
-import { endOfMonth, startOfMonth, startOfYear } from 'date-fns'
-import { GetDriverTransactionArgs, GetTransactionsArgs } from '@inputs/transactions.input'
-import { DRIVER_TRANSACTIONS, TRANSACTION_DRIVER_LIST } from '@pipelines/transaction.pipeline'
+import { endOfMonth, startOfMonth } from 'date-fns'
+import { GetDriverTransactionInput, GetTransactionsArgs } from '@inputs/transactions.input'
+import { DRIVER_TRANSACTIONS, GET_DRIVER_TRANSACTION_SUMMARY } from '@pipelines/transaction.pipeline'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
-import mongoose, { ClientSession, PaginateOptions } from 'mongoose'
+import mongoose, { PaginateOptions } from 'mongoose'
 import { reformPaginate } from '@utils/pagination.utils'
-import { get, omitBy, sum } from 'lodash'
+import { get, sum } from 'lodash'
 import UserModel from './user.model'
 
 export enum ETransactionType {
@@ -29,6 +29,8 @@ registerEnumType(ETransactionType, {
 export enum ETransactionStatus {
   COMPLETE = 'COMPLETE',
   PENDING = 'PENDING',
+  CANCELED = 'CANCELED',
+  OUTSTANDING = 'ค้างชำระ',
 }
 registerEnumType(ETransactionStatus, {
   name: 'ETransactionStatus',
@@ -185,11 +187,11 @@ export class Transaction extends TimeStamps {
   }
 
   static async getTransactionDriverList(
-    query: GetDriverTransactionArgs,
+    query: GetDriverTransactionInput,
     paginate: PaginationArgs,
   ): Promise<TransactionDriversAggregatePayload> {
     const { sort = {}, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
-    const aggregate = TransactionModel.aggregate(TRANSACTION_DRIVER_LIST(query, sort))
+    const aggregate = TransactionModel.aggregate(GET_DRIVER_TRANSACTION_SUMMARY(query, sort))
     const drivers = (await TransactionModel.aggregatePaginate(
       aggregate,
       reformSorts,

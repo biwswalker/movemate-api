@@ -1,6 +1,7 @@
-import { EUserType } from "@enums/users"
-import { ERefType, ETransactionStatus, ETransactionType } from "@models/transaction.model"
-import { ArgsType, Field, InputType } from "type-graphql"
+import { ETransactionDriverStatus } from '@enums/transactions'
+import { EUserType } from '@enums/users'
+import { ERefType, ETransactionStatus, ETransactionType } from '@models/transaction.model'
+import { ArgsType, Field, InputType } from 'type-graphql'
 
 @ArgsType()
 @InputType()
@@ -14,11 +15,11 @@ export class GetDriverTransactionArgs {
   @Field({ nullable: true })
   isPending?: boolean
 
-//   @Field({ nullable: true })
-//   shipmentTracking: string
+  //   @Field({ nullable: true })
+  //   shipmentTracking: string
 
-//   @Field(() => ETransactionStatus, { nullable: true })
-//   transactionStatus: ETransactionStatus
+  //   @Field(() => ETransactionStatus, { nullable: true })
+  //   transactionStatus: ETransactionStatus
 }
 
 @ArgsType()
@@ -40,4 +41,16 @@ export class GetTransactionsArgs {
 
   @Field(() => Date, { nullable: true })
   endDate?: Date
+}
+
+@InputType({ description: 'Input สำหรับกรองและจัดเรียงข้อมูลสรุปยอดของคนขับ' })
+export class GetDriverTransactionInput {
+  @Field({ nullable: true, description: 'กรองตามชื่อคนขับ (ค้นหาบางส่วน)' })
+  driverName?: string
+
+  @Field(() => [EUserType], { nullable: true, description: 'กรองตามประเภทคนขับ' })
+  driverTypes?: EUserType[]
+
+  @Field(() => [ETransactionDriverStatus], { nullable: true, description: 'กรองตามสถานะ (ใช้สถานะจริงของ Transaction)' })
+  statuses?: ETransactionDriverStatus[]
 }

@@ -41,10 +41,10 @@ export class TransactionDrivesPayload {
 @ObjectType()
 export class TransactionDriversAggregatePayload
   extends PaginationPayload
-  implements AggregatePaginateResult<TransactionDrivesPayload>
+  implements AggregatePaginateResult<DriverTransactionPayload>
 {
-  @Field(() => [TransactionDrivesPayload])
-  docs: TransactionDrivesPayload[]
+  @Field(() => [DriverTransactionPayload])
+  docs: DriverTransactionPayload[]
 }
 
 @ObjectType()
@@ -147,4 +147,39 @@ export class TransactionDetailPayload {
 
   @Field(() => DriverPayment, { nullable: true })
   driverPayment?: DriverPayment
+}
+
+@ObjectType({ description: 'ข้อมูลสรุปยอด Transaction ของคนขับแต่ละราย' })
+export class DriverTransactionPayload {
+  @Field()
+  driverId: string
+
+  @Field({ nullable: true, description: 'คำนำหน้าชื่อ' })
+  title?: string
+
+  @Field()
+  driverNumber: string
+
+  @Field()
+  driverName: string
+
+  @Field()
+  statusName: string
+
+  @Field({ nullable: true, description: 'ชื่อไฟล์รูปโปรไฟล์' })
+  profileImage?: string
+
+  @Field(() => EUserType, { nullable: true })
+  driverType?: EUserType
+
+  @Field(() => ETransactionDriverStatus, {
+    description: 'สถานะสรุปรวมของคนขับ (PENDING > COMPLETE > OUTSTANDING > CANCELED)',
+  })
+  status: ETransactionDriverStatus
+
+  @Field(() => Float, { description: 'ยอดรวมทั้งหมดที่ยังค้างชำระ (PENDING + OUTSTANDING)' })
+  netTotalAmount: number
+
+  @Field(() => Date, { nullable: true, description: 'วันที่ของรายการที่ชำระล่าสุด (สถานะ COMPLETE)' })
+  lastPaymentDate?: Date
 }

@@ -134,3 +134,13 @@ export async function generateMonthlySequenceNumber(docType: TDocumentType, leng
   // Combine the prefix, year-month, and padded sequence number
   return `${prefix}${yearMonth}${paddedSequence}`
 }
+
+/**
+ * Escapes special characters in a string for use in a regular expression.
+ * @param str The input string from the user.
+ * @returns A sanitized string safe for regex.
+ */
+export function escapeRegex(str: string): string {
+  // Escape characters with special meaning in regular expressions.
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
