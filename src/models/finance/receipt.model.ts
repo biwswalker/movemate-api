@@ -1,7 +1,6 @@
 import { Field, ID, ObjectType } from 'type-graphql'
 import { prop as Property, Ref, getModelForClass, plugin } from '@typegoose/typegoose'
 import mongooseAutoPopulate from 'mongoose-autopopulate'
-import { ClientSession } from 'mongoose'
 import { PaymentAmounts } from './objects'
 import { BillingDocument } from './documents.model'
 import { EReceiptType } from '@enums/billing'
@@ -26,7 +25,7 @@ export class Receipt extends PaymentAmounts {
 
   @Field(() => EReceiptType)
   @Property({ enum: EReceiptType, required: true, default: EReceiptType.FINAL })
-  receiptType: EReceiptType // <-- เพิ่มฟิลด์ประเภท
+  receiptType: EReceiptType
 
   @Field(() => BillingDocument, { nullable: true })
   @Property({ ref: () => BillingDocument, autopopulate: true })

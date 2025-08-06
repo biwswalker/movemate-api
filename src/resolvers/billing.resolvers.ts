@@ -7,10 +7,11 @@ import {
 } from '@controllers/billingPayment'
 import {
   EAdjustmentNoteType,
-  EBillingCriteriaStatus,
   EBillingInfoStatus,
   EBillingState,
   EBillingStatus,
+  ECreditDisplayStatus,
+  EDisplayStatus,
   EReceiptType,
 } from '@enums/billing'
 import { EPaymentMethod, EPaymentStatus } from '@enums/payments'
@@ -24,12 +25,17 @@ import BillingModel, { Billing } from '@models/finance/billing.model'
 import {
   BillingInfoPayload,
   BillingListPaginationPayload,
+  BillingStatusPayload,
   TotalBillingRecordPayload,
 } from '@payloads/billingCycle.payloads'
-import { BILLING_CYCLE_LIST } from '@pipelines/billingCycle.pipeline'
+import {
+  AGGREGATE_BILLING_STATUS_COUNT,
+  BILLING_CYCLE_LIST,
+  GET_BILLING_STATUS_BY_BILLING_NUMBER,
+} from '@pipelines/billingCycle.pipeline'
 import { reformPaginate } from '@utils/pagination.utils'
 import { GraphQLError } from 'graphql'
-import { get, head, includes, isEmpty, last, map, reduce, sortBy, tail, toNumber, toString, uniq } from 'lodash'
+import { get, head, includes, isEmpty, last, map, omit, reduce, sortBy, tail, toNumber, toString, uniq } from 'lodash'
 import { PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
@@ -77,7 +83,6 @@ export default class BillingResolver {
   ): Promise<BillingListPaginationPayload> {
     try {
       const { sort = undefined, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
-      // Aggregrated
       const aggregate = BillingModel.aggregate(BILLING_CYCLE_LIST(data, sort))
       const _billings = (await BillingModel.aggregatePaginate(aggregate, reformSorts)) as BillingListPaginationPayload
       if (!_billings) {
@@ -97,35 +102,50 @@ export default class BillingResolver {
     @Arg('type', () => EPaymentMethod) type: EPaymentMethod,
     @Arg('customerId', { nullable: true }) customerId: string,
   ): Promise<TotalBillingRecordPayload[]> {
-    const user = customerId ? { user: customerId } : {}
-    const all = await BillingModel.countDocuments({ paymentMethod: type, ...user })
-    const pending = await BillingModel.countDocuments({ paymentMethod: type, status: EBillingStatus.PENDING, ...user })
-    const verify = await BillingModel.countDocuments({ paymentMethod: type, status: EBillingStatus.VERIFY, ...user })
-    const cancelled = await BillingModel.countDocuments({
-      paymentMethod: type,
-      status: EBillingStatus.CANCELLED,
-      ...user,
-    })
-    const complete = await BillingModel.countDocuments({
-      paymentMethod: type,
-      status: EBillingStatus.COMPLETE,
-      ...user,
+    // 1. เรียกใช้ Aggregation Pipeline
+    const pipeline = AGGREGATE_BILLING_STATUS_COUNT(type, customerId)
+    const results: { key: string; count: number }[] = await BillingModel.aggregate(pipeline)
+
+    const isCash = type === EPaymentMethod.CASH
+    const statusEnum = isCash ? EDisplayStatus : ECreditDisplayStatus
+    const statusLabels: { [key: string]: string } = {
+      // Cash Labels
+      AWAITING_VERIFICATION: 'รอตรวจสอบ',
+      PAID: 'ชำระแล้ว',
+      CANCELLED: 'ยกเลิกงาน',
+      REFUNDED: 'คืนเงินแล้ว',
+      BILLED: 'ออกใบเสร็จ',
+      WHT_RECEIVED: 'ได้รับหัก ณ ที่จ่าย',
+      // Credit Labels
+      IN_CYCLE: 'อยู่ในรอบชำระ',
+      OVERDUE: 'ค้างชำระ',
+    }
+    // 3. สร้าง Map ของผลลัพธ์ที่ได้จาก Aggregation
+    const resultMap = new Map(results.map((item) => [item.key, item.count]))
+
+    // 4. สร้าง Array ผลลัพธ์สุดท้ายโดยอิงจาก Enum เพื่อให้มีครบทุกสถานะ
+    const finalCounts = Object.values(omit(statusEnum, ['NONE'])).map((statusKey) => ({
+      key: statusKey,
+      label: statusLabels[statusKey] || statusKey,
+      count: resultMap.get(statusKey) || 0, // ถ้าไม่มีในผลลัพธ์ ให้เป็น 0
+    }))
+
+    // 5. คำนวณยอด "ทั้งหมด"
+    const totalCount = results.reduce((sum, item) => sum + item.count, 0)
+    finalCounts.unshift({
+      key: 'ALL',
+      label: 'ทั้งหมด',
+      count: totalCount,
     })
 
-    return [
-      { label: 'ทั้งหมด', key: EBillingCriteriaStatus.ALL, count: all },
-      { label: 'รอชำระ/คืนเงิน', key: EBillingCriteriaStatus.PENDING, count: pending },
-      { label: 'ตรวจสอบยอดชำระ', key: EBillingCriteriaStatus.VERIFY, count: verify },
-      { label: 'สำเร็จ', key: EBillingCriteriaStatus.COMPLETE, count: complete },
-      { label: 'ยกเลิก', key: EBillingCriteriaStatus.CANCELLED, count: cancelled },
-    ]
+    return finalCounts
   }
 
   @Query(() => [String])
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getAllBillingIds(@Arg('data', { nullable: true }) data: GetBillingInput): Promise<string[]> {
     try {
-      const billingCycles = await BillingModel.aggregate(BILLING_CYCLE_LIST(data, {}, { _id: 1 }))
+      const billingCycles = await BillingModel.aggregate(BILLING_CYCLE_LIST(data))
       const ids = map(billingCycles, ({ _id }) => _id)
       return ids
     } catch (error) {
@@ -217,7 +237,7 @@ export default class BillingResolver {
     await BillingDocumentModel.findByIdAndUpdate(
       documentId,
       {
-        receviedWHTDocumentDate: receiveDate,
+        receivedWHTDocumentDate: receiveDate,
         documentNumber: documentNumber,
         updatedBy: adminId,
       },
@@ -588,8 +608,6 @@ export default class BillingResolver {
         }
       }
 
-      // QWE
-
       // Update count admin
       console.log('[Pre Endding] approvalBillingPayment')
       await getAdminMenuNotificationCount()
@@ -789,6 +807,28 @@ export default class BillingResolver {
           }
         }
       }
+    }
+  }
+
+  @Query(() => BillingStatusPayload, { description: 'ดึงสถานะล่าสุดของ Billing จาก ID (รองรับทั้ง Cash และ Credit)' })
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN])) // หรือ Role อื่นๆ ที่เกี่ยวข้อง
+  async getBillingStatusById(@Arg('billingNumber') billingNumber: string): Promise<BillingStatusPayload> {
+    try {
+      const pipeline = GET_BILLING_STATUS_BY_BILLING_NUMBER(billingNumber)
+      const result = await BillingModel.aggregate(pipeline)
+
+      if (!result || result.length === 0) {
+        throw new GraphQLError('ไม่พบข้อมูล Billing ID ที่ระบุ')
+      }
+
+      return result[0]
+    } catch (error) {
+      console.error(`Error in getBillingStatusById for ID ${billingNumber}:`, error)
+      // ส่ง error เดิมออกไปเพื่อให้ client ทราบ
+      if (error instanceof GraphQLError) {
+        throw error
+      }
+      throw new Error('ไม่สามารถเรียกข้อมูลสถานะ Billing ได้')
     }
   }
 }

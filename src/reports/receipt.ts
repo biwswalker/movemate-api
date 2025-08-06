@@ -38,7 +38,7 @@ export async function generateReceipt(billing: Billing, receipt?: Receipt, sessi
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
   }
   const _document = _receipt.document as BillingDocument | undefined
-  const isReceiveWHTDocument = !isEmpty(_document?.receviedWHTDocumentDate)
+  const isReceiveWHTDocument = !isEmpty(_document?.receivedWHTDocumentDate)
 
   let isAdditionalPaid = false
   if (billing.paymentMethod === EPaymentMethod.CASH) {

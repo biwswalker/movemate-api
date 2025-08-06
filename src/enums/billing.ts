@@ -116,3 +116,30 @@ registerEnumType(ERefundAmountType, {
   name: 'ERefundAmountType',
   description: 'Refund Amount Type',
 })
+
+export enum EDisplayStatus {
+  AWAITING_VERIFICATION = 'AWAITING_VERIFICATION', // 'รอตรวจสอบ',
+  PAID = 'PAID', // 'ชำระแล้ว',
+  CANCELLED = 'CANCELLED', // 'ยกเลิกงาน',
+  REFUNDED = 'REFUNDED', // 'คืนเงินแล้ว',
+  BILLED = 'BILLED', // 'ออกใบเสร็จ',
+  WHT_RECEIVED = 'WHT_RECEIVED', // 'ได้รับหัก ณ ที่จ่าย',
+  NONE = 'NONE', // NONE
+}
+
+registerEnumType(EDisplayStatus, {
+  name: 'EDisplayStatus',
+  description: 'Cash Display Status',
+})
+
+export enum ECreditDisplayStatus {
+  IN_CYCLE = 'IN_CYCLE', // 'อยู่ในรอบชำระ',
+  PAID = 'PAID', // 'ชำระแล้ว',
+  WHT_RECEIVED = 'WHT_RECEIVED', // 'ได้รับหัก ณ ที่จ่าย',
+  OVERDUE = 'OVERDUE', // 'ค้างชำระ',
+}
+
+registerEnumType(ECreditDisplayStatus, {
+  name: 'ECreditDisplayStatus',
+  description: 'Credit Display Status',
+})

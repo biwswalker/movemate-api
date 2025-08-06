@@ -86,8 +86,8 @@ export function CashReceiptFooterComponent(doc: PDFDocument, receipt: Receipt) {
     })
 
   // After transfer detail
-  const receviedWHTDocumentDate = (receipt.document as BillingDocument)?.receviedWHTDocumentDate
-  if (receipt.tax > 0 && !receviedWHTDocumentDate) {
+  const receivedWHTDocumentDate = (receipt.document as BillingDocument)?.receivedWHTDocumentDate
+  if (receipt.tax > 0 && !receivedWHTDocumentDate) {
     if (receipt.remarks) {
       doc.font(FONTS.SARABUN_MEDIUM).fontSize(9).text(CONSTANTS.REMARK, marginLeft).moveDown(0.8)
       doc.font(FONTS.SARABUN_LIGHT).fontSize(7).text(receipt.remarks, marginLeft).moveDown(2)

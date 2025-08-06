@@ -49,7 +49,7 @@ export async function ReceiptFooterComponent(
   doc
     .font(FONTS.SARABUN_LIGHT)
     .fontSize(8)
-    .text(fCurrency(receipt.subTotal), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+    .text(fCurrency(receipt.subTotal, true), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
     .moveDown(1.5)
   
   if (isTaxInclude) {
@@ -60,7 +60,7 @@ export async function ReceiptFooterComponent(
     doc
       .font(FONTS.SARABUN_LIGHT)
       .fontSize(8)
-      .text(fCurrency(receipt.tax), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+      .text(fCurrency(receipt.tax, true), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
 
     doc.moveDown(2.6) //.fillColor(COLORS.TEXT_PRIMARY)
   }
@@ -81,7 +81,7 @@ export async function ReceiptFooterComponent(
     doc
       .font(FONTS.SARABUN_LIGHT)
       .fontSize(8)
-      .text(fCurrency(-_paidBefore), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+      .text(fCurrency(-_paidBefore, true), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
 
     doc.moveDown(2.6)
   }
@@ -93,7 +93,7 @@ export async function ReceiptFooterComponent(
   doc
     .font(FONTS.SARABUN_SEMI_BOLD)
     .fontSize(10)
-    .text(fCurrency(receipt.total), 400, doc.y - 12, { align: 'right', width: maxWidth - 400 })
+    .text(fCurrency(receipt.total, true), 400, doc.y - 12, { align: 'right', width: maxWidth - 400 })
   doc
     .lineCap('butt')
     .lineWidth(1)

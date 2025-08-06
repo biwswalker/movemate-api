@@ -31,7 +31,7 @@ export class BillingDocument {
 
   @Field({ nullable: true })
   @Property({ required: false })
-  receviedWHTDocumentDate: Date
+  receivedWHTDocumentDate: Date
 
   @Field({ nullable: true })
   @Property({ required: false })

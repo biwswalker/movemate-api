@@ -4,6 +4,7 @@ import { AggregatePaginateResult } from 'mongoose'
 import { EBillingCriteriaStatus, EBillingInfoStatus, EBillingState, EBillingStatus } from '@enums/billing'
 import { Billing } from '@models/finance/billing.model'
 import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
+import { EUserType } from '@enums/users'
 
 @ObjectType()
 export class BillingListPayload {
@@ -16,6 +17,12 @@ export class BillingListPayload {
   @Field(() => EBillingStatus)
   status: EBillingStatus
 
+  @Field(() => String)
+  displayStatus: string
+
+  @Field(() => String)
+  displayStatusName: string
+
   @Field(() => EBillingState)
   state: EBillingState
 
@@ -24,6 +31,9 @@ export class BillingListPayload {
 
   @Field(() => String)
   userId: string
+
+  @Field(() => EUserType)
+  userType: EUserType
 
   @Field(() => String)
   userTitle: string
@@ -107,7 +117,7 @@ export class TotalBillingRecordPayload {
   label: string
 
   @Field()
-  key: EBillingCriteriaStatus
+  key: string
 
   @Field(() => Int)
   count: number
@@ -132,4 +142,19 @@ export class BillingInfoPayload {
 
   @Field({ nullable: true })
   message?: string
+}
+
+@ObjectType({ description: 'ผลลัพธ์สถานะของ Billing หนึ่งรายการ' })
+export class BillingStatusPayload {
+  @Field(() => ID)
+  billingId: string
+
+  @Field()
+  status: string
+
+  @Field()
+  statusName: string
+
+  @Field(() => EPaymentMethod)
+  paymentMethod: EPaymentMethod
 }

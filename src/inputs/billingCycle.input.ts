@@ -1,7 +1,8 @@
 import { Field, InputType } from 'type-graphql'
 import { FileInput } from './file.input'
 import { EPaymentMethod } from '@enums/payments'
-import { EBillingCriteriaState, EBillingCriteriaStatus, EBillingState } from '@enums/billing'
+import { EBillingCriteriaState, EBillingCriteriaStatus, ECreditDisplayStatus, EDisplayStatus } from '@enums/billing'
+import { EUserCriterialType } from '@enums/users'
 
 @InputType()
 export class GetBillingInput {
@@ -20,6 +21,9 @@ export class GetBillingInput {
   @Field({ nullable: true })
   customerName?: string
 
+  @Field(() => EUserCriterialType, { nullable: true })
+  userType?: EUserCriterialType
+
   @Field(() => EPaymentMethod, { nullable: true })
   paymentMethod?: EPaymentMethod
 
@@ -37,6 +41,18 @@ export class GetBillingInput {
 
   @Field({ nullable: true })
   customerId?: string
+
+  @Field(() => [EDisplayStatus], {
+    nullable: true,
+    description: 'กรองตามสถานะ (หากไม่ระบุ จะแสดงทั้งหมด)',
+  })
+  cashStatuses?: EDisplayStatus[]
+
+  @Field(() => [ECreditDisplayStatus], {
+    nullable: true,
+    description: 'กรองตามสถานะ (หากไม่ระบุ จะแสดงทั้งหมด)',
+  })
+  creditStatuses?: ECreditDisplayStatus[]
 }
 
 @InputType()
