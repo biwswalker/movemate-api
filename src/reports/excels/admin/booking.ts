@@ -2,7 +2,6 @@ import { Workbook, Style } from 'exceljs'
 import max from 'lodash/max'
 import range from 'lodash/range'
 import get from 'lodash/get'
-import { width } from 'pdfkit/js/page'
 
 export interface BookingReport {
   bookingDate?: string
@@ -158,57 +157,92 @@ export async function generateCustomerBookingReport(
   try {
     const workbook = new Workbook()
     const worksheet = workbook.addWorksheet('Bookings')
+    const boldStyle = { font: { bold: true } }
 
-    // User Detail
-    worksheet.addRow(['Customer Name', userDetail.customerName, '', 'Email', userDetail.email])
-    worksheet.addRow(['Branch', userDetail.branch, '', 'Phone No.', userDetail.phoneNo])
-    worksheet.addRow(['Customer ID', userDetail.customerId])
-    worksheet.addRow(['Customer Type', userDetail.customerType])
+    // --- 1. เพิ่มข้อมูลสรุปลูกค้า (User Detail) ไว้ด้านบนสุด ---
+    worksheet.addRow(['Customer Name:', userDetail.customerName, '', 'Email:', userDetail.email])
+    worksheet.getRow(1).getCell(1).font = boldStyle.font
+    worksheet.getRow(1).getCell(4).font = boldStyle.font
+    worksheet.addRow(['Branch:', userDetail.branch, '', 'Phone No.:', userDetail.phoneNo])
+    worksheet.getRow(2).getCell(1).font = boldStyle.font
+    worksheet.getRow(2).getCell(4).font = boldStyle.font
+    worksheet.addRow(['Customer ID:', userDetail.customerId])
+    worksheet.getRow(3).getCell(1).font = boldStyle.font
+    worksheet.addRow(['Customer Type:', userDetail.customerType])
+    worksheet.getRow(4).getCell(1).font = boldStyle.font
     worksheet.addRow([])
 
     const maxDestination = max(data.map((dest) => (dest.deliveries || []).length))
-
     const _numberFormatStyle: Partial<Style> = { numFmt: '#,##0.00' }
-    worksheet.columns = [
-      { header: 'Booking Date/Time', key: 'bookingDate', width: 20 },
-      { header: 'Pickup Date/Time', key: 'pickupDate', width: 20 },
-      { header: 'Shipment ID', key: 'shipmentId', width: 20 },
-      { header: 'Booking By', key: 'bookingBy', width: 20 },
-      { header: 'Booking Status', key: 'bookingStatus', width: 18 },
-      { header: 'Payment Type', key: 'paymentType', width: 13 },
-      { header: 'Truck Type', key: 'truckType', width: 20 },
-      { header: 'Round-Trip (ไป-กลับ)', key: 'roundTrip', width: 17, style: { alignment: { horizontal: 'center' } } },
-      { header: 'Multi Route', key: 'multiRoute', width: 10, style: { alignment: { horizontal: 'center' } } },
-      { header: 'Distance', key: 'distance', width: 14, style: _numberFormatStyle },
-      { header: 'Pickup 1', key: 'pickup', width: 20 },
-      ...range(maxDestination).map((seq) => ({
-        header: `Delivery ${seq + 1}`,
-        key: `delivery${seq + 1}`,
-        width: 20,
-      })),
-      { header: 'Drop Point', key: 'dropPoint', width: 10 },
-      // Total
-      { header: 'Total Cost', key: 'totalSell', width: 15, style: _numberFormatStyle },
-      { header: 'Total Discount', key: 'discount', width: 15, style: _numberFormatStyle },
-      { header: 'Total Charge', key: 'total', width: 15, style: _numberFormatStyle },
+    const tableHeaderRow = worksheet.getRow(6)
+    const headers = [
+      'Booking Date/Time',
+      'Pickup Date/Time',
+      'Shipment ID',
+      'Booking By',
+      'Booking Status',
+      'Payment Type',
+      'Truck Type',
+      'Round-Trip (ไป-กลับ)',
+      'Multi Route',
+      'Distance',
+      'Pickup 1',
+      ...range(maxDestination).map((seq) => `Delivery ${seq + 1}`),
+      'Drop Point',
+      'Total Cost',
+      'Total Discount',
+      'Total Charge',
     ]
-    worksheet.getRow(1).height = 20
-    worksheet.getRow(1).font = { bold: true, size: 12 }
-    worksheet.getRow(1).alignment = { vertical: 'bottom', horizontal: 'center' }
+    tableHeaderRow.values = headers
+    tableHeaderRow.height = 20
+    tableHeaderRow.font = { bold: true, size: 12 }
+    tableHeaderRow.alignment = { vertical: 'bottom', horizontal: 'center' }
+    const columnWidths = [20, 20, 20, 20, 18, 13, 20, 17, 10, 14, 20]
+    const deliveryWidths = Array(maxDestination).fill(20)
+    const finalWidths = [10, 15, 15, 15]
+    ;[...columnWidths, ...deliveryWidths, ...finalWidths].forEach((width, index) => {
+      worksheet.getColumn(index + 1).width = width
+    })
+    worksheet.getColumn(8).alignment = { horizontal: 'center', vertical: 'middle' } // Round-Trip
+    worksheet.getColumn(9).alignment = { horizontal: 'center', vertical: 'middle' } // Multi Route
+    worksheet.getColumn(10).style = { ...worksheet.getColumn(10).style, ..._numberFormatStyle } // Distance
+    worksheet.getColumn(13 + maxDestination).style = {
+      ...worksheet.getColumn(13 + maxDestination).style,
+      ..._numberFormatStyle,
+    } // Total Cost
+    worksheet.getColumn(14 + maxDestination).style = {
+      ...worksheet.getColumn(14 + maxDestination).style,
+      ..._numberFormatStyle,
+    } // Total Discount
+    worksheet.getColumn(15 + maxDestination).style = {
+      ...worksheet.getColumn(15 + maxDestination).style,
+      ..._numberFormatStyle,
+    } // Total Charge
 
     data.forEach(({ deliveries, ...item }) => {
-      const _row = {
-        ...item,
-        ...range(maxDestination).reduce(
-          (prev, seq) => ({ ...prev, [`delivery${seq + 1}`]: get(deliveries, seq, '') }),
-          {},
-        ),
-      }
+      const _row = [
+        item.bookingDate,
+        item.pickupDate,
+        item.shipmentId,
+        item.bookingBy,
+        item.bookingStatus,
+        item.paymentType,
+        item.truckType,
+        item.roundTrip,
+        item.multiRoute,
+        item.distance,
+        item.pickup,
+        ...range(maxDestination).reduce((prev, seq) => [...prev, get(deliveries, seq, '')], []),
+        item.dropPoint,
+        item.totalSell,
+        item.discount,
+        item.total,
+      ]
       worksheet.addRow(_row)
     })
 
     worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber > 1) {
+      if (rowNumber > 6) {
         row.height = 16
         row.font = { size: 12 }
       }

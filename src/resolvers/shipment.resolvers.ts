@@ -298,7 +298,7 @@ export default class ShipmentResolver {
    * @returns
    */
   @Query(() => [String])
-  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.CUSTOMER]))
   async allshipmentIds(@Ctx() ctx: GraphQLContext, @Arg('data') filters: GetShipmentInput): Promise<string[]> {
     const user_id = ctx.req.user_id
     const user_role = ctx.req.user_role
