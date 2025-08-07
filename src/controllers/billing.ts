@@ -302,17 +302,49 @@ export async function notifyOverdueBilling() {
     state: EBillingState.OVERDUE,
   }).lean()
 
-  const today = new Date()
   await Aigle.forEach(overdueBilling, async (billing) => {
+    const today = new Date()
     const overdate = differenceInDays(startOfDay(today), startOfDay(new Date(billing.paymentDueDate)))
     await NotificationModel.sendNotification({
-      userId: billing.user.toString() as string,
+      userId: billing.user as string,
       varient: ENotificationVarient.ERROR,
       title: `บัญชีของท่านค้างชำระ`,
       message: [`ขณะนี้บัญชีของท่านค้างชำระ และเลยกำหนดชำระมา ${overdate} วัน`],
       infoLink: `/main/billing?billing_number=${billing.billingNumber}`,
       infoText: 'คลิกเพื่อดูรายละเอียด',
     })
+
+    // Add email sending logic for notifyOverdueBilling
+    const customer = await UserModel.findById(billing.user).lean()
+    if (customer) {
+      const financialEmails = get(customer, 'businessDetail.creditPayment.financialContactEmails', [])
+      const emails = uniq([customer.email, ...financialEmails]).filter((email) => !isEmpty(email))
+      const month_text = format(billing.issueDate, 'MMMM', { locale: th })
+      const year_number = toNumber(format(billing.issueDate, 'yyyy', { locale: th }))
+      const year_text = toString(year_number + 543)
+      const billing_link = `https://www.movematethailand.com/main/billing?billing_number=${billing.billingNumber}`
+      await addEmailQueue({
+        from: process.env.MAILGUN_SMTP_EMAIL,
+        to: emails,
+        subject: `[Auto Email] Movemate Thailand ใบแจ้งหนี้ค่าบริการเกินกำหนดชำระ ${billing.billingNumber}`,
+        template: 'notify_overdue',
+        context: {
+          business_name: customer.fullname,
+          month_text,
+          year_text,
+          billing_number: billing.billingNumber,
+          financial_email: 'acc@movematethailand.com', // Placeholder or dynamic from settings
+          contact_number: '02-xxx-xxxx', // Placeholder or dynamic from settings
+          movemate_link: `https://www.movematethailand.com`,
+          billing_link,
+        },
+      })
+      console.log(
+        `[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Overdue billing email sent for billing ${
+          billing.billingNumber
+        } to ${emails.join(', ')}`,
+      )
+    }
   })
 }
 

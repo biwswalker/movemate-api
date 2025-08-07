@@ -1,11 +1,11 @@
-import { BookingReport, generateBookingReport } from 'reports/excels/admin/booking'
+import { BookingReport, generateBookingReport, generateCustomerBookingReport } from 'reports/excels/admin/booking'
 import { fDate, fDateTime } from '@utils/formatTime'
 import path from 'path'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import Aigle from 'aigle'
-import lodash, { find, head, includes, last, reduce, sum, tail } from 'lodash'
+import lodash, { find, get, head, includes, last, reduce, sum, tail } from 'lodash'
 import UserModel, { User } from '@models/user.model'
-import { EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
+import { EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 import { EShipmentStatus } from '@enums/shipments'
 import { EPaymentMethod } from '@enums/payments'
 import { VehicleType } from '@models/vehicleType.model'
@@ -452,7 +452,7 @@ export async function getDebtorReport(ids: string[]) {
     `debtor-report-${generatedDate}.xlsx`,
   )
   await workbook.xlsx.writeFile(filePath)
-  
+
   return filePath
 }
 
@@ -513,6 +513,66 @@ export async function getCreditorReport(ids: string[]) {
     `creditor-report-${generatedDate}.xlsx`,
   )
   await workbook.xlsx.writeFile(filePath)
-  
+
+  return filePath
+}
+
+export async function getCustomerBookingReport(ids: string[], customerId: string) {
+  const bookings = await ShipmentModel.find({ _id: { $in: ids }, customer: customerId })
+  const customer = await UserModel.findById(customerId)
+
+  const workbookData: BookingReport[] = await Aigle.map(bookings, async (booking) => {
+    const origin = head(booking.destinations || [])
+    const destinations = tail(booking.destinations || [])
+    const vehicle = booking.vehicleId as VehicleType | undefined
+
+    const _quotation = last(booking.quotations) as Quotation
+    const _price = _quotation.price
+    const _discount = reduce(
+      _quotation.detail.discounts || [],
+      (prev, discount) => ({ cost: sum([prev.cost, discount.cost]), price: sum([prev.price, discount.price]) }),
+      { cost: 0, price: 0 },
+    )
+
+    return {
+      bookingDate: booking.createdAt ? fDate(booking.createdAt, 'dd/MM/yyyy HH:mm') : '',
+      pickupDate: booking.bookingDateTime ? fDate(booking.bookingDateTime, 'dd/MM/yyyy HH:mm') : '',
+      shipmentId: booking.trackingNumber ?? '-',
+      bookingBy: origin.contactName,
+      bookingStatus: getShipmentStatus(booking.status),
+      paymentType: getPaymentType(booking.paymentMethod),
+      truckType: vehicle.name ?? '-',
+      roundTrip: booking.isRoundedReturn ? 'Yes' : 'No',
+      multiRoute: destinations.length > 1 ? 'Yes' : 'No',
+      distance: booking.displayDistance / 1000,
+      pickup: origin.placeProvince,
+      deliveries: destinations.map((destination) => destination.placeProvince),
+      dropPoint: destinations.length,
+      // TOTAL
+      totalSell: _price.subTotal,
+      discount: _discount.price,
+      total: _price.total,
+    }
+  })
+
+  const businessBranch = get(customer, 'businessDetail.businessBranch', '')
+  const workbook = await generateCustomerBookingReport(workbookData, {
+    customerName: customer.fullname,
+    branch: businessBranch,
+    customerId: customer.userNumber,
+    customerType: customer.userType === EUserType.BUSINESS ? 'Movemate Corporate' : 'Movemate Individual',
+    email: customer.email,
+    phoneNo: customer.contactNumber,
+  })
+  const generatedDate = fDateTime(Date.now(), 'yyyyMMddHHmmss')
+  const filePath = path.join(
+    __dirname,
+    '..',
+    '..',
+    'generated/report/customer/booking',
+    `booking-report-${generatedDate}.xlsx`,
+  )
+  await workbook.xlsx.writeFile(filePath)
+
   return filePath
 }

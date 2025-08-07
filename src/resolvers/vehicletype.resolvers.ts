@@ -1,4 +1,4 @@
-import { Arg, Resolver, Mutation, UseMiddleware, Query } from 'type-graphql'
+import { Arg, Resolver, Mutation, UseMiddleware, Query, Ctx } from 'type-graphql'
 import { AuthGuard } from '@guards/auth.guards'
 import VehicleTypeModel, { VehicleType } from '@models/vehicleType.model'
 import { VehicleTypeInput } from '@inputs/vehicle-type.input'
@@ -10,6 +10,7 @@ import { GraphQLError } from 'graphql'
 import { VehicleTypeConfigureStatusPayload } from '@payloads/vehicleType.payloads'
 import { GET_VEHICLE_CONFIG } from '@pipelines/vehicletype.pipeline'
 import { EUserRole } from '@enums/users'
+import { GraphQLContext } from '@configs/graphQL.config'
 
 @Resolver(VehicleType)
 export default class VehicleTypeResolver {
@@ -67,10 +68,11 @@ export default class VehicleTypeResolver {
     }
   }
   @Query(() => [VehicleType])
-  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
-  async getVehicleTypes(): Promise<VehicleType[]> {
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN, EUserRole.CUSTOMER]))
+  async getVehicleTypes(@Ctx() ctx: GraphQLContext): Promise<VehicleType[]> {
+    const role = ctx.req.user_role
     try {
-      const vehicleTypes = await VehicleTypeModel.find()
+      const vehicleTypes = await VehicleTypeModel.find(role === EUserRole.CUSTOMER ? { isPublic: true } : {})
       if (!vehicleTypes) {
         const message = `ไม่สามารถเรียกข้อมูลประเภทรถได้`
         throw new GraphQLError(message, {

@@ -9,9 +9,10 @@ import {
   getAdminCutomerReport,
   getAdminDriverReport,
   getCreditorReport,
+  getCustomerBookingReport,
   getDebtorReport,
 } from '@controllers/report'
-import { EReportType } from '@enums/report'
+import { ECustomerReportType, EReportType } from '@enums/report'
 import { CreditorReportPayload, CreditorReportResponse } from '@payloads/report.payloads'
 import { PaginationArgs } from '@inputs/query.input'
 import { reformPaginate } from '@utils/pagination.utils'
@@ -27,6 +28,7 @@ import { Shipment } from '@models/shipment.model'
 import { EStepDefinition, EStepStatus, StepDefinition } from '@models/shipmentStepDefinition.model'
 import { Quotation } from '@models/finance/quotation.model'
 import { fDate } from '@utils/formatTime'
+import { WithTransaction } from '@middlewares/RetryTransaction'
 
 Aigle.mixin(lodash, {})
 
@@ -54,6 +56,21 @@ export default class ReportResolver {
     } else if (type === EReportType.CREDITOR) {
       const filePath = await getCreditorReport(ids)
       return `${getCurrentHost(ctx)}/report/admin/creditor/${path.basename(filePath)}`
+    }
+    return ''
+  }
+
+  @Mutation(() => String)
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
+  async getCustomerReport(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('ids', () => [String]) ids: string[],
+    @Arg('type', () => ECustomerReportType) type: ECustomerReportType,
+  ): Promise<string> {
+    const userId = ctx.req.user_id
+    if (type === ECustomerReportType.BOOKING) {
+      const filePath = await getCustomerBookingReport(ids, userId)
+      return `${getCurrentHost(ctx)}/report/customer/booking/${path.basename(filePath)}`
     }
     return ''
   }

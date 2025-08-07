@@ -120,13 +120,95 @@ export async function generateBookingReport(data: BookingReport[]): Promise<Work
     data.forEach(({ deliveries, ...item }) => {
       const _row = {
         ...item,
-        ...range(maxDestination).reduce((prev, seq) => ({ ...prev, [`delivery${seq + 1}`]: get(deliveries, seq, '') }), {}),
+        ...range(maxDestination).reduce(
+          (prev, seq) => ({ ...prev, [`delivery${seq + 1}`]: get(deliveries, seq, '') }),
+          {},
+        ),
       }
       worksheet.addRow(_row)
     })
 
     worksheet.eachRow((row, rowNumber) => {
-      if(rowNumber > 1) {
+      if (rowNumber > 1) {
+        row.height = 16
+        row.font = { size: 12 }
+      }
+    })
+
+    return workbook
+  } catch (error) {
+    console.error(error)
+    throw error
+  }
+}
+
+interface CutomerDetailBookingReport {
+  customerName: string
+  branch: string
+  customerId: string
+  customerType: string
+  email: string
+  phoneNo: string
+}
+
+export async function generateCustomerBookingReport(
+  data: BookingReport[],
+  userDetail: CutomerDetailBookingReport,
+): Promise<Workbook> {
+  try {
+    const workbook = new Workbook()
+    const worksheet = workbook.addWorksheet('Bookings')
+
+    // User Detail
+    worksheet.addRow(['Customer Name', userDetail.customerName, '', 'Email', userDetail.email])
+    worksheet.addRow(['Branch', userDetail.branch, '', 'Phone No.', userDetail.phoneNo])
+    worksheet.addRow(['Customer ID', userDetail.customerId])
+    worksheet.addRow(['Customer Type', userDetail.customerType])
+    worksheet.addRow([])
+
+    const maxDestination = max(data.map((dest) => (dest.deliveries || []).length))
+
+    const _numberFormatStyle: Partial<Style> = { numFmt: '#,##0.00' }
+    worksheet.columns = [
+      { header: 'Booking Date/Time', key: 'bookingDate', width: 20 },
+      { header: 'Pickup Date/Time', key: 'pickupDate', width: 20 },
+      { header: 'Shipment ID', key: 'shipmentId', width: 20 },
+      { header: 'Booking By', key: 'bookingBy', width: 20 },
+      { header: 'Booking Status', key: 'bookingStatus', width: 18 },
+      { header: 'Payment Type', key: 'paymentType', width: 13 },
+      { header: 'Truck Type', key: 'truckType', width: 20 },
+      { header: 'Round-Trip (ไป-กลับ)', key: 'roundTrip', width: 17, style: { alignment: { horizontal: 'center' } } },
+      { header: 'Multi Route', key: 'multiRoute', width: 10, style: { alignment: { horizontal: 'center' } } },
+      { header: 'Distance', key: 'distance', width: 14, style: _numberFormatStyle },
+      { header: 'Pickup 1', key: 'pickup', width: 20 },
+      ...range(maxDestination).map((seq) => ({
+        header: `Delivery ${seq + 1}`,
+        key: `delivery${seq + 1}`,
+        width: 20,
+      })),
+      { header: 'Drop Point', key: 'dropPoint', width: 10 },
+      // Total
+      { header: 'Total Cost', key: 'totalSell', width: 15, style: _numberFormatStyle },
+      { header: 'Total Discount', key: 'discount', width: 15, style: _numberFormatStyle },
+      { header: 'Total Charge', key: 'total', width: 15, style: _numberFormatStyle },
+    ]
+    worksheet.getRow(1).height = 20
+    worksheet.getRow(1).font = { bold: true, size: 12 }
+    worksheet.getRow(1).alignment = { vertical: 'bottom', horizontal: 'center' }
+
+    data.forEach(({ deliveries, ...item }) => {
+      const _row = {
+        ...item,
+        ...range(maxDestination).reduce(
+          (prev, seq) => ({ ...prev, [`delivery${seq + 1}`]: get(deliveries, seq, '') }),
+          {},
+        ),
+      }
+      worksheet.addRow(_row)
+    })
+
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
         row.height = 16
         row.font = { size: 12 }
       }

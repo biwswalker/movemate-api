@@ -21,11 +21,6 @@ export default async function configureCronjob() {
       console.log(`🟢 Start CronJob: ${fDateTime(new Date())} Issue credit billing process!`)
       await issueCreditBilling()
       await checkBillingStatus()
-
-      /**
-       * Overdue
-       */
-      await notifyOverdueBilling()
       console.log(`🛑 End CronJob: ${fDateTime(new Date())} Issue credit billing process!`)
     },
     { timezone: 'Asia/Bangkok' },
