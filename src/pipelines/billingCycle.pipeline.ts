@@ -447,7 +447,7 @@ export const BILLING_CYCLE_LIST = (
     ...(paymentMethod === EPaymentMethod.CREDIT && !isEmpty(creditStatuses)
       ? { displayStatus: { $in: creditStatuses } }
       : {}),
-    ...(isEmpty(displayStatus) ? { displayStatus: { $in: displayStatus } } : {}),
+    ...(!isEmpty(displayStatus) ? { displayStatus: { $in: displayStatus } } : {}),
   }
 
   const projects: PipelineStage[] = !isEmpty(project) ? [{ $project: project as any }] : optimizedProject

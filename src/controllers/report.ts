@@ -3,7 +3,7 @@ import { fDate, fDateTime } from '@utils/formatTime'
 import path from 'path'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import Aigle from 'aigle'
-import lodash, { find, get, head, includes, last, reduce, sum, tail } from 'lodash'
+import lodash, { filter, find, get, head, includes, last, reduce, sortBy, sum, tail, uniq, uniqBy } from 'lodash'
 import UserModel, { User } from '@models/user.model'
 import { EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 import { EShipmentStatus } from '@enums/shipments'
@@ -23,13 +23,14 @@ import { DebtorReport, generateDebtorReport } from 'reports/excels/admin/debtor'
 import { Payment } from '@models/finance/payment.model'
 import { Receipt } from '@models/finance/receipt.model'
 import { Invoice } from '@models/finance/invoice.model'
-import { EBillingState, EBillingStatus } from '@enums/billing'
+import { EAdjustmentNoteType, EBillingState, EBillingStatus } from '@enums/billing'
 import { BillingDocument } from '@models/finance/documents.model'
 import { differenceInDays } from 'date-fns'
 import DriverPaymentModel from '@models/driverPayment.model'
 import { CreditorReport, generateCreditorReport } from 'reports/excels/admin/creditor'
 import { Transaction } from '@models/transaction.model'
 import { EStepDefinition, EStepStatus, StepDefinition } from '@models/shipmentStepDefinition.model'
+import { BillingAdjustmentNote } from '@models/finance/billingAdjustmentNote.model'
 
 Aigle.mixin(lodash, {})
 
@@ -401,13 +402,30 @@ export async function getAdminDriverReport(ids: string[]) {
 
 export async function getDebtorReport(ids: string[]) {
   const billings = await BillingModel.find({ _id: { $in: ids } })
-
-  const workbookData: DebtorReport[] = await Aigle.map(billings, async (billing) => {
+  const _sortBilling = sortBy(billings, ['_user.fullname'])
+  const workbookData: DebtorReport[] = await Aigle.map(_sortBilling, async (billing) => {
     const _user = billing.user as User | undefined
     const _businessDetail = _user.businessDetail as BusinessCustomer | undefined
     const _invoice = billing.invoice as Invoice | undefined
     const _receipts = billing.receipts as Receipt[]
     const _payment = billing.payments as Payment[]
+    const _adjustments = billing.adjustmentNotes as BillingAdjustmentNote[]
+    const creditnote = uniqBy(
+      filter(
+        _adjustments,
+        (adjustment: BillingAdjustmentNote) => adjustment.adjustmentType === EAdjustmentNoteType.CREDIT_NOTE,
+      ),
+      'adjustmentNumber',
+    )
+    const debitnote = uniqBy(
+      filter(
+        _adjustments,
+        (adjustment: BillingAdjustmentNote) => adjustment.adjustmentType === EAdjustmentNoteType.DEBIT_NOTE,
+      ),
+      'adjustmentNumber',
+    )
+    const _lastCreditnote = last(sortBy(creditnote, 'createdAt'))
+    const _lastDebitnote = last(sortBy(debitnote, 'createdAt'))
 
     const _workingPeriod = `${fDate(billing.billingStartDate, 'dd/MM/yyyy')} - ${fDate(
       billing.billingEndDate,
@@ -430,15 +448,21 @@ export async function getDebtorReport(ids: string[]) {
       invoiceNo: _invoice?.invoiceNumber ?? '-',
       invoiceTotal: _invoice?.total || null,
       invoiceDate: fDate(_invoice?.invoiceDate, 'dd/MM/yyyy'),
-      ajustmentDecreaseNo: null,
-      ajustmentDecreaseTotal: null,
-      ajustmentDecreaseDate: null,
-      ajustmentIncreaseNo: null,
-      ajustmentIncreaseTotal: null,
-      ajustmentIncreaseDate: null,
+      ajustmentDecreaseNo: debitnote.map((note) => note.adjustmentNumber).join(', '),
+      ajustmentDecreaseTotal: _lastDebitnote.totalAmount,
+      ajustmentDecreaseDate: _lastDebitnote ? fDate(_lastDebitnote.issueDate, 'dd/MM/yyyy') : null,
+      ajustmentIncreaseNo: creditnote.map((note) => note.adjustmentNumber).join(', '),
+      ajustmentIncreaseTotal: _lastCreditnote.totalAmount,
+      ajustmentIncreaseDate: _lastCreditnote ? fDate(_lastCreditnote.issueDate, 'dd/MM/yyyy') : null,
       receiptNo: _receipts.map((receipt) => receipt.receiptNumber).join(', '),
       paymentDate: _payment.map((payment) => fDate(payment.createdAt, 'dd/MM/yyyy')).join(', '),
       receiptDate: _receipts.map((receipt) => fDate(receipt.receiptDate, 'dd/MM/yyyy')).join(', '),
+      whtNo: _receipts
+        .filter((receipt) => receipt?.document)
+        .map((receipt) => receipt.document)
+        .filter((_document) => (_document as BillingDocument).documentNumber)
+        .map((_document) => (_document as BillingDocument).documentNumber)
+        .join(', '),
     }
   })
 
