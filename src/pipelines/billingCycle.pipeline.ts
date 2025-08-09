@@ -37,6 +37,7 @@ export const BILLING_CYCLE_LIST = (
     customerId,
     cashStatuses,
     creditStatuses,
+    displayStatus,
   } = data
 
   const statusFilter = status && status !== EBillingCriteriaStatus.ALL ? [status] : []
@@ -258,7 +259,7 @@ export const BILLING_CYCLE_LIST = (
         displayStatusName: '$displayStatusInfo.name',
         statusWeight: '$displayStatusInfo.weight',
       },
-    }
+    },
   ]
 
   const optimizedProject: PipelineStage[] = [
@@ -446,6 +447,7 @@ export const BILLING_CYCLE_LIST = (
     ...(paymentMethod === EPaymentMethod.CREDIT && !isEmpty(creditStatuses)
       ? { displayStatus: { $in: creditStatuses } }
       : {}),
+    ...(isEmpty(displayStatus) ? { displayStatus: { $in: displayStatus } } : {}),
   }
 
   const projects: PipelineStage[] = !isEmpty(project) ? [{ $project: project as any }] : optimizedProject

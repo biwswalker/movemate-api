@@ -143,3 +143,20 @@ registerEnumType(ECreditDisplayStatus, {
   name: 'ECreditDisplayStatus',
   description: 'Credit Display Status',
 })
+
+export enum EGeneralBillingDisplayStatus {
+  IN_CYCLE = 'IN_CYCLE', // 'อยู่ในรอบชำระ',
+  PAID = 'PAID', // 'ชำระแล้ว',
+  WHT_RECEIVED = 'WHT_RECEIVED', // 'ได้รับหัก ณ ที่จ่าย',
+  OVERDUE = 'OVERDUE', // 'ค้างชำระ',
+  AWAITING_VERIFICATION = 'AWAITING_VERIFICATION', // 'รอตรวจสอบ',
+  CANCELLED = 'CANCELLED', // 'ยกเลิกงาน',
+  REFUNDED = 'REFUNDED', // 'คืนเงินแล้ว',
+  BILLED = 'BILLED', // 'ออกใบเสร็จ',
+  NONE = 'NONE', // NONE
+}
+
+registerEnumType(EGeneralBillingDisplayStatus, {
+  name: 'EGeneralBillingDisplayStatus',
+  description: 'General Billing Display Status',
+})
