@@ -128,158 +128,137 @@ export const BILLING_CYCLE_LIST = (
         },
       },
     },
-    ...(paymentMethod === EPaymentMethod.CASH
-      ? [
-          {
-            $addFields: {
-              // ใช้ $let เพื่อความสะอาดในการเข้าถึง shipment แรก
-              displayStatusInfo: {
-                $let: {
-                  vars: {
-                    shipment: { $arrayElemAt: ['$shipments', 0] },
-                    lastFinalReceipt: {
-                      $arrayElemAt: [
-                        {
-                          $filter: {
-                            input: '$receipts',
-                            as: 'receipt',
-                            cond: { $eq: ['$$receipt.receiptType', EReceiptType.FINAL] },
-                          },
-                        },
-                        -1, // เอาใบสุดท้าย
-                      ],
+    {
+      $addFields: {
+        displayStatusInfo: {
+          $let: {
+            vars: {
+              now: new Date(),
+              shipment: { $arrayElemAt: ['$shipments', 0] },
+              lastFinalReceipt: {
+                $arrayElemAt: [
+                  {
+                    $filter: {
+                      input: '$receipts',
+                      as: 'receipt',
+                      cond: { $eq: ['$$receipt.receiptType', EReceiptType.FINAL] },
                     },
                   },
-                  in: {
-                    $switch: {
-                      branches: [
-                        {
-                          case: {
-                            $and: [
-                              // สำหรับงานเงินสด สถานะเริ่มต้นคือ IDLE และรอ Admin ตรวจสอบ
-                              { $eq: ['$$shipment.status', EShipmentStatus.IDLE] },
-                              { $eq: ['$$shipment.adminAcceptanceStatus', EAdminAcceptanceStatus.PENDING] },
-                            ],
-                          },
-                          then: { status: EDisplayStatus.AWAITING_VERIFICATION, name: 'รอตรวจสอบ', weight: -1 }, // weight น้อยสุดเพื่อให้อยู่บนสุด
-                        },
-                        {
-                          case: { $eq: ['$$shipment.status', EShipmentStatus.CANCELLED] },
-                          then: { status: EDisplayStatus.REFUNDED, name: 'คืนเงินแล้ว', weight: 2 },
-                        },
-                        {
-                          case: { $eq: ['$$shipment.status', EShipmentStatus.REFUND] },
-                          then: { status: EDisplayStatus.CANCELLED, name: 'ยกเลิกงาน', weight: 0 },
-                        },
-                        {
-                          case: { $in: ['$$shipment.status', [EShipmentStatus.IDLE, EShipmentStatus.PROGRESSING]] },
-                          then: { status: EDisplayStatus.PAID, name: 'ชำระแล้ว', weight: 1 },
-                        },
-                        {
-                          case: { $eq: ['$$shipment.status', EShipmentStatus.DELIVERED] },
-                          then: {
-                            $cond: {
-                              if: {
-                                $and: [
-                                  { $eq: ['$user.userType', EUserType.BUSINESS] },
-                                  { $gt: ['$$lastFinalReceipt.document.receivedWHTDocumentDate', null] },
-                                  { $ne: ['$$lastFinalReceipt.document.documentNumber', null] },
-                                ],
-                              },
-                              then: { status: EDisplayStatus.WHT_RECEIVED, name: 'ได้รับหัก ณ ที่จ่าย', weight: 4 },
-                              else: { status: EDisplayStatus.BILLED, name: 'ออกใบเสร็จ', weight: 3 },
-                            },
-                          },
-                        },
-                      ],
-                      default: { status: EDisplayStatus.NONE, name: 'ไม่ระบุ', weight: 99 },
+                  -1, // เอาใบสุดท้าย
+                ],
+              },
+
+              lastFinalReceiptWithWHT: {
+                $arrayElemAt: [
+                  {
+                    $filter: {
+                      input: '$receipts',
+                      as: 'receipt',
+                      cond: {
+                        $and: [
+                          { $eq: ['$$receipt.receiptType', EReceiptType.FINAL] },
+                          { $gt: ['$$receipt.document.receviedWHTDocumentDate', null] },
+                        ],
+                      },
                     },
+                  },
+                  -1,
+                ],
+              },
+              // หาว่ามีใบเสร็จใดๆ อยู่ในระบบหรือไม่
+              hasAnyReceipt: { $gt: [{ $size: '$receipts' }, 0] },
+            },
+            in: {
+              // ตรวจสอบว่าเป็น CREDIT หรือ CASH
+              $cond: {
+                if: { $eq: ['$paymentMethod', EPaymentMethod.CREDIT] },
+                // --- Logic สำหรับ CREDIT ---
+                then: {
+                  $switch: {
+                    branches: [
+                      {
+                        case: {
+                          $and: [
+                            { $lt: ['$paymentDueDate', '$$now'] }, // เลยวันครบกำหนด
+                            { $ne: ['$status', 'COMPLETE'] }, // และยังไม่ชำระ
+                          ],
+                        },
+                        then: { status: ECreditDisplayStatus.OVERDUE, name: 'ค้างชำระ', weight: 3 },
+                      },
+                      // 2. ได้รับหัก ณ ที่จ่าย
+                      {
+                        case: { $ne: ['$$lastFinalReceiptWithWHT', null] },
+                        then: { status: ECreditDisplayStatus.WHT_RECEIVED, name: 'ได้รับหัก ณ ที่จ่าย', weight: 2 },
+                      },
+                      // 3. ชำระแล้ว (มีใบเสร็จ แต่ยังไม่ได้รับ WHT)
+                      {
+                        case: { $eq: ['$$hasAnyReceipt', true] },
+                        then: { status: ECreditDisplayStatus.PAID, name: 'ชำระแล้ว', weight: 1 },
+                      },
+                    ],
+                    // 4. อยู่ในรอบชำระ (Default)
+                    default: { status: ECreditDisplayStatus.IN_CYCLE, name: 'อยู่ในรอบชำระ', weight: 0 },
                   },
                 },
-              },
-            },
-          },
-          {
-            $addFields: {
-              displayStatus: '$displayStatusInfo.status',
-              displayStatusName: '$displayStatusInfo.name',
-              statusWeight: '$displayStatusInfo.weight',
-            },
-          },
-        ]
-      : []),
-
-    ...(paymentMethod === EPaymentMethod.CREDIT
-      ? [
-          {
-            $addFields: {
-              displayStatusInfo: {
-                $let: {
-                  vars: {
-                    now: new Date(),
-                    // กรองหาใบเสร็จ FINAL ใบสุดท้ายที่มีข้อมูล WHT
-                    lastFinalReceiptWithWHT: {
-                      $arrayElemAt: [
-                        {
-                          $filter: {
-                            input: '$receipts',
-                            as: 'receipt',
-                            cond: {
+                // --- Logic สำหรับ CASH ---
+                else: {
+                  $switch: {
+                    branches: [
+                      {
+                        case: {
+                          $and: [
+                            // สำหรับงานเงินสด สถานะเริ่มต้นคือ IDLE และรอ Admin ตรวจสอบ
+                            { $eq: ['$$shipment.status', EShipmentStatus.IDLE] },
+                            { $eq: ['$$shipment.adminAcceptanceStatus', EAdminAcceptanceStatus.PENDING] },
+                          ],
+                        },
+                        then: { status: EDisplayStatus.AWAITING_VERIFICATION, name: 'รอตรวจสอบ', weight: -1 }, // weight น้อยสุดเพื่อให้อยู่บนสุด
+                      },
+                      {
+                        case: { $eq: ['$$shipment.status', EShipmentStatus.CANCELLED] },
+                        then: { status: EDisplayStatus.REFUNDED, name: 'คืนเงินแล้ว', weight: 2 },
+                      },
+                      {
+                        case: { $eq: ['$$shipment.status', EShipmentStatus.REFUND] },
+                        then: { status: EDisplayStatus.CANCELLED, name: 'ยกเลิกงาน', weight: 1 },
+                      },
+                      {
+                        case: { $in: ['$$shipment.status', [EShipmentStatus.IDLE, EShipmentStatus.PROGRESSING]] },
+                        then: { status: EDisplayStatus.PAID, name: 'ชำระแล้ว', weight: 0 },
+                      },
+                      {
+                        case: { $eq: ['$$shipment.status', EShipmentStatus.DELIVERED] },
+                        then: {
+                          $cond: {
+                            if: {
                               $and: [
-                                { $eq: ['$$receipt.receiptType', EReceiptType.FINAL] },
-                                { $gt: ['$$receipt.document.receviedWHTDocumentDate', null] },
+                                { $eq: ['$user.userType', EUserType.BUSINESS] },
+                                { $gt: ['$$lastFinalReceipt.document.receivedWHTDocumentDate', null] },
+                                { $ne: ['$$lastFinalReceipt.document.documentNumber', null] },
                               ],
                             },
+                            then: { status: EDisplayStatus.WHT_RECEIVED, name: 'ได้รับหัก ณ ที่จ่าย', weight: 4 },
+                            else: { status: EDisplayStatus.BILLED, name: 'ออกใบเสร็จ', weight: 3 },
                           },
                         },
-                        -1,
-                      ],
-                    },
-                    // หาว่ามีใบเสร็จใดๆ อยู่ในระบบหรือไม่
-                    hasAnyReceipt: { $gt: [{ $size: '$receipts' }, 0] },
-                  },
-                  in: {
-                    $switch: {
-                      branches: [
-                        // --- Logic การพิจารณาสถานะตามลำดับความสำคัญ ---
-                        // 1. ค้างชำระ (สำคัญสูงสุด)
-                        {
-                          case: {
-                            $and: [
-                              { $lt: ['$paymentDueDate', '$$now'] }, // เลยวันครบกำหนด
-                              { $ne: ['$status', 'COMPLETE'] }, // และยังไม่ชำระ
-                            ],
-                          },
-                          then: { status: ECreditDisplayStatus.OVERDUE, name: 'ค้างชำระ', weight: 3 },
-                        },
-                        // 2. ได้รับหัก ณ ที่จ่าย
-                        {
-                          case: { $ne: ['$$lastFinalReceiptWithWHT', null] },
-                          then: { status: ECreditDisplayStatus.WHT_RECEIVED, name: 'ได้รับหัก ณ ที่จ่าย', weight: 2 },
-                        },
-                        // 3. ชำระแล้ว (มีใบเสร็จ แต่ยังไม่ได้รับ WHT)
-                        {
-                          case: { $eq: ['$$hasAnyReceipt', true] },
-                          then: { status: ECreditDisplayStatus.PAID, name: 'ชำระแล้ว', weight: 1 },
-                        },
-                      ],
-                      // 4. อยู่ในรอบชำระ (Default)
-                      default: { status: ECreditDisplayStatus.IN_CYCLE, name: 'อยู่ในรอบชำระ', weight: 0 },
-                    },
+                      },
+                    ],
+                    default: { status: EDisplayStatus.NONE, name: 'ไม่ระบุ', weight: 99 },
                   },
                 },
               },
             },
           },
-          {
-            $addFields: {
-              displayStatus: '$displayStatusInfo.status',
-              displayStatusName: '$displayStatusInfo.name',
-              statusWeight: '$displayStatusInfo.weight',
-            },
-          },
-        ]
-      : []),
+        },
+      },
+    },
+    {
+      $addFields: {
+        displayStatus: '$displayStatusInfo.status',
+        displayStatusName: '$displayStatusInfo.name',
+        statusWeight: '$displayStatusInfo.weight',
+      },
+    }
   ]
 
   const optimizedProject: PipelineStage[] = [

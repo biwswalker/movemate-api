@@ -99,15 +99,18 @@ export default class BillingResolver {
   @Query(() => [TotalBillingRecordPayload])
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getBillingStatusCount(
-    @Arg('type', () => EPaymentMethod) type: EPaymentMethod,
+    @Arg('type', () => EPaymentMethod, { nullable: true }) type: EPaymentMethod,
     @Arg('customerId', { nullable: true }) customerId: string,
   ): Promise<TotalBillingRecordPayload[]> {
     // 1. เรียกใช้ Aggregation Pipeline
     const pipeline = AGGREGATE_BILLING_STATUS_COUNT(type, customerId)
     const results: { key: string; count: number }[] = await BillingModel.aggregate(pipeline)
 
-    const isCash = type === EPaymentMethod.CASH
-    const statusEnum = isCash ? EDisplayStatus : ECreditDisplayStatus
+    const statusEnum = type
+      ? type === EPaymentMethod.CASH
+        ? Object.values(EDisplayStatus)
+        : Object.values(ECreditDisplayStatus)
+      : uniq([...Object.values(ECreditDisplayStatus), ...Object.values(EDisplayStatus)])
     const statusLabels: { [key: string]: string } = {
       // Cash Labels
       AWAITING_VERIFICATION: 'รอตรวจสอบ',
@@ -120,6 +123,8 @@ export default class BillingResolver {
       IN_CYCLE: 'อยู่ในรอบชำระ',
       OVERDUE: 'ค้างชำระ',
     }
+
+    console.log('statusEnum:: ', statusEnum)
     // 3. สร้าง Map ของผลลัพธ์ที่ได้จาก Aggregation
     const resultMap = new Map(results.map((item) => [item.key, item.count]))
 
@@ -136,7 +141,7 @@ export default class BillingResolver {
       key: 'ALL',
       label: 'ทั้งหมด',
       count: totalCount,
-    })
+    } as any)
 
     return finalCounts
   }
