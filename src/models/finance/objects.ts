@@ -113,7 +113,7 @@ export class QuotationEditorDetail {
   services?: PriceEditorItem[]
 
   @Field(() => PriceEditorItem, { nullable: true })
-  discounts?: PriceEditorItem
+  discount?: PriceEditorItem
 
   @Field(() => PriceEditorItem, { nullable: true })
   taxs?: PriceEditorItem

@@ -24,8 +24,8 @@ import { EUserRole } from '@enums/users'
 import { CalculationInput, UpdateShipmentInput } from '@inputs/booking.input'
 import RetryTransactionMiddleware, { WithTransaction } from '@middlewares/RetryTransaction'
 import { createShipment, updateShipment } from '@controllers/shipment'
-import { calculateQuotation, calculateStep } from '@controllers/quotation'
-import { CalculateQuotationResultPayload } from '@payloads/quotation.payloads'
+import { calculateExistingQuotation, calculateQuotation, calculateStep } from '@controllers/quotation'
+import { CalculateQuotationResultPayload, EditQuotationResultPayload } from '@payloads/quotation.payloads'
 import { shipmentNotify } from '@controllers/shipmentNotification'
 import { VALUES } from 'constants/values'
 import { ShipmentAdditionalServicePrice } from '@models/shipmentAdditionalServicePrice.model'
@@ -154,12 +154,23 @@ export default class ShipmentResolver {
     return shipmentResponse
   }
 
+  @Mutation(() => EditQuotationResultPayload)
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async calculateExistingShipment(@Arg('data') data: CalculationInput): Promise<EditQuotationResultPayload> {
+    try {
+      const pricing = await calculateExistingQuotation(data)
+      return pricing
+    } catch (error) {
+      throw error
+    }
+  }
+  
   @Mutation(() => CalculateQuotationResultPayload)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
-  async calculateExistingShipment(@Arg('data') data: CalculationInput): Promise<CalculateQuotationResultPayload> {
+  async calculateShipment(@Arg('data') data: CalculationInput): Promise<CalculateQuotationResultPayload> {
     try {
-      const pricing = await calculateQuotation(data, '')
-      return pricing
+      const _quotation = await calculateQuotation(data, '')
+      return _quotation
     } catch (error) {
       throw error
     }

@@ -15,6 +15,26 @@ export class CalculateQuotationResultPayload {
   @Field(() => Price)
   cost: Price
 
+  @Field(() => Float)  
+  displayDistance: number
+
+  @Field(() => Float)
+  displayTime: number
+
+  @Field(() => Float)
+  returnDistance: number
+
+  @Field(() => Float)
+  distance: number
+
+  routes: google.maps.DirectionsResult
+}
+
+@ObjectType()
+export class EditQuotationResultPayload {
+  @Field(() => QuotationEditorDetail)
+  quotation: Partial<QuotationEditorDetail>
+
   @Field(() => Float)
   displayDistance: number
 
@@ -26,6 +46,12 @@ export class CalculateQuotationResultPayload {
 
   @Field(() => Float)
   distance: number
+
+  @Field(() => Price)
+  price: Price
+
+  @Field(() => Price)
+  cost: Price
 
   routes: google.maps.DirectionsResult
 }

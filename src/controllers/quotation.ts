@@ -1,5 +1,5 @@
 import { EPaymentMethod, EPaymentStatus } from '@enums/payments'
-import { CalculationInput, UpdateShipmentInput } from '@inputs/booking.input'
+import { CalculationInput, PriceEditorItemInput, UpdateShipmentInput } from '@inputs/booking.input'
 import AdditionalServiceCostPricingModel, {
   AdditionalServiceCostPricing,
 } from '@models/additionalServiceCostPricing.model'
@@ -13,18 +13,17 @@ import { VehicleType } from '@models/vehicleType.model'
 import { CalculationResultPayload } from '@payloads/pricing.payloads'
 import { getRoute } from '@services/maps/location'
 import { GraphQLError } from 'graphql'
-import { find, forEach, get, head, last, min, omit, random, reduce, sortBy, sum, tail } from 'lodash'
+import { find, forEach, get, head, includes, last, map, random, reduce, sortBy, sum, sumBy, tail } from 'lodash'
 import ceil from 'lodash/ceil'
 import { getAdditionalServicePrice } from './servicces'
 import Aigle from 'aigle'
-import { EPrivilegeDiscountUnit } from '@enums/privilege'
 import PrivilegeModel from '@models/privilege.model'
 import { EUserType } from '@enums/users'
-import UserModel from '@models/user.model'
+import UserModel, { User } from '@models/user.model'
 import { fNumber } from '@utils/formatNumber'
-import { Price, PriceItem, QuotationDetail, QuotationEditorDetail } from '@models/finance/objects'
+import { Price, PriceEditorItem, PriceItem, QuotationDetail, QuotationEditorDetail } from '@models/finance/objects'
 import { ClientSession } from 'mongoose'
-import { CalculateQuotationResultPayload } from '@payloads/quotation.payloads'
+import { CalculateQuotationResultPayload, EditQuotationResultPayload } from '@payloads/quotation.payloads'
 import { VALUES } from 'constants/values'
 import { EPriceItemType } from '@enums/billing'
 
@@ -330,7 +329,7 @@ export async function calculateQuotation(
         : []),
       ...additionalServicesPricing.map((service) => ({ ...service, type: EPriceItemType.SERVICES })),
     ],
-    discounts: discountId
+    discount: discountId
       ? {
           label: discountName,
           cost: 0,
@@ -371,30 +370,13 @@ export async function calculateQuotation(
 export async function calculateExistingQuotation(
   data: UpdateShipmentInput,
   session?: ClientSession,
-): Promise<{
-  quotation: Partial<Quotation>
-  displayDistance: number
-  displayTime: number
-  returnDistance: number
-  distance: number
-  routes: google.maps.DirectionsResult
-}> {
-  const { isRounded, locations, vehicleTypeId, shipmentId, quotation } = data
+): Promise<EditQuotationResultPayload> {
+  const { isRounded, locations, vehicleTypeId, shipmentId, discountId, serviceIds, quotation } = data
 
-  const {
-    shipping,
-    rounded,
-    services,
-    discounts,
-    taxs,
-    // Float
-    subTotal,
-    subTotalCost,
-    taxCost,
-    totalCost,
-    tax,
-    total,
-  } = quotation
+  const shipping: PriceEditorItemInput | undefined = quotation?.shipping
+  const rounded: PriceEditorItemInput | undefined = quotation?.rounded
+  const taxs: PriceEditorItemInput | undefined = quotation?.taxs
+  const services: PriceEditorItemInput[] = quotation?.services
 
   const shipment = await ShipmentModel.findById(shipmentId).session(session)
 
@@ -442,13 +424,90 @@ export async function calculateExistingQuotation(
   const latestTotalPrice = get(latestQuotation, 'price', undefined) as Price | undefined
   const latestTotalCost = get(latestQuotation, 'cost', undefined) as Price | undefined
 
+  /**
+   * Additional Service Cost Pricng
+   */
+  const additionalServicesPricing = await Aigle.map<string, PriceEditorItem>(serviceIds, async (serviceId) => {
+    const changedService = find(services, ['refId', serviceId])
+    if (changedService) {
+      return changedService
+    }
+    const service = find(shipment?.additionalServices || [], ['reference._id', serviceId]) as
+      | ShipmentAdditionalServicePrice
+      | undefined
+    if (service) {
+      const label = get(service, 'reference.additionalService.name', '')
+      return {
+        label: label === 'POD' ? `บริการคืนใบส่งสินค้า (POD)` : label,
+        cost: service.cost,
+        price: service.price,
+        refId: serviceId,
+        type: EPriceItemType.SERVICES,
+      }
+    } else {
+      const newService = await AdditionalServiceCostPricingModel.findById(serviceId) //.session(session)
+      if (newService) {
+        const label = get(newService.additionalService, 'name', '')
+        return {
+          label: label === 'POD' ? `บริการคืนใบส่งสินค้า (POD)` : label,
+          cost: newService.cost,
+          price: newService.price,
+          refId: newService._id,
+          type: EPriceItemType.SERVICES,
+        }
+      } else {
+        return {
+          label: '',
+          cost: 0,
+          price: 0,
+          type: EPriceItemType.SERVICES,
+        }
+      }
+    }
+  })
+
+  /**
+   * New Calculate before discount calculate
+   */
+  const newPreDiscountCost = sum([shipping.cost, rounded?.cost || 0, sumBy(additionalServicesPricing, 'cost') || 0])
+  const newPreDiscountPrice = sum([shipping.price, rounded?.price || 0, sumBy(additionalServicesPricing, 'price') || 0])
+
+  /**
+   * New Discount
+   */
+  let newDiscountTotal: number | null = null
+  let newDiscountName = ''
+  if (discountId) {
+    const { discountName, totalDiscount } = await PrivilegeModel.calculateDiscount(discountId, newPreDiscountPrice)
+    newDiscountTotal = totalDiscount
+    newDiscountName = discountName
+  }
+
+  const newSubTotal = sum([newPreDiscountPrice, -newDiscountTotal])
+
+  const _user = shipment.customer as User
+
+  /**
+   * New Tax
+   */
+  const isBusinessUser = _user.userType === EUserType.BUSINESS
+  let newTaxTotal: number = 0
+  const newTaxCost: number = newPreDiscountCost * 0.01
+  if (isBusinessUser) {
+    const _tax = newSubTotal * 0.01
+    newTaxTotal = _tax
+  }
+
+  const newTotal = sum([newSubTotal, -newTaxTotal])
+  const newTotalCost = sum([newPreDiscountCost, -newTaxCost])
+
   const actureCostToPay = sum([
-    totalCost,
+    newTotalCost,
     -(latestTotalCost?.total || 0),
     _isPaymentComplete ? 0 : latestTotalCost?.acturePrice || 0,
   ])
   const acturePriceToPay = sum([
-    total,
+    newTotal,
     -(latestTotalPrice?.total || 0),
     _isPaymentComplete ? 0 : latestTotalPrice?.acturePrice || 0,
   ])
@@ -458,38 +517,46 @@ export async function calculateExistingQuotation(
     droppoint: 0, // Can not get where comform
     rounded: rounded?.price || 0,
     roundedPercent: latestTotalPrice?.roundedPercent,
-    subTotal: subTotal,
-    tax: tax,
-    total: total,
+    subTotal: newSubTotal,
+    tax: newTaxTotal,
+    total: newTotal,
   }
   const _cost: Price = {
     acturePrice: actureCostToPay,
     droppoint: 0, // Can not get where comform
-    rounded: rounded?.cost,
+    rounded: rounded?.cost || 0,
     roundedPercent: latestTotalCost?.roundedPercent,
-    subTotal: subTotalCost,
-    tax: taxCost,
-    total: totalCost,
+    subTotal: newPreDiscountCost,
+    tax: newTaxCost,
+    total: newTotalCost,
   }
 
-  const _quotation: Partial<Quotation> = {
-    cost: _cost,
-    price: _price,
-    detail: {
-      shippingPrices: [
-        { label: shipping.label, cost: shipping.cost, price: shipping.price },
-        ...(rounded ? [{ label: rounded.label, cost: rounded.cost, price: rounded.price }] : []),
-      ],
-      additionalServices: services.map((service) => omit(service, ['refId', 'type'])),
-      discounts: discounts ? [{ label: discounts.label, cost: discounts.cost, price: discounts.price }] : [],
-      taxs: taxs ? [{ label: taxs.label, cost: taxs.cost, price: taxs.price }] : [],
-      subTotal,
-      tax,
-      total,
+  const _quotation: Partial<QuotationEditorDetail> = {
+    shipping: {
+      label: shipping.label,
+      cost: shipping.cost,
+      price: shipping.price,
+      type: EPriceItemType.SHIPPING,
     },
-    subTotal,
-    tax,
-    total,
+    rounded: rounded
+      ? {
+          label: rounded.label,
+          cost: rounded.cost,
+          price: rounded.price,
+          type: EPriceItemType.RETURN,
+        }
+      : null,
+    services: additionalServicesPricing,
+    discount: newDiscountTotal
+      ? { label: newDiscountName, cost: 0, price: newDiscountTotal, type: EPriceItemType.DISCOUNT }
+      : null,
+    taxs: taxs ? { label: taxs.label, cost: newTaxCost, price: newTaxTotal, type: EPriceItemType.TAX } : null,
+    subTotal: _price.subTotal,
+    tax: _price.tax,
+    total: _price.total,
+    subTotalCost: _cost.subTotal,
+    taxCost: _cost.tax,
+    totalCost: _cost.total,
   }
 
   return {
@@ -499,6 +566,8 @@ export async function calculateExistingQuotation(
     returnDistance: returnDistanceMeter,
     distance: distanceMeter,
     routes: computeRoutes,
+    price: _price,
+    cost: _cost,
   }
 }
 

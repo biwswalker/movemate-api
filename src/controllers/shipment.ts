@@ -13,6 +13,7 @@ import lodash, {
   isEqual,
   last,
   map,
+  pick,
   range,
   reduce,
   sortBy,
@@ -184,6 +185,7 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
         throw new GraphQLError('คุณได้ใช้โค้ดส่วนลดนี้ครบจำนวนครั้งที่กำหนดแล้ว')
       }
     }
+    _discountId = privilege._id
     await PrivilegeModel.findByIdAndUpdate(privilege._id, { $push: { usedUser: customerId } }, { session })
   }
 
@@ -417,9 +419,20 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
   const _newQuotation = new QuotationModel({
     quotationNumber: _quotationNumber,
     quotationDate: today,
-    price: _newQuotationData.price,
-    cost: _newQuotationData.cost,
-    detail: _newQuotationData.detail,
+    price: _calculated.price,
+    cost: _calculated.cost,
+    detail: {
+      shippingPrices: [
+        pick(_newQuotationData.shipping, ['label', 'price', 'cost']),
+        ...(_newQuotationData.rounded ? [pick(_newQuotationData.rounded, ['label', 'price', 'cost'])] : []),
+      ],
+      additionalServices: map(_newQuotationData.services, (_services) => pick(_services, ['label', 'price', 'cost'])),
+      discounts: _newQuotationData.discount ? [pick(_newQuotationData.discount, ['label', 'price', 'cost'])] : [],
+      taxs: _newQuotationData.taxs ? [pick(_newQuotationData.taxs, ['label', 'price', 'cost'])] : [],
+      subTotal: _newQuotationData.subTotal,
+      tax: _newQuotationData.tax,
+      total: _newQuotationData.total,
+    },
     subTotal: _newQuotationData.subTotal,
     tax: _newQuotationData.tax,
     total: _newQuotationData.total,
@@ -431,7 +444,7 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
   // ====================================================================
   // --- 3. จัดการ Logic การเงินตามประเภทการชำระเงิน (สำคัญที่สุด) ---
   // ====================================================================
-  const _price = _newQuotationData.price
+  const _price = _calculated.price
   const _priceDifference = _price.acturePrice
   const _tax = _price.tax > 0 ? _priceDifference * (1 / (100 - 1)) : 0
   const _newSubTotal = _priceDifference + _tax
