@@ -44,6 +44,7 @@ import DashboardResolver from '@resolvers/dashboard.resolvers'
 import ReportResolver from '@resolvers/report.resolvers'
 import AuditLogResolver from '@resolvers/auditLog.resolvers'
 import ControllResolver from '@resolvers/controll.resolvers'
+import CustomerResolver from '@resolvers/customer.resolvers'
 import ControllSubscription from '@subscriptions/controll.subscriptions'
 import ShipmentSubscription from '@subscriptions/shipment.subscriptions'
 
@@ -101,6 +102,7 @@ export async function createGraphQLServer(httpServer: http.Server) {
       ReportResolver,
       AuditLogResolver,
       ControllResolver,
+      CustomerResolver,
       /**
        * Subscriptions
        */

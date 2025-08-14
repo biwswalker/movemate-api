@@ -1,6 +1,15 @@
 import { ArgsType, Field, InputType, Int } from 'type-graphql'
 import { RegisterBusinessInput, RegisterIndividualInput } from './customer.input'
-import { ERegistration, EUpdateUserStatus, EUserCriterialStatus, EUserCriterialType, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
+import {
+  ERegistration,
+  EUpdateUserStatus,
+  EUserCriterialStatus,
+  EUserCriterialType,
+  EUserRole,
+  EUserStatus,
+  EUserType,
+  EUserValidationStatus,
+} from '@enums/users'
 
 @InputType()
 export class RegisterInput {
@@ -86,6 +95,7 @@ export class UpdateBusinessDetailInput {
   isAcceptEDocuments: boolean
 }
 
+@InputType()
 @ArgsType()
 export class GetUserArgs {
   @Field({ nullable: true })
@@ -146,6 +156,12 @@ export class GetUserArgs {
 
   @Field(() => String, { nullable: true })
   parentId?: string
+
+  @Field(() => Boolean, {
+    nullable: true,
+    description: 'หากเป็น true และ userType=BUSINESS, จะค้นหาลูกค้ารออัปเกรดแทน',
+  })
+  isUpgradeRequest?: boolean
 }
 
 @ArgsType()
@@ -164,7 +180,7 @@ export class GetUserPendingArgs {
 
   @Field({ nullable: true })
   phoneNumber: string
-  
+
   @Field({ nullable: true })
   taxId: string
 
@@ -182,7 +198,7 @@ export class GetUserPendingArgs {
 
   @Field(() => Date, { nullable: true })
   requestStart: Date
-  
+
   @Field(() => Date, { nullable: true })
   requestEnd: Date
 }
