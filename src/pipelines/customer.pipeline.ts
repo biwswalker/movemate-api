@@ -155,7 +155,24 @@ export const GET_USER_LIST = (filters: GetUserArgs, sort = {}): PipelineStage[] 
       },
     },
     { $unwind: { path: '$businessDetail', preserveNullAndEmptyArrays: true } },
-    { $lookup: { from: 'driverdetails', localField: 'driverDetail', foreignField: '_id', as: 'driverDetail' } },
+    {
+      $lookup: {
+        from: 'driverdetails',
+        localField: 'driverDetail',
+        foreignField: '_id',
+        as: 'driverDetail',
+        pipeline: [
+          {
+            $lookup: {
+              from: 'vehicletypes',
+              localField: 'serviceVehicleTypes',
+              foreignField: '_id',
+              as: 'serviceVehicleTypesInfo',
+            },
+          },
+        ],
+      },
+    },
     { $unwind: { path: '$driverDetail', preserveNullAndEmptyArrays: true } },
     {
       $lookup: {
@@ -186,6 +203,43 @@ export const GET_USER_LIST = (filters: GetUserArgs, sort = {}): PipelineStage[] 
       },
     },
     { $unwind: { path: '$upgradeRequest', preserveNullAndEmptyArrays: true } },
+    { $lookup: { from: 'files', localField: 'profileImage', foreignField: '_id', as: 'profileImageInfo' } },
+    { $unwind: { path: '$profileImageInfo', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'users',
+        let: { parentIds: { $ifNull: ['$parents', []] } },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                // แปลง string ID ใน $$parentIds เป็น ObjectId เพื่อเปรียบเทียบ
+                $in: [{ $toString: '$_id' }, '$$parentIds'],
+              },
+            },
+          },
+          // Join business detail ของ parent แต่ละคน
+          {
+            $lookup: {
+              from: 'driverdetails',
+              localField: 'driverDetail',
+              foreignField: '_id',
+              as: 'driverDetail',
+            },
+          },
+          {
+            $unwind: '$driverDetail',
+          },
+          {
+            $project: {
+              _id: 0,
+              businessName: '$driverDetail.businessName',
+            },
+          },
+        ],
+        as: 'parentDetails',
+      },
+    },
 
     // --- 4. $match ขั้นที่สอง (กรอง field ที่อยู่ใน Detail) ---
     ...(filters.name ? [{ $match: buildNameMatch(filters.name) }] : []),
@@ -253,11 +307,17 @@ export const GET_USER_LIST = (filters: GetUserArgs, sort = {}): PipelineStage[] 
             else: {
               $switch: {
                 branches: [
-                  { case: { $eq: ['$userType', EUserType.BUSINESS] }, then: '$businessDetail.businessName' },
                   {
                     case: { $eq: ['$userRole', EUserRole.DRIVER] },
-                    then: { $concat: ['$driverDetail.firstname', ' ', '$driverDetail.lastname'] },
+                    then: {
+                      $cond: {
+                        if: { $eq: ['$userType', EUserType.BUSINESS] },
+                        then: '$driverDetail.businessName',
+                        else: { $concat: ['$driverDetail.firstname', ' ', '$driverDetail.lastname'] },
+                      },
+                    },
                   },
+                  { case: { $eq: ['$userType', EUserType.BUSINESS] }, then: '$businessDetail.businessName' },
                 ],
                 default: { $concat: ['$individualDetail.firstname', ' ', '$individualDetail.lastname'] },
               },
@@ -285,6 +345,29 @@ export const GET_USER_LIST = (filters: GetUserArgs, sort = {}): PipelineStage[] 
               { case: { $eq: ['$validationStatus', EUserValidationStatus.DENIED] }, then: 3 },
             ],
             default: 99,
+          },
+        },
+        lineId: '$driverDetail.lineId',
+        driverType: '$driverDetail.driverType',
+        licensePlateProvince: '$driverDetail.licensePlateProvince',
+        licensePlateNumber: '$driverDetail.licensePlateNumber',
+        profileImageName: '$profileImageInfo.filename',
+        serviceVehicleTypeName: {
+          $reduce: {
+            input: '$driverDetail.serviceVehicleTypesInfo.name',
+            initialValue: '',
+            in: {
+              $concat: ['$$value', { $cond: [{ $eq: ['$$value', ''] }, '', ', '] }, '$$this'],
+            },
+          },
+        },
+        parents: {
+          $reduce: {
+            input: '$parentDetails.businessName',
+            initialValue: '',
+            in: {
+              $concat: ['$$value', { $cond: [{ $eq: ['$$value', ''] }, '', ', '] }, '$$this'],
+            },
           },
         },
       },
@@ -329,6 +412,13 @@ export const GET_USER_LIST = (filters: GetUserArgs, sort = {}): PipelineStage[] 
         },
         creditLimit: '$businessDetail.creditPayment.creditLimit',
         creditUsage: '$businessDetail.creditPayment.creditUsage',
+        lineId: 1,
+        serviceVehicleTypeName: 1,
+        driverType: 1,
+        profileImageName: 1,
+        licensePlateProvince: 1,
+        licensePlateNumber: 1,
+        parents: 1,
       },
     },
     {

@@ -1,5 +1,5 @@
 import { EPaymentMethod } from '@enums/payments'
-import { EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
+import { EDriverType, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 import { Field, Float, ID, ObjectType } from 'type-graphql'
 import { PaginationPayload } from './pagination.payloads'
 import { PaginateResult } from 'mongoose'
@@ -56,6 +56,27 @@ export class CustomerDetailPayload {
 
   @Field({ nullable: true, description: 'createdAt' })
   createdAt?: string
+
+  @Field({ nullable: true, description: 'lineId' })
+  lineId?: string
+
+  @Field({ nullable: true, description: 'serviceVehicleTypeName' })
+  serviceVehicleTypeName?: string
+
+  @Field(() => [EDriverType], { nullable: true, description: 'driverType' })
+  driverType?: EDriverType[]
+
+  @Field({ nullable: true, description: 'profileImageName' })
+  profileImageName?: string
+
+  @Field({ nullable: true, description: 'licensePlateProvince' })
+  licensePlateProvince?: string
+
+  @Field({ nullable: true, description: 'licensePlateNumber' })
+  licensePlateNumber?: string
+
+  @Field({ nullable: true, description: 'parents' })
+  parents?: string
 }
 
 @ObjectType()
