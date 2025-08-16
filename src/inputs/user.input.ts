@@ -164,8 +164,8 @@ export class GetUserArgs {
   isUpgradeRequest?: boolean
 }
 
-@ArgsType()
-export class GetUserPendingArgs {
+@InputType()
+export class GetUserPendingListInput {
   @Field({ nullable: true })
   userId: string
 

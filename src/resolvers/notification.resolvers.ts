@@ -36,7 +36,7 @@ import { TRANSACTION_DRIVER_LIST } from '@pipelines/transaction.pipeline'
 import { EBillingStatus } from '@enums/billing'
 import BillingModel from '@models/finance/billing.model'
 import UserPendingModel from '@models/userPending.model'
-import { GET_PENDING_USERS } from '@pipelines/userPending.pipeline'
+import { GET_PEDNING_USER_LIST } from '@pipelines/userPending.pipeline'
 import { ClientSession } from 'mongoose'
 
 export async function getAdminMenuNotificationCount(session?: ClientSession): Promise<AdminNotificationCountPayload> {
@@ -78,7 +78,7 @@ export async function getAdminMenuNotificationCount(session?: ClientSession): Pr
   })
     .session(session)
     .catch(() => 0)
-  const _driverPendingAggregate = await GET_PENDING_USERS({
+  const _driverPendingAggregate = await GET_PEDNING_USER_LIST({
     userRole: EUserRole.DRIVER,
     status: EUpdateUserStatus.PENDING,
   })
@@ -86,7 +86,7 @@ export async function getAdminMenuNotificationCount(session?: ClientSession): Pr
     .session(session)
     .then((response) => response.length || 0)
     .catch(() => 0)
-  const _customerPendingAggregate = await GET_PENDING_USERS({
+  const _customerPendingAggregate = await GET_PEDNING_USER_LIST({
     userRole: EUserRole.CUSTOMER,
     status: EUpdateUserStatus.PENDING,
   })

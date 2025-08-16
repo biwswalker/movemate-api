@@ -56,12 +56,6 @@ export class UserPaginationAggregatePayload extends PaginationPayload implements
   docs: User[]
 }
 
-@ObjectType()
-export class UserPendingAggregatePayload extends PaginationPayload implements AggregatePaginateResult<UserPending> {
-  @Field(() => [UserPending])
-  docs: UserPending[]
-}
-
 
 @InputType()
 export class AdminDetailInput {

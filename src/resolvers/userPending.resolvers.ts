@@ -1,10 +1,9 @@
 import { Resolver, Query, Arg, Ctx, UseMiddleware, Args, Mutation } from 'type-graphql'
 import UserModel from '@models/user.model'
-import { GetUserPendingArgs } from '@inputs/user.input'
+import { GetUserPendingListInput } from '@inputs/user.input'
 import { AuthGuard } from '@guards/auth.guards'
 import { GraphQLContext } from '@configs/graphQL.config'
-import { get, isArray, isEmpty, map, omit, reduce } from 'lodash'
-import { UserPendingAggregatePayload } from '@payloads/user.payloads'
+import { get, isEmpty, map, omit } from 'lodash'
 import { PaginateOptions } from 'mongoose'
 import { PaginationArgs } from '@inputs/query.input'
 import { GraphQLError } from 'graphql'
@@ -20,40 +19,27 @@ import { yupValidationThrow } from '@utils/error.utils'
 import { EPaymentMethod } from '@enums/payments'
 import { ECreditDataStatus, EDriverType, EUpdateUserStatus, EUserRole } from '@enums/users'
 import UserPendingModel, { UserPending } from '@models/userPending.model'
-import { GET_PENDING_USERS } from '@pipelines/userPending.pipeline'
+import { GET_PEDNING_USER_LIST } from '@pipelines/userPending.pipeline'
 import { WithTransaction } from '@middlewares/RetryTransaction'
 import NotificationModel, { ENavigationType, ENotificationVarient } from '@models/notification.model'
 import { DriverUpdateInput } from '@inputs/driver.input'
 import DriverDetailModel from '@models/driverDetail.model'
 import { BusinessDriverScema, IndividualDriverScema } from '@validations/driver.validations'
-import DriverDocumentModel, { DriverDocument } from '@models/driverDocument.model'
+import DriverDocumentModel from '@models/driverDocument.model'
+import { reformPaginate } from '@utils/pagination.utils'
+import { UserPendingAggregatePayload } from '@payloads/userPending.payloads'
 
 @Resolver(UserPending)
 export default class UserPendingResolver {
   @Query(() => UserPendingAggregatePayload)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async pendingUsers(
-    @Args() query: GetUserPendingArgs,
-    @Args() { sortField, sortAscending, ...paginationArgs }: PaginationArgs,
+    @Arg('filters', { nullable: true }) filters: GetUserPendingListInput,
+    @Args() paginate: PaginationArgs,
   ): Promise<UserPendingAggregatePayload> {
     try {
-      const { sort, ...pagination }: PaginateOptions = {
-        ...paginationArgs,
-        ...(isArray(sortField)
-          ? {
-              sort: reduce(
-                sortField,
-                function (result, value) {
-                  return { ...result, [value]: sortAscending ? 1 : -1 }
-                },
-                {},
-              ),
-            }
-          : {}),
-      }
-
-      console.log('query: ', query)
-      const _aggregate = await GET_PENDING_USERS(query, sort)
+      const { sort = undefined, ...pagination }: PaginateOptions = reformPaginate(paginate)
+      const _aggregate = GET_PEDNING_USER_LIST(filters, sort)
       const aggregate = UserPendingModel.aggregate(_aggregate)
       const users = (await UserPendingModel.aggregatePaginate(aggregate, pagination)) as UserPendingAggregatePayload
 
@@ -66,9 +52,9 @@ export default class UserPendingResolver {
 
   @Query(() => [String])
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
-  async allpendinguserIds(@Args() query: GetUserPendingArgs): Promise<string[]> {
+  async allpendinguserIds(@Arg('filters', { nullable: true }) filters: GetUserPendingListInput): Promise<string[]> {
     try {
-      const _aggregate = await GET_PENDING_USERS(query)
+      const _aggregate = GET_PEDNING_USER_LIST(filters)
       const users = await UserPendingModel.aggregate(_aggregate)
       const ids = map(users, ({ _id }) => _id)
       return ids
@@ -324,7 +310,7 @@ export default class UserPendingResolver {
 
         // Handle document files
         const driverDocumentModel = await DriverDocumentModel.findById(driverDetailModel.documents).session(session)
-        
+
         const frontOfVehicleFile = documents.frontOfVehicle ? new FileModel(documents.frontOfVehicle) : null
         if (frontOfVehicleFile) await frontOfVehicleFile.save({ session })
 
@@ -396,8 +382,11 @@ export default class UserPendingResolver {
         }
 
         let _documentsId = ''
-        if(!isEmpty(_driverDocument)) {
-          const _documents = await new DriverDocumentModel({ ...omit(driverDocumentModel.toObject(), ['_id']), ..._driverDocument }).save({ session })
+        if (!isEmpty(_driverDocument)) {
+          const _documents = await new DriverDocumentModel({
+            ...omit(driverDocumentModel.toObject(), ['_id']),
+            ..._driverDocument,
+          }).save({ session })
           _documentsId = _documents._id
         } else {
           _documentsId = driverDocumentModel._id
