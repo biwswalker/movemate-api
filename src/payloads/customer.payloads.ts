@@ -1,5 +1,5 @@
 import { EPaymentMethod } from '@enums/payments'
-import { EDriverType, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
+import { EAdminPermission, EDriverType, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 import { Field, Float, ID, ObjectType } from 'type-graphql'
 import { PaginationPayload } from './pagination.payloads'
 import { PaginateResult } from 'mongoose'
@@ -77,6 +77,9 @@ export class CustomerDetailPayload {
 
   @Field({ nullable: true, description: 'parents' })
   parents?: string
+
+  @Field(() => EAdminPermission, { nullable: true })
+  permission?: EAdminPermission
 }
 
 @ObjectType()

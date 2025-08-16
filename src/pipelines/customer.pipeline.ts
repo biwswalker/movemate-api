@@ -18,6 +18,8 @@ const buildNameMatch = (name: string) => {
       { 'individualDetail.firstname': { $regex: safeName, $options: 'i' } },
       { 'individualDetail.lastname': { $regex: safeName, $options: 'i' } },
       { 'businessDetail.businessName': { $regex: safeName, $options: 'i' } },
+      { 'adminDetail.firstname': { $regex: safeName, $options: 'i' } },
+      { 'adminDetail.lastname': { $regex: safeName, $options: 'i' } },
       // เพิ่มการค้นหาจาก fullname ของ driver ด้วย
       {
         $expr: {
@@ -79,6 +81,7 @@ export const GET_USER_LIST = (filters: GetUserArgs, sort = {}): PipelineStage[] 
       { 'individualDetail.email': { $regex: filters.email, $options: 'i' } },
       { 'businessDetail.businessEmail': { $regex: filters.email, $options: 'i' } },
       { 'upgradeRequest.businessEmail': { $regex: filters.email, $options: 'i' } },
+      { 'adminDetail.email': { $regex: filters.email, $options: 'i' } },
     ]
   }
   if (filters.phoneNumber) {
@@ -240,6 +243,8 @@ export const GET_USER_LIST = (filters: GetUserArgs, sort = {}): PipelineStage[] 
         as: 'parentDetails',
       },
     },
+    { $lookup: { from: 'admins', localField: 'adminDetail', foreignField: '_id', as: 'adminDetail' } },
+    { $unwind: { path: '$adminDetail', preserveNullAndEmptyArrays: true } },
 
     // --- 4. $match ขั้นที่สอง (กรอง field ที่อยู่ใน Detail) ---
     ...(filters.name ? [{ $match: buildNameMatch(filters.name) }] : []),
@@ -270,6 +275,10 @@ export const GET_USER_LIST = (filters: GetUserArgs, sort = {}): PipelineStage[] 
                         else: '$driverDetail.title',
                       },
                     },
+                  },
+                  {
+                    case: { $eq: ['$userRole', EUserRole.ADMIN] },
+                    then: { $ifNull: ['$adminDetail.title', ''] },
                   },
                   {
                     case: { $eq: ['$userType', EUserType.INDIVIDUAL] },
@@ -315,6 +324,16 @@ export const GET_USER_LIST = (filters: GetUserArgs, sort = {}): PipelineStage[] 
                         then: '$driverDetail.businessName',
                         else: { $concat: ['$driverDetail.firstname', ' ', '$driverDetail.lastname'] },
                       },
+                    },
+                  },
+                  {
+                    case: { $eq: ['$userRole', EUserRole.ADMIN] },
+                    then: {
+                      $concat: [
+                        { $ifNull: ['$adminDetail.firstname', ''] },
+                        ' ',
+                        { $ifNull: ['$adminDetail.lastname', ''] },
+                      ],
                     },
                   },
                   { case: { $eq: ['$userType', EUserType.BUSINESS] }, then: '$businessDetail.businessName' },
@@ -370,6 +389,13 @@ export const GET_USER_LIST = (filters: GetUserArgs, sort = {}): PipelineStage[] 
             },
           },
         },
+        permission: {
+          $cond: {
+            if: { $eq: ['$userRole', EUserRole.ADMIN] },
+            then: '$adminDetail.permission',
+            else: '$$REMOVE',
+          },
+        },
       },
     },
     // --- 6. $project เพื่อเลือกและจัดรูปแบบ field สุดท้าย ---
@@ -393,7 +419,13 @@ export const GET_USER_LIST = (filters: GetUserArgs, sort = {}): PipelineStage[] 
           $cond: {
             if: { $eq: ['$userType', EUserType.BUSINESS] },
             then: '$businessDetail.businessEmail',
-            else: '$individualDetail.email',
+            else: {
+              $cond: {
+                if: { $eq: ['$userRole', EUserRole.ADMIN] },
+                then: '$adminDetail.email',
+                else: '$individualDetail.email',
+              },
+            },
           },
         },
         contactNumber: {
@@ -419,6 +451,7 @@ export const GET_USER_LIST = (filters: GetUserArgs, sort = {}): PipelineStage[] 
         licensePlateProvince: 1,
         licensePlateNumber: 1,
         parents: 1,
+        permission: 1,
       },
     },
     {
