@@ -13,21 +13,7 @@ RUN npm run build
 
 FROM node:20-alpine
 WORKDIR /usr/src/movemate-api
-RUN mkdir uploads
-RUN mkdir generated
-RUN mkdir generated/invoice
-RUN mkdir generated/receipt
-RUN mkdir generated/whtcert
-RUN mkdir generated/adjustmentnote
-RUN mkdir generated/report
-RUN mkdir generated/report/admin
-RUN mkdir generated/report/admin/booking
-RUN mkdir generated/report/admin/customer
-RUN mkdir generated/report/admin/driver
-RUN mkdir generated/report/admin/debtor
-RUN mkdir generated/report/admin/creditor
-RUN mkdir generated/report/customer
-RUN mkdir generated/report/customer/booking
+RUN mkdir -p uploads generated/invoice generated/receipt generated/whtcert generated/adjustmentnote generated/report/admin/booking generated/report/admin/customer generated/report/admin/driver generated/report/admin/debtor generated/report/admin/creditor generated/report/customer/booking
 
 COPY package.json package-lock.json firebase-services.json ./
 COPY --from=builder /usr/src/movemate-api/node_modules /usr/src/movemate-api/node_modules
