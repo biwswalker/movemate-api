@@ -103,6 +103,7 @@ async function server() {
   const PORT = process.env.API_PORT || 5000
 
   await new Promise<void>((resolve) => httpServer.listen({ port: PORT }, resolve))
+  
   console.log(`🚀 Server ready at :`, httpServer.address())
 
   // Set timezone
