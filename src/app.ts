@@ -104,7 +104,7 @@ async function server() {
 
   await new Promise<void>((resolve) => httpServer.listen({ port: PORT }, resolve))
   
-  console.log(`🚀 Server ready at :`, httpServer.address())
+  console.log(`🚀✨ Server ready at :`, httpServer.address())
 
   // Set timezone
   configureCronjob()
