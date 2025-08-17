@@ -148,24 +148,6 @@ export const BILLING_CYCLE_LIST = (
                   -1, // เอาใบสุดท้าย
                 ],
               },
-
-              lastFinalReceiptWithWHT: {
-                $arrayElemAt: [
-                  {
-                    $filter: {
-                      input: '$receipts',
-                      as: 'receipt',
-                      cond: {
-                        $and: [
-                          { $eq: ['$$receipt.receiptType', EReceiptType.FINAL] },
-                          { $gt: ['$$receipt.document.receviedWHTDocumentDate', null] },
-                        ],
-                      },
-                    },
-                  },
-                  -1,
-                ],
-              },
               // หาว่ามีใบเสร็จใดๆ อยู่ในระบบหรือไม่
               hasAnyReceipt: { $gt: [{ $size: '$receipts' }, 0] },
             },
@@ -188,7 +170,12 @@ export const BILLING_CYCLE_LIST = (
                       },
                       // 2. ได้รับหัก ณ ที่จ่าย
                       {
-                        case: { $ne: ['$$lastFinalReceiptWithWHT', null] },
+                        case: {
+                          $and: [
+                            { $gt: ['$$lastFinalReceipt.document.receivedWHTDocumentDate', null] },
+                            { $ne: ['$$lastFinalReceipt.document.documentNumber', null] },
+                          ],
+                        },
                         then: { status: ECreditDisplayStatus.WHT_RECEIVED, name: 'ได้รับหัก ณ ที่จ่าย', weight: 2 },
                       },
                       // 3. ชำระแล้ว (มีใบเสร็จ แต่ยังไม่ได้รับ WHT)
@@ -604,24 +591,6 @@ export const GET_BILLING_STATUS_BY_BILLING_NUMBER = (billingNumber: string): Pip
                   -1, // เอาใบสุดท้าย
                 ],
               },
-
-              lastFinalReceiptWithWHT: {
-                $arrayElemAt: [
-                  {
-                    $filter: {
-                      input: '$receipts',
-                      as: 'receipt',
-                      cond: {
-                        $and: [
-                          { $eq: ['$$receipt.receiptType', EReceiptType.FINAL] },
-                          { $gt: ['$$receipt.document.receviedWHTDocumentDate', null] },
-                        ],
-                      },
-                    },
-                  },
-                  -1,
-                ],
-              },
               // หาว่ามีใบเสร็จใดๆ อยู่ในระบบหรือไม่
               hasAnyReceipt: { $gt: [{ $size: '$receipts' }, 0] },
             },
@@ -644,7 +613,12 @@ export const GET_BILLING_STATUS_BY_BILLING_NUMBER = (billingNumber: string): Pip
                       },
                       // 2. ได้รับหัก ณ ที่จ่าย
                       {
-                        case: { $ne: ['$$lastFinalReceiptWithWHT', null] },
+                        case: {
+                          $and: [
+                            { $gt: ['$$lastFinalReceipt.document.receivedWHTDocumentDate', null] },
+                            { $ne: ['$$lastFinalReceipt.document.documentNumber', null] },
+                          ],
+                        },
                         then: { status: ECreditDisplayStatus.WHT_RECEIVED, name: 'ได้รับหัก ณ ที่จ่าย', weight: 2 },
                       },
                       // 3. ชำระแล้ว (มีใบเสร็จ แต่ยังไม่ได้รับ WHT)
@@ -773,24 +747,6 @@ export const AGGREGATE_BILLING_STATUS_COUNT = (paymentMethod: EPaymentMethod, cu
                   -1, // เอาใบสุดท้าย
                 ],
               },
-
-              lastFinalReceiptWithWHT: {
-                $arrayElemAt: [
-                  {
-                    $filter: {
-                      input: '$receipts',
-                      as: 'receipt',
-                      cond: {
-                        $and: [
-                          { $eq: ['$$receipt.receiptType', EReceiptType.FINAL] },
-                          { $gt: ['$$receipt.document.receviedWHTDocumentDate', null] },
-                        ],
-                      },
-                    },
-                  },
-                  -1,
-                ],
-              },
               // หาว่ามีใบเสร็จใดๆ อยู่ในระบบหรือไม่
               hasAnyReceipt: { $gt: [{ $size: '$receipts' }, 0] },
             },
@@ -813,7 +769,12 @@ export const AGGREGATE_BILLING_STATUS_COUNT = (paymentMethod: EPaymentMethod, cu
                       },
                       // 2. ได้รับหัก ณ ที่จ่าย
                       {
-                        case: { $ne: ['$$lastFinalReceiptWithWHT', null] },
+                        case: {
+                          $and: [
+                            { $gt: ['$$lastFinalReceipt.document.receivedWHTDocumentDate', null] },
+                            { $ne: ['$$lastFinalReceipt.document.documentNumber', null] },
+                          ],
+                        },
                         then: { status: ECreditDisplayStatus.WHT_RECEIVED, name: 'ได้รับหัก ณ ที่จ่าย', weight: 2 },
                       },
                       // 3. ชำระแล้ว (มีใบเสร็จ แต่ยังไม่ได้รับ WHT)

@@ -124,7 +124,6 @@ export default class BillingResolver {
       OVERDUE: 'ค้างชำระ',
     }
 
-    console.log('statusEnum:: ', statusEnum)
     // 3. สร้าง Map ของผลลัพธ์ที่ได้จาก Aggregation
     const resultMap = new Map(results.map((item) => [item.key, item.count]))
 

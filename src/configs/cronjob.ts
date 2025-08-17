@@ -34,13 +34,13 @@ export default async function configureCronjob() {
        * Invoice
        */
       await emailIssueBillingToCustomer()
-      await notifyIssueBillingToCustomer()
 
       /**
        * Due Date
        */
       await notifyNearbyDuedate(3)
       await notifyNearbyDuedate(1)
+      await notifyNearbyDuedate(0)
       await notifyOverdueBilling()
       console.log(`🛑 End CronJob: ${fDateTime(new Date())} Billing email notification process!`)
     },

@@ -31,8 +31,8 @@ import { EAdminAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
 import RefundNoteModel from '@models/finance/refundNote.model'
 import { generateCashReceipt } from 'reports/cashReceipt'
 import { generateRefundReceipt } from 'reports/refundReceipt'
-import { User } from '@models/user.model'
-import { EUserType } from '@enums/users'
+import UserModel, { User } from '@models/user.model'
+import { EUserStatus, EUserType } from '@enums/users'
 
 Aigle.mixin(lodash, {})
 
@@ -166,6 +166,10 @@ export async function markBillingAsPaid(
     const amount = -_payment.total
     const customerId = get(_billing, 'user._id', '')
     await updateCustomerCreditUsageBalance(customerId, amount, session)
+    await UserModel.findOneAndUpdate(
+      { _id: customerId, status: { $in: [EUserStatus.INACTIVE, EUserStatus.BANNED] } },
+      { status: EUserStatus.ACTIVE },
+    )
     /**
      * generate receipt
      */

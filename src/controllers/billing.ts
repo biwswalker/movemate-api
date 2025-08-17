@@ -81,6 +81,7 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
        * Get Complete Shipment
        * Complete period: (Previous Month - Previous Day)
        */
+      console.log('Period: ', prevIssueBillingCycleDate, currentIssueBillingCycleDate)
       const shipmentsInPeriod = await ShipmentModel.find({
         customer: customerId,
         paymentMethod: EPaymentMethod.CREDIT,
@@ -228,8 +229,9 @@ export async function checkNearbyDuedateBilling(before: number = 1): Promise<Bil
   const beforeDay = addDays(today, before)
   const startOfBeforeDay = startOfDay(beforeDay)
   const endOfBeforeDay = endOfDay(beforeDay)
+  console.log('Nearby duedate period check: ', startOfBeforeDay, endOfBeforeDay)
   const billing = await BillingModel.find({
-    billingStatus: EBillingStatus.PENDING,
+    status: EBillingStatus.PENDING,
     paymentDueDate: {
       $gte: startOfBeforeDay, // paymentDueDate หลังจากหรือเท่ากับวันนี้
       $lte: endOfBeforeDay, // และก่อนหรือเท่ากับในอีก 1 วันข้างหน้า
@@ -243,19 +245,40 @@ export async function notifyNearbyDuedate(beforeDuedateDay: number) {
   const getMessage = (day) => {
     switch (day) {
       case 0:
-        return { title: 'ครบกำหนดชำระ', message: 'ครบกำหนดชำระแล้ว กรุณาเตรียมการชำระเงิน' }
+        return {
+          title: 'ครบกำหนดชำระ',
+          message: 'ครบกำหนดชำระแล้ว กรุณาเตรียมการชำระเงิน',
+          templateMessage: 'ครบกำหนดชำระแล้ว',
+        }
       case 1:
-        return { title: 'ใกล้ครบกำหนดชำระ', message: 'พรุ่งนี้เป็นวันครบกำหนดชำระค่าบริการ กรุณาเตรียมการชำระเงิน' }
+        return {
+          title: 'ใกล้ครบกำหนดชำระ',
+          message: 'พรุ่งนี้เป็นวันครบกำหนดชำระค่าบริการ กรุณาเตรียมการชำระเงิน',
+          templateMessage: 'ครบกำหนดชำระในวันพรุ่งนี้',
+        }
       case 2:
-        return { title: 'ใกล้ครบกำหนดชำระ', message: 'อีก 2 วันจะครบกำหนดชำระค่าบริการ กรุณาเตรียมการชำระเงิน' }
+        return {
+          title: 'ใกล้ครบกำหนดชำระ',
+          message: 'อีก 2 วันจะครบกำหนดชำระค่าบริการ กรุณาเตรียมการชำระเงิน',
+          templateMessage: 'กำลังจะถึงกำหนดชำระในอีก 2 วัน ',
+        }
       case 3:
-        return { title: 'ใกล้ครบกำหนดชำระ', message: 'อีก 3 วันจะครบกำหนดชำระค่าบริการ กรุณาเตรียมการชำระเงิน' }
+        return {
+          title: 'ใกล้ครบกำหนดชำระ',
+          message: 'อีก 3 วันจะครบกำหนดชำระค่าบริการ กรุณาเตรียมการชำระเงิน',
+          templateMessage: 'กำลังจะถึงกำหนดชำระในอีก 3 วัน',
+        }
       default:
-        return { title: 'ใกล้ครบกำหนดชำระ', message: 'ใกล้จะครบกำหนดชำระค่าบริการ กรุณาเตรียมการชำระเงิน' }
+        return {
+          title: 'ใกล้ครบกำหนดชำระ',
+          message: 'ใกล้จะครบกำหนดชำระค่าบริการ กรุณาเตรียมการชำระเงิน',
+          templateMessage: 'ใกล้จะครบกำหนดชำระค่าบริการ',
+        }
     }
   }
   const billings = await checkNearbyDuedateBilling(beforeDuedateDay)
-  const { title, message } = getMessage(beforeDuedateDay)
+  console.log(`Nearby duedate billing founded: ${billings.length} billing`)
+  const { title, message, templateMessage } = getMessage(beforeDuedateDay)
   await Aigle.forEach(billings, async (billing) => {
     await NotificationModel.sendNotification({
       userId: billing.user.toString() as string, // Lean get
@@ -285,7 +308,7 @@ export async function notifyNearbyDuedate(beforeDuedateDay: number) {
           month_text,
           year_text,
           billing_number: billing.billingNumber,
-          due_days: beforeDuedateDay,
+          due_days: templateMessage,
           financial_email: 'acc@movematethailand.com', // Placeholder or dynamic from settings
           contact_number: '02-xxx-xxxx', // Placeholder or dynamic from settings
           movemate_link: `https://www.movematethailand.com`,
@@ -315,10 +338,11 @@ export async function notifyOverdueBilling() {
     })
 
     // Add email sending logic for notifyOverdueBilling
-    const customer = await UserModel.findById(billing.user).lean()
+    const customer = await UserModel.findById(billing.user)
     if (customer) {
       const financialEmails = get(customer, 'businessDetail.creditPayment.financialContactEmails', [])
       const emails = uniq([customer.email, ...financialEmails]).filter((email) => !isEmpty(email))
+
       const month_text = format(billing.issueDate, 'MMMM', { locale: th })
       const year_number = toNumber(format(billing.issueDate, 'yyyy', { locale: th }))
       const year_text = toString(year_number + 543)
@@ -350,6 +374,7 @@ export async function notifyOverdueBilling() {
 
 /**
  * Sent invoice notification to customer
+ * @deprecated
  */
 export async function notifyIssueBillingToCustomer() {
   const today = new Date()
@@ -359,7 +384,7 @@ export async function notifyIssueBillingToCustomer() {
   const _billings = await BillingModel.find({
     status: EBillingStatus.PENDING,
     state: EBillingState.CURRENT,
-    createdAt: { $gte: startRange, $lt: endRange },
+    createdAt: { $gte: startRange, $lte: endRange },
     paymentMethod: EPaymentMethod.CREDIT,
   }).lean()
 
@@ -386,7 +411,7 @@ export async function emailIssueBillingToCustomer(session?: ClientSession) {
   const _billings = await BillingModel.find({
     status: EBillingStatus.PENDING,
     state: EBillingState.CURRENT,
-    createdAt: { $gte: startRange, $lt: endRange },
+    createdAt: { $gte: startRange, $lte: endRange },
     paymentMethod: EPaymentMethod.CREDIT,
   }).session(session)
 
@@ -423,8 +448,17 @@ export async function emailIssueBillingToCustomer(session?: ClientSession) {
       })
       const documentId = document?._id
       const invoiceId = get(billing, 'invoice._id', '')
+      const userId = get(billing, 'user._id', '')
       await InvoiceModel.findByIdAndUpdate(invoiceId, { document: documentId }, { session })
       await BillingDocumentModel.findByIdAndUpdate(documentId, { emailTime: new Date() }, { session })
+      await NotificationModel.sendNotification({
+        userId: userId,
+        varient: ENotificationVarient.MASTER,
+        title: 'ออกใบแจ้งหนี้แล้ว',
+        message: [`ระบบได้ออกใบแจ้งหนี้หมายเลข ${billing.billingNumber} แล้ว`],
+        infoLink: `/main/billing?billing_number=${billing.billingNumber}`,
+        infoText: 'คลิกเพื่อดูรายละเอียด',
+      })
       console.log(`[${format(new Date(), 'dd/MM/yyyy HH:mm:ss')}] Billing Cycle has sent for ${emails.join(', ')}`)
     }
   })
@@ -450,8 +484,9 @@ export async function checkBillingStatus() {
   const _overdueBillings = await BillingModel.find({
     status: EBillingStatus.PENDING,
     state: EBillingState.CURRENT,
-    paymentDueDate: { $lt: startOfDay(today) },
+    paymentDueDate: { $lte: startOfDay(today) },
   }).lean()
+  console.log(`📌 Check Overdue billing founded: ${_overdueBillings.length} - Payment duedate ${startOfDay(today)}`)
 
   await Aigle.forEach(_overdueBillings, async (billing) => {
     await BillingModel.findByIdAndUpdate(billing._id, { state: EBillingState.OVERDUE })
@@ -469,8 +504,13 @@ export async function checkBillingStatus() {
   const _suspendedBillings = await BillingModel.find({
     status: EBillingStatus.PENDING,
     state: EBillingState.OVERDUE,
-    paymentDueDate: { $lt: startOfDay(addDays(today, -16)) },
+    paymentDueDate: { $lte: startOfDay(addDays(today, -16)) },
   }).lean()
+  console.log(
+    `📌 Check Suspended billing founded: ${_overdueBillings.length} - Payment duedate ${startOfDay(
+      addDays(today, -16),
+    )}`,
+  )
 
   let _bannedCustomer = []
   await Aigle.forEach(_suspendedBillings, async (suspendedBill) => {
