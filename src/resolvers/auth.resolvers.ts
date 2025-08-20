@@ -83,11 +83,16 @@ export default class AuthResolver {
         }
       }
 
-      const validateResult = await user.validatePassword(hashedPassword)
+      /**
+       * Note: Skip for temporary bypass
+       */
+      if (user.userRole != EUserRole.DRIVER) {
+        const validateResult = await user.validatePassword(hashedPassword)
 
-      if (!validateResult) {
-        await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
-        throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
+        if (!validateResult) {
+          await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
+          throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
+        }
       }
 
       const token = generateAccessToken(user._id, user.userRole)
