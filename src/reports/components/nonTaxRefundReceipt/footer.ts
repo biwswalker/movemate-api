@@ -12,7 +12,7 @@ const CONSTANTS = {
   TAX: 'ภาษีหัก ณ ที่จ่าย 1% :',
   TOTAL: 'รวมที่ต้องชำระทั้งสิ้น :',
   REMARK: 'หมายเหตุ',
-  CUSTOMER_LABEL: '(ผู้ใช้บริการ)',
+  CUSTOMER_LABEL: '(ผู้ให้บริการ)',
 }
 
 export function NonTaxRefundReceiptFooterComponent(doc: PDFDocument, refundNote: RefundNote) {

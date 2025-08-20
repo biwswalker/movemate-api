@@ -114,6 +114,8 @@ export default class BillingResolver {
     const statusLabels: { [key: string]: string } = {
       // Cash Labels
       AWAITING_VERIFICATION: 'รอตรวจสอบ',
+      PENDING_PAYMENT: 'รอการชำระ',
+      VERIFY_REFUND: 'ตรวจสอบคืนเงิน',
       PAID: 'ชำระแล้ว',
       CANCELLED: 'ยกเลิกงาน',
       REFUNDED: 'คืนเงินแล้ว',

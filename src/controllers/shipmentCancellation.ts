@@ -420,7 +420,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
         varient: ENotificationVarient.ERROR,
         title: 'งานขนส่งของท่านถูกยกเลิก',
         message: [
-          `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${_shipment.trackingNumber} ของท่านได้ยกเลิกแล้วโดย${
+          `เราขอแจ้งให้ท่านทราบว่าการจองหมายเลข ${_shipment.trackingNumber} ของท่านได้ยกเลิกแล้วโดย${
             isCancelledByAdmin ? 'ผู้ดูแลระบบ' : 'ลูกค้า'
           } เหตุผล: ${reason}`,
           `กรุณาตรวจสอบรายละเอียดงานขนส่งของท่าน`,
@@ -438,7 +438,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
       varient: ENotificationVarient.ERROR,
       title: 'การจองของท่านถูกยกเลิกแล้ว',
       message: [
-        `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${_shipment.trackingNumber} ของท่านได้ยกเลิกแล้วโดย${
+        `เราขอแจ้งให้ท่านทราบว่าการจองหมายเลข ${_shipment.trackingNumber} ของท่านได้ยกเลิกแล้วโดย${
           isCancelledByAdmin ? 'ผู้ดูแลระบบ' : 'ท่านเอง'
         }`,
         ...(!isCredit ? ['ระบบกำลังคำนวนยอดคืนเงิน และจะดำเนินการคืนให้ท่านในไม่ช้า'] : []),

@@ -73,7 +73,7 @@ export async function markShipmentVerified(input: MarkShipmentVerifiedInput, adm
         varient: ENotificationVarient.INFO,
         title: 'การจองของท่านยืนยันยอดชำระแล้ว',
         message: [
-          `เราขอแจ้งให้ท่าทราบว่าการจองรถเลขที่ ${_shipment.trackingNumber} ของท่านยืนยันยอดชำระแล้ว`,
+          `เราขอแจ้งให้ท่านทราบว่าการจองรถเลขที่ ${_shipment.trackingNumber} ของท่านยืนยันยอดชำระแล้ว`,
           `การจองจะถูกดำเนินการจับคู่หาคนขับในไม่ช้า`,
         ],
         infoText: 'ดูการจอง',

@@ -14,7 +14,7 @@ const CONSTANTS = {
   MM_ADDRESS: 'เลขที่ 156 ซอยลาดพร้าว 96 ถนนลาดพร้าว แขวงพลับพลา เขตวังทองหลาง กรุงเทพมหานคร 10310',
   MM_TAX_ID: 'เลขประจําตัวผู้เสียภาษี: 0105564086723',
   MM_CONTACT_NUMBER: 'ติดต่อ: 02-xxx-xxxx',
-  MM_CONTACT_EMAIL: 'อีเมล์: acc@movematethailand.com',
+  MM_CONTACT_EMAIL: 'อีเมล: acc@movematethailand.com',
   // Document Info
   DOCUMENT_NAME: 'REFUND RECEIPT',
   DOCUMENT_TH_NAME: 'ใบคืนเงิน',

@@ -2,13 +2,31 @@ import jwt from 'jsonwebtoken'
 import CryptoJS from 'crypto-js'
 
 export function encryption(encryptext: string) {
-  const text = CryptoJS.AES.encrypt(encryptext, process.env.MOVEMATE_SHARED_KEY).toString()
-  return text || ''
+  if (!encryptext) {
+    return '';
+  }
+  try {
+    const sanitizedText = encryptext.replace(/ /g, '+');
+    const text = CryptoJS.AES.encrypt(sanitizedText, process.env.MOVEMATE_SHARED_KEY).toString()
+    return text || '';
+  } catch (error) {
+    console.error('CryptoJS encrypt error:', error);
+    return '';
+  }
 }
 
-export function decryption(decryptext: string) {
-  const text = CryptoJS.AES.decrypt(decryptext, process.env.MOVEMATE_SHARED_KEY).toString(CryptoJS.enc.Utf8)
-  return text || ''
+export function decryption(decryptext: string): string {
+  if (!decryptext) {
+    return '';
+  }
+  try {
+    const sanitizedText = decryptext.replace(/ /g, '+');
+    const text = CryptoJS.AES.decrypt(sanitizedText, process.env.MOVEMATE_SHARED_KEY).toString(CryptoJS.enc.Utf8);
+    return text || '';
+  } catch (error) {
+    console.error('CryptoJS decryption error:', error);
+    return '';
+  }
 }
 
 export function generateExpToken(data: Object, exp = '3d'): string {

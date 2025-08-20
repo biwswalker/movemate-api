@@ -2,6 +2,7 @@ import {
   EBillingCriteriaState,
   EBillingCriteriaStatus,
   EBillingState,
+  EBillingStatus,
   ECreditDisplayStatus,
   EDisplayStatus,
   EReceiptType,
@@ -15,7 +16,7 @@ import { billingDocumentPipelineStage } from './document.pipeline'
 import { endOfDay, startOfDay } from 'date-fns'
 import { EUserCriterialType, EUserType } from '@enums/users'
 import { EAdminAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
-import { EPaymentMethod } from '@enums/payments'
+import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
 
 export const BILLING_CYCLE_LIST = (
   data: GetBillingInput,
@@ -150,6 +151,7 @@ export const BILLING_CYCLE_LIST = (
               },
               // หาว่ามีใบเสร็จใดๆ อยู่ในระบบหรือไม่
               hasAnyReceipt: { $gt: [{ $size: '$receipts' }, 0] },
+              lastPayment: { $arrayElemAt: ['$payments', -1] },
             },
             in: {
               // ตรวจสอบว่าเป็น CREDIT หรือ CASH
@@ -192,6 +194,23 @@ export const BILLING_CYCLE_LIST = (
                 else: {
                   $switch: {
                     branches: [
+                      {
+                        case: {
+                          $and: [
+                            { $eq: ['$$lastPayment.status', EBillingStatus.PENDING] },
+                            { $eq: ['$$lastPayment.type', EPaymentType.REFUND] },
+                          ],
+                        },
+                        then: { status: EDisplayStatus.VERIFY_REFUND, name: 'ตรวจสอบคืนเงิน', weight: 0 },
+                      },
+                      {
+                        case: { $eq: ['$$lastPayment.status', EPaymentStatus.VERIFY] },
+                        then: { status: EDisplayStatus.AWAITING_VERIFICATION, name: 'รอตรวจสอบ', weight: -1 },
+                      },
+                      {
+                        case: { $eq: ['$$lastPayment.status', EPaymentStatus.PENDING] },
+                        then: { status: EDisplayStatus.PENDING_PAYMENT, name: 'รอการชำระ', weight: 0 },
+                      },
                       {
                         case: {
                           $and: [
@@ -593,6 +612,7 @@ export const GET_BILLING_STATUS_BY_BILLING_NUMBER = (billingNumber: string): Pip
               },
               // หาว่ามีใบเสร็จใดๆ อยู่ในระบบหรือไม่
               hasAnyReceipt: { $gt: [{ $size: '$receipts' }, 0] },
+              lastPayment: { $arrayElemAt: ['$payments', -1] },
             },
             in: {
               // ตรวจสอบว่าเป็น CREDIT หรือ CASH
@@ -635,6 +655,23 @@ export const GET_BILLING_STATUS_BY_BILLING_NUMBER = (billingNumber: string): Pip
                 else: {
                   $switch: {
                     branches: [
+                      {
+                        case: {
+                          $and: [
+                            { $eq: ['$$lastPayment.status', EBillingStatus.VERIFY] },
+                            { $eq: ['$$lastPayment.type', EPaymentType.REFUND] },
+                          ],
+                        },
+                        then: { status: EDisplayStatus.VERIFY_REFUND, name: 'ตรวจสอบคืนเงิน', weight: 0 },
+                      },
+                      {
+                        case: { $eq: ['$$lastPayment.status', EPaymentStatus.VERIFY] },
+                        then: { status: EDisplayStatus.AWAITING_VERIFICATION, name: 'รอตรวจสอบ', weight: -1 },
+                      },
+                      {
+                        case: { $eq: ['$$lastPayment.status', EPaymentStatus.PENDING] },
+                        then: { status: EDisplayStatus.PENDING_PAYMENT, name: 'รอการชำระ', weight: 0 },
+                      },
                       {
                         case: {
                           $and: [
@@ -749,6 +786,7 @@ export const AGGREGATE_BILLING_STATUS_COUNT = (paymentMethod: EPaymentMethod, cu
               },
               // หาว่ามีใบเสร็จใดๆ อยู่ในระบบหรือไม่
               hasAnyReceipt: { $gt: [{ $size: '$receipts' }, 0] },
+              lastPayment: { $arrayElemAt: ['$payments', -1] },
             },
             in: {
               // ตรวจสอบว่าเป็น CREDIT หรือ CASH
@@ -791,6 +829,23 @@ export const AGGREGATE_BILLING_STATUS_COUNT = (paymentMethod: EPaymentMethod, cu
                 else: {
                   $switch: {
                     branches: [
+                      {
+                        case: {
+                          $and: [
+                            { $eq: ['$$lastPayment.status', EBillingStatus.VERIFY] },
+                            { $eq: ['$$lastPayment.type', EPaymentType.REFUND] },
+                          ],
+                        },
+                        then: { status: EDisplayStatus.VERIFY_REFUND, name: 'ตรวจสอบคืนเงิน', weight: 0 },
+                      },
+                      {
+                        case: { $eq: ['$$lastPayment.status', EPaymentStatus.VERIFY] },
+                        then: { status: EDisplayStatus.AWAITING_VERIFICATION, name: 'รอตรวจสอบ', weight: -1 },
+                      },
+                      {
+                        case: { $eq: ['$$lastPayment.status', EPaymentStatus.PENDING] },
+                        then: { status: EDisplayStatus.PENDING_PAYMENT, name: 'รอการชำระ', weight: 0 },
+                      },
                       {
                         case: {
                           $and: [

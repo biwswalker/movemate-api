@@ -69,7 +69,7 @@ export function HeaderComponent(
   doc.moveDown(0.6)
   doc.text('ติดต่อ: 02-xxx-xxxx', 110)
   doc.moveDown(0.6)
-  doc.text('อีเมล์: acc@movematethailand.com', 110)
+  doc.text('อีเมล: acc@movematethailand.com', 110)
 
   // Receipt number detail
   const docNumberReactX = 420

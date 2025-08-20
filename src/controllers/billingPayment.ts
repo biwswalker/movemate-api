@@ -460,8 +460,8 @@ export async function markBillingAsRefunded(input: MarkBillingAsRefundInput, adm
    */
   const _billingNumber = _billing.billingNumber
   const message = isCreditPayment
-    ? [`เราขอแจ้งให้ท่าทราบว่าใบแจ้งหนี้เลขที่ ${_billingNumber} ของท่านดำเนินคืนยอดชำระแล้ว`]
-    : [`เราขอแจ้งให้ท่าทราบว่างานขนส่งหมายเลข ${_billingNumber} ของท่านดำเนินคืนยอดชำระแล้ว`]
+    ? [`เราขอแจ้งให้ท่านทราบว่าใบแจ้งหนี้เลขที่ ${_billingNumber} ของท่านดำเนินคืนยอดชำระแล้ว`]
+    : [`เราขอแจ้งให้ท่านทราบว่างานขนส่งหมายเลข ${_billingNumber} ของท่านดำเนินคืนยอดชำระแล้ว`]
   const infoText = isCreditPayment ? 'ดูข้อมูลการเงิน' : 'ดูงานขนส่ง'
   const infoLink = isCreditPayment
     ? `/main/billing?billing_number=${_billingNumber}`

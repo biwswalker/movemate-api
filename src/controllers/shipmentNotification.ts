@@ -232,7 +232,7 @@ export const cancelShipmentIfNotInterested = async (
         varient: ENotificationVarient.ERROR,
         title: 'การจองของท่านถูกยกเลิกอัตโนมัติ',
         message: [
-          `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${shipment.trackingNumber} ระบบทำการยกเลิกอัตโนมัติเนื่องจากเลยระยะเวลาที่กำหนด และจะดำเนินการคืนให้ท่านในไม่ช้า`,
+          `เราขอแจ้งให้ท่านทราบว่าการจองหมายเลข ${shipment.trackingNumber} ระบบทำการยกเลิกอัตโนมัติเนื่องจากเลยระยะเวลาที่กำหนด และจะดำเนินการคืนให้ท่านในไม่ช้า`,
         ],
         infoText: 'ดูงานขนส่ง',
         infoLink: `/main/tracking?tracking_number=${shipment.trackingNumber}`,
@@ -311,7 +311,7 @@ export const cancelShipmentIfNotInterested = async (
           varient: ENotificationVarient.ERROR,
           title: 'การจองของท่านถูกยกเลิกอัตโนมัติ',
           message: [
-            `เราขอแจ้งให้ท่าทราบว่าการจองหมายเลข ${shipment.trackingNumber} ระบบทำการยกเลิกอัตโนมัติเนื่องจากเลยระยะเวลาที่กำหนด`,
+            `เราขอแจ้งให้ท่านทราบว่าการจองหมายเลข ${shipment.trackingNumber} ระบบทำการยกเลิกอัตโนมัติเนื่องจากเลยระยะเวลาที่กำหนด`,
           ],
 
           infoText: 'ดูงานขนส่ง',

@@ -12,7 +12,7 @@ const CONSTANTS = {
   SUBTOTAL: 'รวมเป็นเงิน :',
   TAX: 'ภาษีหัก ณ ที่จ่าย 1% :',
   REMARK: 'หมายเหตุ',
-  CUSTOMER_LABEL: '(ผู้ใช้บริการ)',
+  CUSTOMER_LABEL: '(ผู้ให้บริการ)',
 }
 
 export function CashReceiptFooterComponent(doc: PDFDocument, receipt: Receipt) {

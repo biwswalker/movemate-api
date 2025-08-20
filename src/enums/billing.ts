@@ -124,6 +124,8 @@ export enum EDisplayStatus {
   REFUNDED = 'REFUNDED', // 'คืนเงินแล้ว',
   BILLED = 'BILLED', // 'ออกใบเสร็จ',
   WHT_RECEIVED = 'WHT_RECEIVED', // 'ได้รับหัก ณ ที่จ่าย',
+  PENDING_PAYMENT = 'PENDING_PAYMENT', // 'รอการชำระ'
+  VERIFY_REFUND = 'VERIFY_REFUND', // 'ตรวจสอบคืนเงิน'
   NONE = 'NONE', // NONE
 }
 
