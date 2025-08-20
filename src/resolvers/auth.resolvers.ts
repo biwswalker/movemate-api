@@ -25,7 +25,7 @@ export default class AuthResolver {
   @Mutation(() => AuthPayload)
   async login(@Arg('username') username: string, @Ctx() ctx: GraphQLContext): Promise<AuthPayload> {
     try {
-      const hashedPassword = get(split(get(ctx, 'req.headers.authorization', ''), ' '), '1', '')
+      const hashedPassword = String(get(ctx, 'req.headers.x-auth-key', ''))
       const user = await User.findByUsername(username, undefined)
 
       if (!user) {
@@ -83,16 +83,11 @@ export default class AuthResolver {
         }
       }
 
-      /**
-       * Note: Skip for temporary bypass
-       */
-      if (user.userRole != EUserRole.DRIVER) {
-        const validateResult = await user.validatePassword(hashedPassword)
+      const validateResult = await user.validatePassword(hashedPassword)
 
-        if (!validateResult) {
-          await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
-          throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
-        }
+      if (!validateResult) {
+        await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
+        throw new GraphQLError('บัญชีหรือรหัสผ่านผิด โปรดลองใหม่อีกครั้ง')
       }
 
       const token = generateAccessToken(user._id, user.userRole)

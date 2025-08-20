@@ -367,7 +367,9 @@ export default class DriverResolver {
           title: 'คนขับใหม่รอการอนุมัติ',
           message: [`คุณ '${driverDetailModel.fullname}' ได้ลงทะเบียนเป็นคนขับใหม่ กรุณาตรวจสอบและอนุมัติบัญชี`],
           infoText: 'ตรวจสอบข้อมูล',
-          infoLink: `/management/driver/detail/${user._id}`,
+          infoLink: `/management/driver/list/${user.userType === EUserType.BUSINESS ? 'business' : 'individual'}/${
+            user.userNumber
+          }`,
         },
         session,
       )
