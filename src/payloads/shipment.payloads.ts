@@ -89,10 +89,10 @@ export class ShipmentListPayload {
 
   @Field({ nullable: true })
   refId: string
-  
+
   @Field(() => StepDefinition, { nullable: true })
   step: StepDefinition
-  
+
   @Field(() => Float, { nullable: true, defaultValue: 0 })
   cancellationFee: number
 }
@@ -107,4 +107,22 @@ export class ShipmentTimeCheckPayload {
 
   @Field(() => Int)
   timeDifferenceInMinutes: number
+}
+
+@ObjectType({ description: 'ข้อมูลการติดตามสถานะการจัดส่งสำหรับบุคคลภายนอก' })
+export class PublicTrackingPayload {
+  @Field(() => EShipmentStatus)
+  status: EShipmentStatus
+  
+  @Field(() => Boolean, { nullable: true })
+  isRoundedReturn?: boolean
+
+  @Field(() => [Destination], { description: 'ข้อมูลจุดรับและจุดส่งทั้งหมด' })
+  destinations: Destination[]
+
+  @Field(() => [StepDefinition], { description: 'ขั้นตอนการทำงานทั้งหมด' })
+  steps: StepDefinition[]
+
+  @Field(() => StepDefinition, { nullable: true, description: 'ขั้นตอนปัจจุบันที่กำลังดำเนินการ' })
+  currentStep?: StepDefinition
 }

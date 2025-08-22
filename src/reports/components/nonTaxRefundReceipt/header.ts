@@ -3,7 +3,6 @@ import { ASSETS, FONTS } from '../constants'
 import { fDate } from '@utils/formatTime'
 import { get, toNumber } from 'lodash'
 import { User } from '@models/user.model'
-import { Receipt } from '@models/finance/receipt.model'
 import { RefundNote } from '@models/finance/refundNote.model'
 import { EUserType } from '@enums/users'
 
@@ -39,6 +38,7 @@ export function NonTaxRefundReceiptHeaderComponent(
   doc: PDFDocument,
   user: User,
   refundNote: RefundNote,
+  previousRefundNumber: string[],
   page: number,
   totalPage: number,
   isOriginal: boolean = true,
@@ -46,6 +46,7 @@ export function NonTaxRefundReceiptHeaderComponent(
   const marginLeft = doc.page.margins.left
   const marginRight = doc.page.margins.right
   const maxWidth = doc.page.width - marginRight
+  const _tempReactStartY = doc.y
   // Logo
   doc.image(ASSETS.LOGO, doc.page.margins.left, 60, { width: 80 })
 
@@ -93,11 +94,18 @@ export function NonTaxRefundReceiptHeaderComponent(
   doc.font(FONTS.SARABUN_LIGHT).text(refundNote.refundNoteNumber, 520, doc.y - 10, { align: 'left' })
   // ---
   doc.moveDown(0.3)
+
   doc.font(FONTS.SARABUN_MEDIUM).text(CONSTANTS.ADVANCE_RECEIPT_DATE, docNumberReactX + 2, doc.y, {
     align: 'right',
     width: (docNumberRectWidth + 45) / 2 - 4,
   }) // 81
-  doc.font(FONTS.SARABUN_LIGHT).text(refundNote.refAdvanceReceiptNo || '-', 520, doc.y - 10, { align: 'left' })
+  ;(refundNote.refAdvanceReceiptNo || []).map((refAdvanceReceiptNo, index) => {
+    if (index !== 0) {
+      doc.moveDown(1)
+    }
+    doc.font(FONTS.SARABUN_LIGHT).text(refAdvanceReceiptNo, 520, doc.y - 10, { align: 'left' })
+  })
+
   // ---
   const receiptInBEDateMonth = fDate(refundNote.refundDate, 'dd/MM')
   const receiptInBEYear = toNumber(fDate(refundNote.refundDate, 'yyyy')) + 543
@@ -107,15 +115,19 @@ export function NonTaxRefundReceiptHeaderComponent(
     width: (docNumberRectWidth + 45) / 2 - 4,
   }) // 81
   doc.font(FONTS.SARABUN_LIGHT).text(`${receiptInBEDateMonth}/${receiptInBEYear}`, 520, doc.y - 10, { align: 'left' })
+  doc.moveDown(1)
   // ---
-  doc.rect(docNumberReactX, 54, docNumberRectWidth, 85).lineWidth(2).stroke()
+  doc
+    .rect(docNumberReactX, 54, docNumberRectWidth, doc.y - _tempReactStartY)
+    .lineWidth(2)
+    .stroke()
 
-  // doc.moveDown(0.5)
+  doc.moveDown(0.5)
   doc
     .lineCap('butt')
     .lineWidth(1.5)
-    .moveTo(marginLeft, doc.y + 14)
-    .lineTo(maxWidth, doc.y + 14)
+    .moveTo(marginLeft, doc.y)
+    .lineTo(maxWidth, doc.y)
     .stroke()
   doc.moveDown(2.2)
   // Seperate line

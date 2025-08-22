@@ -1,5 +1,5 @@
 import { cancelShipmentQueue, shipmentNotifyQueue } from '@configs/jobQueue'
-import { EBillingReason, EBillingState, EBillingStatus, ERefundAmountType } from '@enums/billing'
+import { EBillingReason, EBillingState, EBillingStatus, EReceiptType, ERefundAmountType } from '@enums/billing'
 import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
 import { EDriverAcceptanceStatus, EShipmentCancellationReason, EShipmentStatus } from '@enums/shipments'
 import { EDriverStatus, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
@@ -38,6 +38,7 @@ import DriverDetailModel from '@models/driverDetail.model'
 import { isDriverAvailableForShipment } from './driver'
 import { ClientSession } from 'mongoose'
 import RefundNoteModel from '@models/finance/refundNote.model'
+import { Receipt } from '@models/finance/receipt.model'
 
 Aigle.mixin(lodash, {})
 
@@ -134,12 +135,12 @@ export const cancelShipmentIfNotInterested = async (
     }
 
     const _refundNoteNumber = await generateMonthlySequenceNumber('refundnote')
-    const _advanceReceipt = billing.advanceReceipt
-    const _advanceReceiptNumber = _advanceReceipt?.receiptNumber || ''
+    const _advanceReceipts = filter(billing.receipts, (_receipt: Receipt) => _receipt.receiptType === EReceiptType.ADVANCE) as Receipt[]
+    const _advanceReceiptsNumber = _advanceReceipts.map((_receipt: Receipt) => _receipt.receiptNumber)
 
     const _refundNote = new RefundNoteModel({
       refundNoteNumber: _refundNoteNumber,
-      refAdvanceReceiptNo: _advanceReceiptNumber,
+      refAdvanceReceiptNo: _advanceReceiptsNumber,
       billing: billing._id,
       amount: latestQuotation.price.total,
       tax: latestQuotation.price.tax,

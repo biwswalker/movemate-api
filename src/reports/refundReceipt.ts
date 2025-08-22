@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { get, reduce, head, tail, clone, round, last, sortBy } from 'lodash'
+import { get, reduce, head, tail, clone, round } from 'lodash'
 import PDFDocument, { Table, DataOptions } from 'pdfkit-table'
 import { fCurrency } from '@utils/formatNumber'
 import { fDate } from '@utils/formatTime'
@@ -16,7 +16,6 @@ import BillingDocumentModel, { BillingDocument } from '@models/finance/documents
 import { ClientSession } from 'mongoose'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
-import { EShipmentStatus } from '@enums/shipments'
 import { User } from '@models/user.model'
 import { RefundNote } from '@models/finance/refundNote.model'
 
@@ -45,6 +44,14 @@ export async function generateRefundReceipt(
     const message = 'ไม่พบข้อมูลใบเสร็จคืนเงิน'
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
   }
+
+  // Multiple Receipt Number
+  const _receipts = (billing.receipts || []) as Receipt[]
+  // const _advanceReceipts = filter(_receipts, (_receipt: Receipt) => _receipt.receiptType === EReceiptType.ADVANCE)
+  // const _currentAdvanceIndex = findIndex(_advanceReceipts, ['receiptNumber', receipt.receiptNumber])
+  // const _previousAdvanceReceiptNumber = filter(_advanceReceipts, (_, index: number) => index < _currentAdvanceIndex).map((_receipt: Receipt) => _receipt.receiptNumber)
+  const _previousRefAdvanceReceiptNumber = []
+
   const _document = refundNote.document as BillingDocument | undefined
 
   const fileName = `${refundNote.refundNoteNumber}.pdf`
@@ -73,7 +80,6 @@ export async function generateRefundReceipt(
       fontSize: 8,
       separation: false,
     }
-
 
     const dropoffs = tail(shipment.destinations)
     const details = `ค่าขนส่ง${vehicle.name} ${pickup.name} ไปยัง ${reduce(
@@ -121,12 +127,12 @@ export async function generateRefundReceipt(
   let isOiginal = true
   let currentPage = 1
   const headerHeight = clone(doc.y - doc.page.margins.top)
-  NonTaxRefundReceiptHeaderComponent(doc, _user, refundNote, currentPage, currentPage, isOiginal)
+  NonTaxRefundReceiptHeaderComponent(doc, _user, refundNote, _previousRefAdvanceReceiptNumber, currentPage, currentPage, isOiginal)
 
   await doc.on('pageAdded', () => {
     currentPage++
     if (!nomoredata) {
-      NonTaxRefundReceiptHeaderComponent(doc, _user, refundNote, currentPage, currentPage, isOiginal)
+      NonTaxRefundReceiptHeaderComponent(doc, _user, refundNote, _previousRefAdvanceReceiptNumber, currentPage, currentPage, isOiginal)
       doc.moveDown(2)
     } else {
       doc.moveDown(10)

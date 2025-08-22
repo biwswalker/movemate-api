@@ -7,7 +7,12 @@ import { GraphQLError } from 'graphql'
 import { PaginateOptions } from 'mongoose'
 import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import lodash, { find, get, map, omit, sortBy, sum } from 'lodash'
-import { ShipmentListPayload, ShipmentTimeCheckPayload, TotalRecordPayload } from '@payloads/shipment.payloads'
+import {
+  PublicTrackingPayload,
+  ShipmentListPayload,
+  ShipmentTimeCheckPayload,
+  TotalRecordPayload,
+} from '@payloads/shipment.payloads'
 import { LoadmoreArgs } from '@inputs/query.input'
 import { reformPaginate } from '@utils/pagination.utils'
 import { GET_SHIPMENT_LIST } from '@pipelines/shipment.pipeline'
@@ -37,6 +42,8 @@ import { AuditLogDecorator } from 'decorators/AuditLog.decorator'
 import { EAuditActions } from '@enums/audit'
 import { differenceInMinutes } from 'date-fns'
 import { handleUpdateBookingTime } from '@controllers/shipmentOperation'
+import { StepDefinition } from '@models/shipmentStepDefinition.model'
+import { Destination } from '@models/shipment/objects'
 
 Aigle.mixin(lodash, {})
 
@@ -164,7 +171,7 @@ export default class ShipmentResolver {
       throw error
     }
   }
-  
+
   @Mutation(() => CalculateQuotationResultPayload)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async calculateShipment(@Arg('data') data: CalculationInput): Promise<CalculateQuotationResultPayload> {
@@ -490,5 +497,56 @@ export default class ShipmentResolver {
     }
 
     return true
+  }
+
+  @Query(() => PublicTrackingPayload, { description: 'ดึงข้อมูลการติดตามสถานะสำหรับบุคคลภายนอก' })
+  async getPublicShipmentTracking(@Arg('trackingNumber') trackingNumber: string): Promise<PublicTrackingPayload> {
+    try {
+      // 1. ค้นหา Shipment จาก trackingNumber และดึงข้อมูล steps ทั้งหมดเข้ามาด้วย
+      const shipment = await await ShipmentModel.findOne({ trackingNumber })
+        .populate([
+          {
+            path: 'steps',
+            populate: {
+              path: 'images',
+              model: 'File',
+            },
+          },
+          {
+            path: 'currentStepId',
+            populate: {
+              path: 'images',
+              model: 'File',
+            },
+          },
+        ])
+        .lean()
+
+      if (!shipment) {
+        throw new GraphQLError('ไม่พบข้อมูลการจัดส่งสำหรับหมายเลขนี้')
+      }
+
+      const destnations = map(shipment.destinations, (_dest) => ({
+        name: _dest.name,
+        detail: _dest.detail,
+        contactName: _dest.contactName,
+        placeProvince: _dest.placeProvince,
+      }))
+
+      // 3. สร้างและคืนค่า Payload ที่มีเฉพาะข้อมูลที่จำเป็น
+      return {
+        status: shipment.status,
+        isRoundedReturn: shipment.isRoundedReturn,
+        destinations: destnations as Destination[],
+        steps: shipment.steps as StepDefinition[],
+        currentStep: shipment.currentStepId as StepDefinition,
+      }
+    } catch (error) {
+      console.error(`Error fetching public tracking for ${trackingNumber}:`, error)
+      if (error instanceof GraphQLError) {
+        throw error
+      }
+      throw new Error('เกิดข้อผิดพลาดในการเรียกดูข้อมูลการจัดส่ง')
+    }
   }
 }

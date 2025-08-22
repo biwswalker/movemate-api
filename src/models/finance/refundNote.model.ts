@@ -15,9 +15,9 @@ export class RefundNote {
   @Property({ required: true, unique: true })
   refundNoteNumber: string
 
-  @Field()
+  @Field(() => [String])
   @Property({ required: true })
-  refAdvanceReceiptNo: string
+  refAdvanceReceiptNo: string[]
 
   @Field(() => Billing)
   @Property({ ref: 'Billing', required: true })

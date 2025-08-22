@@ -37,13 +37,15 @@ export function AdvanceReceiptHeaderComponent(
   doc: PDFDocument,
   user: User,
   receipt: Receipt,
+  previousReceiptNumber: string[],
   page: number,
   totalPage: number,
-  isOriginal: boolean = true,
 ) {
   const marginLeft = doc.page.margins.left
   const marginRight = doc.page.margins.right
   const maxWidth = doc.page.width - marginRight
+  const _tempReactStartY = doc.y
+
   // Logo
   doc.image(ASSETS.LOGO, doc.page.margins.left, 60, { width: 80 })
 
@@ -87,7 +89,12 @@ export function AdvanceReceiptHeaderComponent(
   doc
     .font(FONTS.SARABUN_MEDIUM)
     .text(CONSTANTS.RECEIPT_NO, docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
-  doc.font(FONTS.SARABUN_LIGHT).text(receipt.receiptNumber, 499, doc.y - 10, { align: 'left' })
+  ;[...(previousReceiptNumber || []), receipt.receiptNumber].map((receiptNumber, index) => {
+    if (index !== 0) {
+      doc.moveDown(1)
+    }
+    doc.font(FONTS.SARABUN_LIGHT).text(receiptNumber, 499, doc.y - 10, { align: 'left' })
+  })
   // ---
   const receiptInBEDateMonth = fDate(receipt.receiptDate, 'dd/MM')
   const receiptInBEYear = toNumber(fDate(receipt.receiptDate, 'yyyy')) + 543
@@ -97,14 +104,13 @@ export function AdvanceReceiptHeaderComponent(
     .text(CONSTANTS.RECEIPT_DATE, docNumberReactX, doc.y, { align: 'right', width: docNumberRectWidth / 2 - 4 }) // 81
   doc.font(FONTS.SARABUN_LIGHT).text(`${receiptInBEDateMonth}/${receiptInBEYear}`, 499, doc.y - 10, { align: 'left' })
   // ---
-  doc.rect(docNumberReactX, 54, docNumberRectWidth, 70).lineWidth(2).stroke()
-  doc.moveDown(0.5)
+  doc.moveDown(1)
   doc
-    .lineCap('butt')
-    .lineWidth(1.5)
-    .moveTo(marginLeft, doc.y + 14)
-    .lineTo(maxWidth, doc.y + 14)
+    .rect(docNumberReactX, 54, docNumberRectWidth, doc.y - _tempReactStartY)
+    .lineWidth(2)
     .stroke()
+  doc.moveDown(0.5)
+  doc.lineCap('butt').lineWidth(1.5).moveTo(marginLeft, doc.y).lineTo(maxWidth, doc.y).stroke()
   doc.moveDown(2.2)
   // Seperate line
 

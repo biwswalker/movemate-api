@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { get, reduce, head, tail, clone, round, last, sortBy } from 'lodash'
+import { get, reduce, head, tail, clone, round } from 'lodash'
 import PDFDocument, { Table, DataOptions } from 'pdfkit-table'
 import { fCurrency } from '@utils/formatNumber'
 import { fDate } from '@utils/formatTime'
@@ -16,7 +16,6 @@ import BillingDocumentModel, { BillingDocument } from '@models/finance/documents
 import { ClientSession } from 'mongoose'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
-import { EShipmentStatus } from '@enums/shipments'
 import { User } from '@models/user.model'
 
 interface GenerateReceiptResponse {
@@ -32,6 +31,14 @@ export async function generateAdvanceReceipt(
 ): Promise<GenerateReceiptResponse> {
   const _quotation = billing.quotation as Quotation
   const _user = billing.user as User
+
+  // Multiple Receipt Number
+  // const _receipts = (billing.receipts || []) as Receipt[]
+  // const _advanceReceipts = filter(_receipts, (_receipt: Receipt) => _receipt.receiptType === EReceiptType.ADVANCE)
+  // const _currentAdvanceIndex = findIndex(_advanceReceipts, ['receiptNumber', receipt.receiptNumber])
+  // const _previousAdvanceReceiptNumber = filter(_advanceReceipts, (_, index: number) => index < _currentAdvanceIndex).map((_receipt: Receipt) => _receipt.receiptNumber)
+  const _previousAdvanceReceiptNumber = []
+
   if (!_quotation) {
     const message = 'ไม่พบข้อมูลใบเสนอราคา'
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -119,15 +126,14 @@ export async function generateAdvanceReceipt(
   const table: Table = { headers: _headers, datas: _shipments as any }
 
   let nomoredata = false
-  let isOiginal = true
   let currentPage = 1
   const headerHeight = clone(doc.y - doc.page.margins.top)
-  AdvanceReceiptHeaderComponent(doc, _user, receipt, currentPage, currentPage, isOiginal)
+  AdvanceReceiptHeaderComponent(doc, _user, receipt, _previousAdvanceReceiptNumber, currentPage, currentPage)
 
   await doc.on('pageAdded', () => {
     currentPage++
     if (!nomoredata) {
-      AdvanceReceiptHeaderComponent(doc, _user, receipt, currentPage, currentPage, isOiginal)
+      AdvanceReceiptHeaderComponent(doc, _user, receipt, _previousAdvanceReceiptNumber, currentPage, currentPage)
       doc.moveDown(2)
     } else {
       doc.moveDown(10)
@@ -146,24 +152,6 @@ export async function generateAdvanceReceipt(
 
   nomoredata = true
   AdvanceReceiptFooterComponent(doc, receipt)
-  // isOiginal = false
-
-  // // Copy section
-  // await doc.addPage()
-  // nomoredata = false
-  // AdvanceReceiptHeaderComponent(doc, _user, receipt, currentPage, currentPage, isOiginal)
-
-  // await doc.table(table, {
-  //   minHeaderHeight: headerHeight,
-  //   minRowTHHeight: 16,
-  //   divider: {
-  //     header: { disabled: false, width: 1, opacity: 1 },
-  //     horizontal: { disabled: true },
-  //   },
-  //   prepareHeader: () => doc.font(FONTS.SARABUN_MEDIUM).fontSize(7),
-  // })
-  // nomoredata = true
-  // AdvanceReceiptFooterComponent(doc, receipt)
 
   doc.end()
   await new Promise((resolve) => writeStream.on('finish', resolve))

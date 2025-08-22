@@ -26,7 +26,7 @@ import Aigle from 'aigle'
 import { REPONSE_NAME } from 'constants/status'
 import { differenceInMinutes, format } from 'date-fns'
 import { GraphQLError } from 'graphql'
-import lodash, { find, get, includes, last } from 'lodash'
+import lodash, { filter, find, get, includes, last } from 'lodash'
 import { ClientSession } from 'mongoose'
 import { publishDriverMatchingShipment } from './shipmentGet'
 import { EUserRole, EUserType } from '@enums/users'
@@ -35,7 +35,7 @@ import { initialStepDefinition } from './steps'
 import { clearShipmentJobQueues } from './shipmentJobQueue'
 import { addCustomerCreditUsage } from './customer'
 import RefundNoteModel from '@models/finance/refundNote.model'
-import ReceiptModel from '@models/finance/receipt.model'
+import ReceiptModel, { Receipt } from '@models/finance/receipt.model'
 import { generateCashReceipt } from 'reports/cashReceipt'
 
 Aigle.mixin(lodash, {})
@@ -242,15 +242,15 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
          * ลูกค้ายกเลิกการใช้บริการก่อนวันให้บริิการจริง คืนเงินเต็มจำนวนตามเงื่อนไขบริษัท
          */
         const _refundNoteNumber = await generateMonthlySequenceNumber('refundnote')
-        const _advanceReceipt = _billing.advanceReceipt
-        const _advanceReceiptNumber = _advanceReceipt?.receiptNumber || ''
+        const _advanceReceipts = filter(_billing.receipts, (_receipt: Receipt) => _receipt.receiptType === EReceiptType.ADVANCE) as Receipt[]
+        const _advanceReceiptsNumber = _advanceReceipts.map((_receipt: Receipt) => _receipt.receiptNumber)
 
         const isBusiness = (_shipment.customer as User)?.userType === EUserType.BUSINESS
         const _tax = isBusiness ? forCustomer * 0.01 : 0
         const _total = forCustomer - _tax
         const _refundNote = new RefundNoteModel({
           refundNoteNumber: _refundNoteNumber,
-          refAdvanceReceiptNo: _advanceReceiptNumber,
+          refAdvanceReceiptNo: _advanceReceiptsNumber,
           billing: _billing._id,
           amount: _total,
           subtotal: forCustomer,
@@ -270,16 +270,15 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
          */
         // Make dummy
         const _refundNoteNumber = generateRandomNumberPattern(`DUMMYREFUNDNOTE####`)
-        const _advanceReceipt = _billing.advanceReceipt
-        const _advanceReceiptNumber = _advanceReceipt?.receiptNumber || ''
+        const _advanceReceipts = filter(_billing.receipts, (_receipt: Receipt) => _receipt.receiptType === EReceiptType.ADVANCE) as Receipt[]
+        const _advanceReceiptsNumber = _advanceReceipts.map((_receipt: Receipt) => _receipt.receiptNumber)
 
         const isBusiness = (_shipment.customer as User)?.userType === EUserType.BUSINESS
         const _tax = isBusiness ? forCustomer * 0.01 : 0
         const _total = forCustomer - _tax
         const _refundNote = new RefundNoteModel({
           refundNoteNumber: _refundNoteNumber,
-          refAdvanceReceiptNo: _advanceReceiptNumber,
-          billing: _billing._id,
+          refAdvanceReceiptNo: _advanceReceiptsNumber,
           amount: _total,
           subtotal: forCustomer,
           tax: _tax,
