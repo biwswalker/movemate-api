@@ -47,6 +47,8 @@ import ControllResolver from '@resolvers/controll.resolvers'
 import CustomerResolver from '@resolvers/customer.resolvers'
 import ControllSubscription from '@subscriptions/controll.subscriptions'
 import ShipmentSubscription from '@subscriptions/shipment.subscriptions'
+import TrackingSubscription from '@subscriptions/tracking.subscriptions'
+import TrackingResolver from '@resolvers/tracking.resolvers'
 
 export interface GraphQLContext {
   req: Request
@@ -103,11 +105,13 @@ export async function createGraphQLServer(httpServer: http.Server) {
       AuditLogResolver,
       ControllResolver,
       CustomerResolver,
+      TrackingResolver,
       /**
        * Subscriptions
        */
       ControllSubscription,
       ShipmentSubscription,
+      TrackingSubscription,
     ],
     pubSub: pubSub,
     authChecker: ({ context }: { context: GraphQLContext }) => {

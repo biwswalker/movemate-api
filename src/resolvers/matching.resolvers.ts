@@ -163,7 +163,7 @@ export default class MatchingResolver {
 
   @Query(() => Shipment, { nullable: true })
   @UseMiddleware(AuthGuard([EUserRole.DRIVER]))
-  async getTodayShipment(@Ctx() ctx: GraphQLContext): Promise<Shipment> {
+  async getActiveShipment(@Ctx() ctx: GraphQLContext): Promise<Shipment> {
     const userId = ctx.req.user_id
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
@@ -178,17 +178,9 @@ export default class MatchingResolver {
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
 
-    const today = new Date()
-    const start = today.setHours(0, 0, 0, 0)
-    const end = today.setHours(23, 59, 59, 999)
-
     const shipmentDriver = user.userType === EUserType.BUSINESS ? { agent: userId } : { driver: userId }
 
-    const query: FilterQuery<Shipment> = {
-      bookingDateTime: { $gt: start, $lt: end },
-      ...shipmentDriver,
-      status: EShipmentStatus.PROGRESSING,
-    }
+    const query: FilterQuery<Shipment> = { ...shipmentDriver, status: EShipmentStatus.PROGRESSING }
 
     const shipment = await ShipmentModel.findOne(query, undefined, { sort: { bookingDateTime: 1 } })
 

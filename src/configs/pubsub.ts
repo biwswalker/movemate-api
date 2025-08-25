@@ -4,6 +4,7 @@ import { Notification } from '@models/notification.model'
 import { Shipment } from '@models/shipment.model'
 import { LocationRequestLimitPayload } from '@payloads/location.payloads'
 import { AdminNotificationCountPayload } from '@payloads/notification.payloads'
+import { DriverLocation } from '@payloads/tracking.payloads'
 
 export const enum NOTFICATIONS {
   COUNT = 'COUNT',
@@ -16,6 +17,7 @@ export const enum NOTFICATIONS {
 export const enum SHIPMENTS {
   GET_MATCHING_SHIPMENT = 'GET_MATCHING_SHIPMENT',
   UPDATE = 'SHIPMENT_UPDATE',
+  DRIVER_LOCATION = 'DRIVER_LOCATION_UPDATE',
 }
 
 export const enum LOCATIONS {
@@ -36,6 +38,7 @@ export default createPubSub<{
   [LOCATIONS.REQUEST_LIMIT]: [LocationRequestLimitPayload]
   [SHIPMENTS.GET_MATCHING_SHIPMENT]: [Shipment[]]
   [SHIPMENTS.UPDATE]: [string, Shipment]
+  [SHIPMENTS.DRIVER_LOCATION]: [string, DriverLocation]
   [USERS.STATUS]: [string, EUserStatus]
   [USERS.FORCE_LOGOUT]: [string, string]
 }>()
