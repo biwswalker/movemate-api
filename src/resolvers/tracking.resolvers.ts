@@ -1,4 +1,4 @@
-import { Mutation, Arg, Ctx, Resolver, UseMiddleware } from 'type-graphql'
+import { Mutation, Arg, Ctx, Resolver, UseMiddleware, Query } from 'type-graphql'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { GraphQLContext } from '@configs/graphQL.config'
 import ShipmentModel from '@models/shipment.model'
@@ -6,6 +6,8 @@ import { EShipmentStatus } from '@enums/shipments'
 import { AuthGuard } from '@guards/auth.guards'
 import { EUserRole } from '@enums/users'
 import redis from '@configs/redis'
+import { DriverLocation } from '@payloads/tracking.payloads'
+import { GraphQLError } from 'graphql'
 
 @Resolver()
 export default class TrackingResolver {
@@ -35,5 +37,36 @@ export default class TrackingResolver {
     }
 
     return true
+  }
+
+  @Query(() => DriverLocation, {
+    nullable: true,
+    description: 'ดึงตำแหน่งล่าสุดของคนขับจาก Redis สำหรับการแสดงผลครั้งแรก',
+  })
+  async getInitialDriverLocation(@Arg('shipmentId') shipmentId: string): Promise<DriverLocation | null> {
+    try {
+      // 1. ค้นหา Driver ID จาก Shipment ID
+      const shipment = await ShipmentModel.findById(shipmentId).select('driver status').lean()
+
+      if (!shipment || !shipment.driver || shipment.status !== EShipmentStatus.PROGRESSING) {
+        // ไม่ต้องคืนค่าตำแหน่ง หากงานไม่ได้กำลังทำอยู่หรือไม่มีคนขับ
+        return null
+      }
+
+      const driverId = shipment.driver.toString()
+
+      // 2. ดึงข้อมูลตำแหน่งล่าสุดจาก Redis
+      const lastLocationJson = await redis.get(`driver-location:${driverId}`)
+
+      if (lastLocationJson) {
+        console.log(`Found initial location for driver ${driverId} in Redis.`)
+        return JSON.parse(lastLocationJson)
+      }
+
+      return null // ไม่พบข้อมูลใน Redis
+    } catch (error) {
+      console.error(`Error fetching initial location for shipment ${shipmentId}:`, error)
+      throw new GraphQLError('ไม่สามารถดึงข้อมูลตำแหน่งเริ่มต้นได้')
+    }
   }
 }
