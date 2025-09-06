@@ -223,7 +223,13 @@ export const BILLING_CYCLE_LIST = (
                       },
                       {
                         case: { $eq: ['$$shipment.status', EShipmentStatus.CANCELLED] },
-                        then: { status: EDisplayStatus.REFUNDED, name: 'คืนเงินแล้ว', weight: 2 },
+                        then: {
+                          $cond: {
+                            if: { $eq: ['$status', EBillingStatus.CANCELLED] },
+                            then: { status: EDisplayStatus.CANCELLED, name: 'ยกเลิกงาน', weight: 5 },
+                            else: { status: EDisplayStatus.REFUNDED, name: 'คืนเงินแล้ว', weight: 2 },
+                          },
+                        },
                       },
                       {
                         case: { $eq: ['$$shipment.status', EShipmentStatus.REFUND] },
@@ -592,6 +598,14 @@ export const GET_BILLING_STATUS_BY_BILLING_NUMBER = (billingNumber: string): Pip
       },
     },
     {
+      $lookup: {
+        from: 'payments',
+        localField: 'payments',
+        foreignField: '_id',
+        as: 'payments',
+      },
+    },
+    {
       $addFields: {
         displayStatusInfo: {
           $let: {
@@ -658,7 +672,7 @@ export const GET_BILLING_STATUS_BY_BILLING_NUMBER = (billingNumber: string): Pip
                       {
                         case: {
                           $and: [
-                            { $eq: ['$$lastPayment.status', EBillingStatus.VERIFY] },
+                            { $eq: ['$$lastPayment.status', EBillingStatus.PENDING] },
                             { $eq: ['$$lastPayment.type', EPaymentType.REFUND] },
                           ],
                         },
@@ -684,7 +698,13 @@ export const GET_BILLING_STATUS_BY_BILLING_NUMBER = (billingNumber: string): Pip
                       },
                       {
                         case: { $eq: ['$$shipment.status', EShipmentStatus.CANCELLED] },
-                        then: { status: EDisplayStatus.REFUNDED, name: 'คืนเงินแล้ว', weight: 2 },
+                        then: {
+                          $cond: {
+                            if: { $eq: ['$status', EBillingStatus.CANCELLED] },
+                            then: { status: EDisplayStatus.CANCELLED, name: 'ยกเลิกงาน', weight: 5 },
+                            else: { status: EDisplayStatus.REFUNDED, name: 'คืนเงินแล้ว', weight: 2 },
+                          },
+                        },
                       },
                       {
                         case: { $eq: ['$$shipment.status', EShipmentStatus.REFUND] },
@@ -724,7 +744,8 @@ export const GET_BILLING_STATUS_BY_BILLING_NUMBER = (billingNumber: string): Pip
       $project: {
         _id: 0,
         billingId: '$_id',
-        status: '$displayStatusInfo.status',
+        status: '$status',
+        billingStatus: '$displayStatusInfo.status',
         statusName: '$displayStatusInfo.name',
         paymentMethod: '$paymentMethod',
       },
@@ -766,6 +787,14 @@ export const AGGREGATE_BILLING_STATUS_COUNT = (paymentMethod: EPaymentMethod, cu
       },
     },
     {
+      $lookup: {
+        from: 'payments',
+        localField: 'payments',
+        foreignField: '_id',
+        as: 'payments',
+      },
+    },
+    {
       $addFields: {
         displayStatusInfo: {
           $let: {
@@ -832,7 +861,7 @@ export const AGGREGATE_BILLING_STATUS_COUNT = (paymentMethod: EPaymentMethod, cu
                       {
                         case: {
                           $and: [
-                            { $eq: ['$$lastPayment.status', EBillingStatus.VERIFY] },
+                            { $eq: ['$$lastPayment.status', EBillingStatus.PENDING] },
                             { $eq: ['$$lastPayment.type', EPaymentType.REFUND] },
                           ],
                         },
@@ -858,7 +887,13 @@ export const AGGREGATE_BILLING_STATUS_COUNT = (paymentMethod: EPaymentMethod, cu
                       },
                       {
                         case: { $eq: ['$$shipment.status', EShipmentStatus.CANCELLED] },
-                        then: { status: EDisplayStatus.REFUNDED, name: 'คืนเงินแล้ว', weight: 2 },
+                        then: {
+                          $cond: {
+                            if: { $eq: ['$status', EBillingStatus.CANCELLED] },
+                            then: { status: EDisplayStatus.CANCELLED, name: 'ยกเลิกงาน', weight: 5 },
+                            else: { status: EDisplayStatus.REFUNDED, name: 'คืนเงินแล้ว', weight: 2 },
+                          },
+                        },
                       },
                       {
                         case: { $eq: ['$$shipment.status', EShipmentStatus.REFUND] },

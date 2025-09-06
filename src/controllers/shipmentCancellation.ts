@@ -74,7 +74,7 @@ export function calculateCancellationFee(shipment: Shipment, isPaymentComplete: 
       [EDriverAcceptanceStatus.IDLE, EDriverAcceptanceStatus.PENDING, EDriverAcceptanceStatus.UNINTERESTED],
       shipment.driverAcceptanceStatus,
     )
-    
+
   if (isDriverNotAccepted) {
     // ไม่คิดค่าบริการ -> คืนเงิน 100%
     return {
@@ -162,10 +162,12 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
   const _steps = (_shipment.steps || []) as StepDefinition[]
   // const lastStep = lodash.last(lodash.sortBy(_shipment.steps, ['seq'])) as StepDefinition
 
-  const deniedSteps = lodash.filter(_steps, (step) => step.seq >= currentStep.seq)
-  await Aigle.forEach(deniedSteps, async (step) => {
-    await StepDefinitionModel.findByIdAndUpdate(step._id, { stepStatus: EStepStatus.CANCELLED }, { session })
-  })
+  const deniedStepIds = lodash.filter(_steps, (step) => step.seq >= currentStep.seq).map((step) => step._id)
+  // await Aigle.forEach(deniedSteps, async (step) => {
+  //   await StepDefinitionModel.findByIdAndUpdate(step._id, { stepStatus: EStepStatus.CANCELLED }, { session })
+  // })
+
+  await StepDefinitionModel.updateMany({ _id: { $in: deniedStepIds }}, { stepStatus: EStepStatus.CANCELLED }, { session })
 
   /**
    * New Step
@@ -184,8 +186,6 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
   await _customerCancelledStep.save({ session })
   stepIds.push(_customerCancelledStep._id)
 
-  let finalShipmentStatus = EShipmentStatus.CANCELLED
-
   if (!isCredit) {
     const _billing = await BillingModel.findOne({ billingNumber: _shipment.trackingNumber }).session(session)
     if (!_billing) {
@@ -196,7 +196,6 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
 
     if (forCustomer > 0) {
       // **[Corrected Logic]** Only enter refund flow if there is an amount to refund.
-      finalShipmentStatus = EShipmentStatus.REFUND
       // Add refund step
       _newLatestSeq = _newLatestSeq + 1
       const refundStep = new StepDefinitionModel({
@@ -242,7 +241,10 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
          * ลูกค้ายกเลิกการใช้บริการก่อนวันให้บริิการจริง คืนเงินเต็มจำนวนตามเงื่อนไขบริษัท
          */
         const _refundNoteNumber = await generateMonthlySequenceNumber('refundnote')
-        const _advanceReceipts = filter(_billing.receipts, (_receipt: Receipt) => _receipt.receiptType === EReceiptType.ADVANCE) as Receipt[]
+        const _advanceReceipts = filter(
+          _billing.receipts,
+          (_receipt: Receipt) => _receipt.receiptType === EReceiptType.ADVANCE,
+        ) as Receipt[]
         const _advanceReceiptsNumber = _advanceReceipts.map((_receipt: Receipt) => _receipt.receiptNumber)
 
         const isBusiness = (_shipment.customer as User)?.userType === EUserType.BUSINESS
@@ -270,7 +272,10 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
          */
         // Make dummy
         const _refundNoteNumber = generateRandomNumberPattern(`DUMMYREFUNDNOTE####`)
-        const _advanceReceipts = filter(_billing.receipts, (_receipt: Receipt) => _receipt.receiptType === EReceiptType.ADVANCE) as Receipt[]
+        const _advanceReceipts = filter(
+          _billing.receipts,
+          (_receipt: Receipt) => _receipt.receiptType === EReceiptType.ADVANCE,
+        ) as Receipt[]
         const _advanceReceiptsNumber = _advanceReceipts.map((_receipt: Receipt) => _receipt.receiptNumber)
 
         const isBusiness = (_shipment.customer as User)?.userType === EUserType.BUSINESS
@@ -279,6 +284,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
         const _refundNote = new RefundNoteModel({
           refundNoteNumber: _refundNoteNumber,
           refAdvanceReceiptNo: _advanceReceiptsNumber,
+          billing: _billing._id,
           amount: _total,
           subtotal: forCustomer,
           tax: _tax,
@@ -353,7 +359,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
   }
 
   const customerCancellationFee = latestQuotation.price.subTotal - forCustomer
-
+  const finalShipmentStatus = forCustomer > 0 && !isCredit ? EShipmentStatus.REFUND : EShipmentStatus.CANCELLED
   // Update Shipment final status
   const lastStepId = last(stepIds)
   await ShipmentModel.findByIdAndUpdate(
@@ -431,6 +437,11 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
     )
   }
 
+  const cashMessage =
+    feeState === 'FULL_CUSTOMER_REFUND' || feeState === 'HALF_CUSTOMER_REFUND'
+      ? ['ระบบกำลังคำนวนยอดคืนเงิน และจะดำเนินการคืนให้ท่านในไม่ช้า']
+      : []
+
   await NotificationModel.sendNotification(
     {
       userId: lodash.get(_shipment, 'customer._id', ''),
@@ -440,7 +451,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
         `เราขอแจ้งให้ท่านทราบว่าการจองหมายเลข ${_shipment.trackingNumber} ของท่านได้ยกเลิกแล้วโดย${
           isCancelledByAdmin ? 'ผู้ดูแลระบบ' : 'ท่านเอง'
         }`,
-        ...(!isCredit ? ['ระบบกำลังคำนวนยอดคืนเงิน และจะดำเนินการคืนให้ท่านในไม่ช้า'] : []),
+        ...(!isCredit ? cashMessage : []),
       ],
       infoText: 'ดูงานขนส่ง',
       infoLink: `/main/tracking?tracking_number=${_shipment.trackingNumber}`,

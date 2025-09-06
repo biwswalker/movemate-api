@@ -149,8 +149,11 @@ export class BillingStatusPayload {
   @Field(() => ID)
   billingId: string
 
+  @Field(() => EBillingStatus)
+  status: EBillingStatus
+
   @Field()
-  status: string
+  billingStatus: string
 
   @Field()
   statusName: string

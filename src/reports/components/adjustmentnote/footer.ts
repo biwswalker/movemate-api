@@ -192,6 +192,7 @@ export async function AdjustmentNoteFooterComponent(doc: PDFDocument, adjustment
     .fillColor(COLORS.TEXT_PRIMARY)
     .text('(ผู้มีอำนาจลงนาม)', signatureX, doc.y - 9, { width: signatureWidth, align: 'center' })
 
-  doc.image(ASSETS.SIGNATURE, signatureX + 108, doc.y - 85, { width: 78 })
-  doc.image(ASSETS.THEPPAWNCHAI, signatureX + 100 + 78, doc.y - 125, { width: 100 })
+    doc.image(ASSETS.THEPPAWNCHAI_CREDENTIAL, signatureX + 108, doc.y - 109, { width: 100 })
+  // doc.image(ASSETS.SIGNATURE, signatureX + 108, doc.y - 85, { width: 78 })
+  // doc.image(ASSETS.THEPPAWNCHAI, signatureX + 100 + 78, doc.y - 125, { width: 100 })
 }

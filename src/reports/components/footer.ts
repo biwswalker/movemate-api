@@ -210,8 +210,9 @@ export async function ReceiptFooterComponent(
     .fillColor(COLORS.TEXT_PRIMARY)
     .text('(ผู้ให้บริการ)', signatureX, doc.y - 9, { width: signatureWidth, align: 'center' })
 
-  doc.image(ASSETS.SIGNATURE, signatureX + 108, doc.y - 90, { width: 78 })
-  doc.image(ASSETS.THEPPAWNCHAI, signatureX + 100 + 78, doc.y - (94 + 64), { width: 100 })
+  doc.image(ASSETS.THEPPAWNCHAI_CREDENTIAL, signatureX + 108, doc.y - 114, { width: 100 })
+  // doc.image(ASSETS.SIGNATURE, signatureX + 108, doc.y - 90, { width: 78 })
+  // doc.image(ASSETS.THEPPAWNCHAI, signatureX + 100 + 78, doc.y - (94 + 64), { width: 100 })
 }
 
 export async function InvoiceFooterComponent(doc: PDFDocument, billing: Billing, taxIncluded?: boolean) {
@@ -431,6 +432,7 @@ export async function InvoiceFooterComponent(doc: PDFDocument, billing: Billing,
     .fillColor(COLORS.TEXT_PRIMARY)
     .text('(ผู้ให้บริการ)', signatureX, doc.y - 9, { width: signatureWidth, align: 'center' })
 
-  doc.image(ASSETS.SIGNATURE, signatureX + 108, doc.y - 90, { width: 78 })
-  doc.image(ASSETS.THEPPAWNCHAI, signatureX + 100 + 78, doc.y - (94 + 64), { width: 100 })
+  doc.image(ASSETS.THEPPAWNCHAI_CREDENTIAL, signatureX + 108, doc.y - 114, { width: 100 })
+  // doc.image(ASSETS.SIGNATURE, signatureX + 108, doc.y - 90, { width: 78 })
+  // doc.image(ASSETS.THEPPAWNCHAI, signatureX + 100 + 78, doc.y - (94 + 64), { width: 100 })
 }

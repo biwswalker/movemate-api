@@ -733,27 +733,29 @@ export async function getShipmentCancellationPreview(shipmentId: string): Promis
   const isFourWheeler = vehicle.type === '4W'
   const cancellationTime = new Date()
   const minutesToBooking = differenceInMinutes(shipment.bookingDateTime, cancellationTime)
-
+  
   // --- กำหนดเงื่อนไขและนโยบาย ---
   const policy: CancellationPolicyDetail[] = isFourWheeler
-    ? [
-        { condition: 'ยกเลิกก่อนเริ่มงานมากกว่า 120 นาที', feeDescription: 'ไม่มีค่าใช้จ่าย' },
-        { condition: 'ยกเลิกระหว่าง 40 - 120 นาที', feeDescription: 'คิดค่าใช้จ่าย 50%' },
-        { condition: 'ยกเลิกน้อยกว่า 40 นาที', feeDescription: 'คิดค่าใช้จ่าย 100%' },
-      ]
-    : [
-        { condition: 'ยกเลิกก่อนเริ่มงานมากกว่า 180 นาที', feeDescription: 'ไม่มีค่าใช้จ่าย' },
-        { condition: 'ยกเลิกระหว่าง 90 - 180 นาที', feeDescription: 'คิดค่าใช้จ่าย 50%' },
-        { condition: 'ยกเลิกน้อยกว่า 90 นาที', feeDescription: 'คิดค่าใช้จ่าย 100%' },
-      ]
-
+  ? [
+    { condition: 'ยกเลิกก่อนเริ่มงานมากกว่า 120 นาที', feeDescription: 'ไม่มีค่าใช้จ่าย' },
+    { condition: 'ยกเลิกระหว่าง 40 - 120 นาที', feeDescription: 'คิดค่าใช้จ่าย 50%' },
+    { condition: 'ยกเลิกน้อยกว่า 40 นาที', feeDescription: 'คิดค่าใช้จ่าย 100%' },
+  ]
+  : [
+    { condition: 'ยกเลิกก่อนเริ่มงานมากกว่า 180 นาที', feeDescription: 'ไม่มีค่าใช้จ่าย' },
+    { condition: 'ยกเลิกระหว่าง 90 - 180 นาที', feeDescription: 'คิดค่าใช้จ่าย 50%' },
+    { condition: 'ยกเลิกน้อยกว่า 90 นาที', feeDescription: 'คิดค่าใช้จ่าย 100%' },
+  ]
+  
   // --- คำนวณค่าปรับและยอดคืนตามเงื่อนไขปัจจุบัน ---
   const pickupStep = find(shipment.steps, ['step', EStepDefinition.PICKUP]) as StepDefinition | undefined
   const isDonePickup = pickupStep && pickupStep.stepStatus === EStepStatus.DONE
-
+  
   const freeThreshold = isFourWheeler ? 120 : 180
   const halfChargeThreshold = isFourWheeler ? 40 : 90
   const totalCharge = latestQuotation.price.total
+  console.log('Cancellation Time: ', shipment.bookingDateTime, cancellationTime, minutesToBooking)
+  console.log('Threshold: ', freeThreshold, halfChargeThreshold)
 
   let cancellationFee = 0
   let finalChargeDescription = ''

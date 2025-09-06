@@ -128,6 +128,7 @@ export function NonTaxRefundReceiptFooterComponent(doc: PDFDocument, refundNote:
   doc
     .fillColor(COLORS.TEXT_PRIMARY)
     .text(CONSTANTS.CUSTOMER_LABEL, signatureX, doc.y - 9, { width: signatureWidth, align: 'center' })
-  doc.image(ASSETS.SIGNATURE, signatureX + 108, doc.y - 90, { width: 78 })
-  doc.image(ASSETS.THEPPAWNCHAI, signatureX + 100 + 40, doc.y - (94 + 46), { width: 100 })
+  doc.image(ASSETS.THEPPAWNCHAI_CREDENTIAL, signatureX + 108, doc.y - 114, { width: 100 })
+  // doc.image(ASSETS.SIGNATURE, signatureX + 108, doc.y - 90, { width: 78 })
+  // doc.image(ASSETS.THEPPAWNCHAI, signatureX + 100 + 40, doc.y - (94 + 46), { width: 100 })
 }
