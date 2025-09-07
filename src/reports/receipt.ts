@@ -1,4 +1,4 @@
-import { get, reduce, head, tail, clone, round, last, sortBy, isEmpty } from 'lodash'
+import { get, reduce, head, tail, clone, round, last, sortBy, isEmpty, toNumber } from 'lodash'
 import PDFDocument, { Table, DataOptions } from 'pdfkit-table'
 import fs from 'fs'
 import path from 'path'
@@ -25,10 +25,14 @@ interface GenerateReceiptResponse {
   document: BillingDocument
 }
 
-export async function generateReceipt(billing: Billing, receipt?: Receipt, session?: ClientSession): Promise<GenerateReceiptResponse> {
+export async function generateReceipt(
+  billing: Billing,
+  receipt?: Receipt,
+  session?: ClientSession,
+): Promise<GenerateReceiptResponse> {
   const _receipts = billing.receipts as Receipt[]
   const _quotation = billing.quotation as Quotation
-  const _receipt = receipt ? receipt :last(sortBy(_receipts, 'createdAt')) as Receipt | undefined
+  const _receipt = receipt ? receipt : (last(sortBy(_receipts, 'createdAt')) as Receipt | undefined)
   if (!_quotation) {
     const message = 'ไม่พบข้อมูลใบเสนอราคา'
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -96,7 +100,7 @@ export async function generateReceipt(billing: Billing, receipt?: Receipt, sessi
         (prev, curr) => (prev ? `${prev}, ${curr.name}` : curr.name),
         '',
       )}`
-      amount = latestQuotation?.price?.total || 0
+      amount = latestQuotation?.price?.subTotal || 0
     } else if (shipment.status === EShipmentStatus.CANCELLED && shipment.cancellationFee > 0) {
       // กรณีงานยกเลิกและมีค่าปรับ: แสดงเป็นค่าปรับ
       details = `ค่าปรับจากการยกเลิกงาน #${shipment.trackingNumber}`
@@ -106,9 +110,12 @@ export async function generateReceipt(billing: Billing, receipt?: Receipt, sessi
       return null
     }
 
+    const issueInBEDateMonth = fDate(shipment.bookingDateTime, 'dd/MM')
+    const issueInBEYear = toNumber(fDate(shipment.bookingDateTime, 'yyyy')) + 543
+
     return {
       no: { label: String(no), options },
-      bookingDateTime: { label: fDate(shipment.bookingDateTime, 'dd/MM/yyyy'), options },
+      bookingDateTime: { label: `${issueInBEDateMonth}/${issueInBEYear}`, options },
       trackingNumber: { label: shipment.trackingNumber, options },
       details: { label: details, options: { ...options, align: 'left' } },
       subtotal: { label: fCurrency(amount, true), options },

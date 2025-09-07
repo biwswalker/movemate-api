@@ -1,4 +1,4 @@
-import { get, reduce, head, tail, clone, round, last, sortBy } from 'lodash'
+import { get, reduce, head, tail, clone, round, last, sortBy, toNumber } from 'lodash'
 import PDFDocument, { Table, DataOptions } from 'pdfkit-table'
 import fs from 'fs'
 import path from 'path'
@@ -83,7 +83,7 @@ export async function generateInvoice(
         (prev, curr) => (prev ? `${prev}, ${curr.name}` : curr.name),
         '',
       )}`
-      amount = latestQuotation?.price?.total || 0
+      amount = latestQuotation?.price?.subTotal || 0
     } else if (shipment.status === EShipmentStatus.CANCELLED && shipment.cancellationFee > 0) {
       // กรณีงานยกเลิกและมีค่าปรับ: แสดงเป็นค่าปรับ
       details = `ค่าปรับจากการยกเลิกงาน #${shipment.trackingNumber}`
@@ -93,9 +93,12 @@ export async function generateInvoice(
       return null
     }
 
+    const issueInBEDateMonth = fDate(shipment.bookingDateTime, 'dd/MM')
+    const issueInBEYear = toNumber(fDate(shipment.bookingDateTime, 'yyyy')) + 543
+
     return {
       no: { label: String(no), options },
-      bookingDateTime: { label: fDate(shipment.bookingDateTime, 'dd/MM/yyyy'), options },
+      bookingDateTime: { label: `${issueInBEDateMonth}/${issueInBEYear}`, options },
       trackingNumber: { label: shipment.trackingNumber, options },
       details: { label: details, options: { ...options, align: 'left' } },
       subtotal: { label: fCurrency(amount), options },
