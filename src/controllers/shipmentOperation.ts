@@ -1,5 +1,5 @@
 import { EPaymentMethod } from '@enums/payments'
-import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
+import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EQuotationStatus, EShipmentStatus } from '@enums/shipments'
 import { FileInput } from '@inputs/file.input'
 import DriverDetailModel from '@models/driverDetail.model'
 import FileModel from '@models/file.model'
@@ -436,7 +436,7 @@ export async function finishJob(shipmentId: string, session?: ClientSession): Pr
     transactionType: ETransactionType.INCOME, // ตรวจสอบเฉพาะรายรับที่เกิดจากการจบงาน
   }).session(session)
 
-  const lastPayment = last(sortBy(shipment?.quotations, ['createdAt'])) as Quotation
+  const lastPayment = last(sortBy(shipment?.quotations as Quotation[], ['createdAt']).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation
   const cost = lastPayment?.cost
   const isAgentDriver = !isEmpty(shipment?.agentDriver)
   const driverId = get(shipment, 'driver._id', '')
@@ -724,7 +724,7 @@ export async function getShipmentCancellationPreview(shipmentId: string): Promis
     throw new GraphQLError('ไม่พบข้อมูลงานขนส่ง')
   }
 
-  const latestQuotation = last(sortBy(shipment.quotations, ['createdAt'])) as Quotation | undefined
+  const latestQuotation = last(sortBy(shipment.quotations as Quotation[], ['createdAt']).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
   if (!latestQuotation) {
     throw new GraphQLError('ไม่พบข้อมูลใบเสนอราคา')
   }

@@ -1,7 +1,7 @@
 import { cancelShipmentQueue, shipmentNotifyQueue } from '@configs/jobQueue'
 import { EBillingReason, EBillingState, EBillingStatus, EReceiptType, ERefundAmountType } from '@enums/billing'
 import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
-import { EDriverAcceptanceStatus, EShipmentCancellationReason, EShipmentStatus } from '@enums/shipments'
+import { EDriverAcceptanceStatus, EQuotationStatus, EShipmentCancellationReason, EShipmentStatus } from '@enums/shipments'
 import { EDriverStatus, EUserRole, EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
 import BusinessCustomerCreditPaymentModel, {
   BusinessCustomerCreditPayment,
@@ -104,7 +104,7 @@ export const cancelShipmentIfNotInterested = async (
 
   if (!shipment) return
   if (shipment?.driverAcceptanceStatus !== EDriverAcceptanceStatus.PENDING) return
-  const latestQuotation = last(sortBy(shipment.quotations, ['createdAt'])) as Quotation | undefined
+  const latestQuotation = last(sortBy(shipment.quotations as Quotation[], ['createdAt']).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
 
   // Make refund if Cash
   if (isEqual(paymentMethod, EPaymentMethod.CASH)) {

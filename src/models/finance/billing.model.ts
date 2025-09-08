@@ -9,15 +9,16 @@ import { Payment } from './payment.model'
 import { Receipt } from './receipt.model'
 import { EBillingState, EBillingStatus, EReceiptType } from '@enums/billing'
 import { BillingAdjustmentNote } from './billingAdjustmentNote.model'
-import { EPaymentMethod, EPaymentType } from '@enums/payments'
+import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
 import { BillingReason, PaymentAmounts } from './objects'
-import { filter, get, last, sortBy } from 'lodash'
+import { filter, get, includes, last, sortBy } from 'lodash'
 import { Invoice } from './invoice.model'
 import { AggregatePaginateModel, PaginateModel } from 'mongoose'
 import mongoosePagination from 'mongoose-paginate-v2'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
 import { Quotation } from './quotation.model'
 import { RefundNote } from './refundNote.model'
+import { EQuotationStatus } from '@enums/shipments'
 
 /**
  * TODO:
@@ -134,7 +135,7 @@ export class Billing extends TimeStamps {
 
     // --- สำหรับลูกค้าเงินสด (ใช้ Logic เดิม) ---
     const payments = get(this, '_doc.payments', this.payments || []) as Payment[]
-    const latestPayment = last(sortBy(payments, 'createdAt'))
+    const latestPayment = last(sortBy(payments, 'createdAt').filter(_payment => !includes([EPaymentStatus.CANCELLED], _payment.status)))
     if (latestPayment) {
       return {
         total: latestPayment.total ?? 0,
@@ -157,7 +158,7 @@ export class Billing extends TimeStamps {
     ) as Payment | undefined
 
     if (latestPayment) {
-      const quotation = last(sortBy(latestPayment.quotations, 'createdAt')) as Quotation | undefined
+      const quotation = last(sortBy(latestPayment.quotations as Quotation[], 'createdAt').filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
       return quotation
     }
     return undefined

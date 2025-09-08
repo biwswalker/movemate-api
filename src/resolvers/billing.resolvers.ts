@@ -57,7 +57,7 @@ import TransactionModel, {
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import { shipmentNotify } from '@controllers/shipmentNotification'
 import { generateBillingReceipt } from '@controllers/billingReceipt'
-import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
+import { EAdminAcceptanceStatus, EDriverAcceptanceStatus, EQuotationStatus, EShipmentStatus } from '@enums/shipments'
 import { CreateAdjustmentNoteInput } from '@inputs/billingAdjustmentNote.input'
 import { createAdjustmentNote } from '@controllers/billingAdjustment'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
@@ -766,7 +766,7 @@ export default class BillingResolver {
       }
     } else {
       // No direct billing record found, determine the reason
-      const latestQuotation = last(sortBy(shipment.quotations, ['createdAt'])) as Quotation | undefined
+      const latestQuotation = last(sortBy(shipment.quotations as Quotation[], ['createdAt']).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
 
       if (!latestQuotation) {
         // This case should ideally not happen if a shipment exists and was priced

@@ -1,6 +1,6 @@
 import { EBillingState, EBillingStatus } from '@enums/billing'
 import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
-import { EShipmentStatus } from '@enums/shipments'
+import { EQuotationStatus, EShipmentStatus } from '@enums/shipments'
 import { EUserRole, EUserStatus, EUserType } from '@enums/users'
 import BusinessCustomerCreditPaymentModel, {
   BusinessCustomerCreditPayment,
@@ -118,7 +118,7 @@ export async function createBillingCreditUser(customerId: string, session?: Clie
       let quotationIds = []
 
       for (const shipment of shipmentsInPeriod) {
-        const latestQuotation = last(sortBy(shipment.quotations, ['createdAt'])) as Quotation | undefined
+        const latestQuotation = last(sortBy(shipment.quotations as Quotation[], ['createdAt']).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
         if (!latestQuotation) continue
 
         quotationIds.push(latestQuotation._id)

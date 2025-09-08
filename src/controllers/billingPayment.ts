@@ -27,12 +27,13 @@ import { generateBillingReceipt } from './billingReceipt'
 import { MakePayBillingInput } from '@inputs/payment.input'
 import FileModel from '@models/file.model'
 import { revertShipmentRejection } from './shipmentOperation'
-import { EAdminAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
+import { EAdminAcceptanceStatus, EQuotationStatus, EShipmentStatus } from '@enums/shipments'
 import RefundNoteModel from '@models/finance/refundNote.model'
 import { generateCashReceipt } from 'reports/cashReceipt'
 import { generateRefundReceipt } from 'reports/refundReceipt'
 import UserModel, { User } from '@models/user.model'
 import { EUserStatus, EUserType } from '@enums/users'
+import QuotationModel from '@models/finance/quotation.model'
 
 Aigle.mixin(lodash, {})
 
@@ -310,6 +311,10 @@ export async function markBillingAsRefunded(input: MarkBillingAsRefundInput, adm
     { status: isRefunded ? EPaymentStatus.COMPLETE : EPaymentStatus.CANCELLED, $push: { evidence: _evidenceId } },
     { session },
   )
+
+  if(!isRefunded && _payment.quotations) {
+    await QuotationModel.updateMany({ _id: { $in: _payment.quotations }}, { status: EQuotationStatus.VOID })
+  }
 
   let _reason: BillingReason | undefined = undefined
   if (!isRefunded && reason) {

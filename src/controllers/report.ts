@@ -6,7 +6,7 @@ import Aigle from 'aigle'
 import lodash, { filter, find, get, head, includes, last, reduce, sortBy, sum, tail, uniq, uniqBy } from 'lodash'
 import UserModel, { User } from '@models/user.model'
 import { EUserStatus, EUserType, EUserValidationStatus } from '@enums/users'
-import { EShipmentStatus } from '@enums/shipments'
+import { EQuotationStatus, EShipmentStatus } from '@enums/shipments'
 import { EPaymentMethod } from '@enums/payments'
 import { VehicleType } from '@models/vehicleType.model'
 import { ShipmentAdditionalServicePrice } from '@models/shipmentAdditionalServicePrice.model'
@@ -235,7 +235,7 @@ export async function getAdminBookingReport(ids: string[]) {
     const _shipmentResolver = new ShipmentResolver()
     const _calculated = await _shipmentResolver.getCalculationDetail(booking._id)
 
-    const _quotation = last(booking.quotations) as Quotation
+    const _quotation = last(((booking.quotations || []) as Quotation[]).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation
     const _cost = _quotation.cost
     const _price = _quotation.price
     const _discount = reduce(
@@ -490,7 +490,7 @@ export async function getCreditorReport(ids: string[]) {
 
     const _creditorShipments = _shipments.map((shipment) => {
       const _step = find(shipment.steps, ['step', EStepDefinition.FINISH]) as StepDefinition | undefined
-      const _qoutation = last(shipment.quotations) as Quotation | undefined
+      const _qoutation = last(((shipment.quotations || []) as Quotation[]).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
       if (_step && _step.stepStatus === EStepStatus.DONE) {
         return {
           shipmentNo: shipment.trackingNumber,
@@ -550,10 +550,10 @@ export async function getCustomerBookingReport(ids: string[], customerId: string
     const destinations = tail(booking.destinations || [])
     const vehicle = booking.vehicleId as VehicleType | undefined
 
-    const _quotation = last(booking.quotations) as Quotation
-    const _price = _quotation.price
+    const _quotation = last(((booking.quotations || []) as Quotation[]).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
+    const _price = _quotation?.price
     const _discount = reduce(
-      _quotation.detail.discounts || [],
+      _quotation?.detail?.discounts || [],
       (prev, discount) => ({ cost: sum([prev.cost, discount.cost]), price: sum([prev.price, discount.price]) }),
       { cost: 0, price: 0 },
     )

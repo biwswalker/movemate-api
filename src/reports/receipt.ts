@@ -1,4 +1,4 @@
-import { get, reduce, head, tail, clone, round, last, sortBy, isEmpty, toNumber } from 'lodash'
+import { get, reduce, head, tail, clone, round, last, sortBy, isEmpty, toNumber, includes } from 'lodash'
 import PDFDocument, { Table, DataOptions } from 'pdfkit-table'
 import fs from 'fs'
 import path from 'path'
@@ -17,7 +17,7 @@ import { ClientSession } from 'mongoose'
 import { GraphQLError } from 'graphql'
 import { REPONSE_NAME } from 'constants/status'
 import { EPaymentMethod } from '@enums/payments'
-import { EShipmentStatus } from '@enums/shipments'
+import { EQuotationStatus, EShipmentStatus } from '@enums/shipments'
 
 interface GenerateReceiptResponse {
   fileName: string
@@ -94,7 +94,7 @@ export async function generateReceipt(
     if (shipment.status === EShipmentStatus.DELIVERED) {
       // กรณีงานสำเร็จ: แสดงเป็นค่าขนส่งปกติ
       const dropoffs = tail(shipment.destinations)
-      const latestQuotation = last(sortBy(shipment.quotations, 'createdAt')) as Quotation | undefined
+      const latestQuotation = last(sortBy(shipment.quotations as Quotation[], 'createdAt').filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
       details = `ค่าขนส่ง${vehicle.name} ${pickup.name} ไปยัง ${reduce(
         dropoffs,
         (prev, curr) => (prev ? `${prev}, ${curr.name}` : curr.name),

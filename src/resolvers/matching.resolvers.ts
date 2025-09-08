@@ -17,8 +17,8 @@ import {
 import { addSeconds, format, isBefore, parseISO } from 'date-fns'
 import pubsub, { SHIPMENTS } from '@configs/pubsub'
 import { Repeater } from '@graphql-yoga/subscription'
-import { EPaymentMethod, EPaymentStatus } from '@enums/payments'
-import { EDriverAcceptanceStatus, EShipmentMatchingCriteria, EShipmentStatus } from '@enums/shipments'
+import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
+import { EDriverAcceptanceStatus, EQuotationStatus, EShipmentMatchingCriteria, EShipmentStatus } from '@enums/shipments'
 import { EDriverStatus, EUserRole, EUserStatus, EUserType } from '@enums/users'
 import { th } from 'date-fns/locale'
 import { FilterQuery } from 'mongoose'
@@ -439,8 +439,8 @@ export default class MatchingResolver {
     if (paymentMethod === EPaymentMethod.CASH) {
       const _billing = await BillingModel.findOne({ billingNumber: shipment.trackingNumber }).session(session)
       if (_billing) {
-        const _payments = sortBy((_billing.payments || []) as Payment[], 'createdAt')
-        const isWaitingPaidOrApproval = _payments.some((_payment) => _payment.status === EPaymentStatus.PENDING)
+        const _payments = sortBy((_billing.payments || []) as Payment[], 'createdAt').filter(_payment => !includes([EPaymentStatus.CANCELLED], _payment.status))
+        const isWaitingPaidOrApproval = _payments.some((_payment) => _payment.status === EPaymentStatus.PENDING && _payment.type !== EPaymentType.REFUND)
         if (isWaitingPaidOrApproval) {
           const message = 'ไม่สามารถดำเนินการสำเร็จได้ เนื่องลูกค้ายังไม่ได้ชำระเงิน'
           throw new GraphQLError(message, {
@@ -454,7 +454,7 @@ export default class MatchingResolver {
 
         const _paymentQoutations = _payments.filter((_payment) => !isEmpty(_payment.quotations))
         const lastPayment = last(_paymentQoutations)
-        const _quotation = last(sortBy(lastPayment.quotations, 'createdAt')) as Quotation | undefined
+        const _quotation = last(sortBy(lastPayment.quotations as Quotation[], 'createdAt').filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
 
         // if (_quotation?.price?.acturePrice !== _quotation?.price?.total && !(_advanceReceipts.length > 1)) {
         //   const _priceDifference = _quotation.price.acturePrice

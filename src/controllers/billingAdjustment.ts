@@ -3,7 +3,7 @@ import { ClientSession } from 'mongoose'
 import { GraphQLError } from 'graphql'
 import { generateMonthlySequenceNumber, generateTrackingNumber } from '@utils/string.utils'
 import { format } from 'date-fns'
-import { find, last, sortBy, sumBy } from 'lodash'
+import { find, includes, last, sortBy, sumBy } from 'lodash'
 import BillingAdjustmentNoteModel, { BillingAdjustmentNote } from '@models/finance/billingAdjustmentNote.model'
 import BillingModel from '@models/finance/billing.model'
 import { User } from '@models/user.model'
@@ -101,7 +101,11 @@ export async function createAdjustmentNote(
 
   await newAdjustmentNote.save({ session })
 
-  const lastestPayment = last(sortBy(billing.payments, 'createdAt')) as Payment | undefined
+  const lastestPayment = last(
+    sortBy(billing.payments as Payment[], 'createdAt').filter(
+      (_payment) => !includes([EPaymentStatus.CANCELLED], _payment.status),
+    ),
+  ) as Payment | undefined
   if (lastestPayment) {
     if (lastestPayment.status === EPaymentStatus.PENDING) {
       await PaymentModel.findByIdAndUpdate(lastestPayment._id, { status: EPaymentStatus.CANCELLED }, { session })

@@ -1,6 +1,6 @@
 import { EBillingReason, EBillingState, EBillingStatus, EReceiptType, ERefundAmountType } from '@enums/billing'
 import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
-import { EDriverAcceptanceStatus, EShipmentStatus } from '@enums/shipments'
+import { EDriverAcceptanceStatus, EQuotationStatus, EShipmentStatus } from '@enums/shipments'
 import BillingModel from '@models/finance/billing.model'
 import { BillingReason } from '@models/finance/objects'
 import PaymentModel from '@models/finance/payment.model'
@@ -43,7 +43,7 @@ Aigle.mixin(lodash, {})
 // ฟังก์ชันคำนวณค่าปรับจากการยกเลิก (Refactored for clarity)
 export function calculateCancellationFee(shipment: Shipment, isPaymentComplete: boolean) {
   const cancellationTime = new Date()
-  const latestQuotation = lodash.last(lodash.sortBy(shipment.quotations, ['createdAt'])) as Quotation | undefined
+  const latestQuotation = lodash.last(lodash.sortBy(shipment.quotations as Quotation[], ['createdAt']).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
 
   if (!latestQuotation) {
     throw new GraphQLError('ไม่พบข้อมูลใบเสนอราคา', {
@@ -137,7 +137,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
   }
 
-  const latestQuotation = lodash.last(lodash.sortBy(_shipment.quotations, ['createdAt'])) as Quotation | undefined
+  const latestQuotation = lodash.last(lodash.sortBy(_shipment.quotations as Quotation[], ['createdAt']).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
   if (!latestQuotation) {
     throw new GraphQLError('ไม่พบข้อมูลใบเสนอราคา', { extensions: { code: REPONSE_NAME.NOT_FOUND } })
   }

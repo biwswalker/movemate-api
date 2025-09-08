@@ -26,6 +26,7 @@ import { ClientSession } from 'mongoose'
 import { CalculateQuotationResultPayload, EditQuotationResultPayload } from '@payloads/quotation.payloads'
 import { VALUES } from 'constants/values'
 import { EPriceItemType } from '@enums/billing'
+import { EQuotationStatus } from '@enums/shipments'
 
 export async function calculateQuotation(
   data: CalculationInput,
@@ -75,7 +76,7 @@ export async function calculateQuotation(
   let latestQuotation: Quotation | undefined = undefined
   let isPaymentComplete: boolean | undefined = undefined
   if (shipment) {
-    const latestQuotations = last(sortBy(shipment.quotations, ['createdAt'])) as Quotation | undefined
+    const latestQuotations = last(sortBy(shipment.quotations as Quotation[], ['createdAt']).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
     if (shipment.paymentMethod === EPaymentMethod.CREDIT) {
       isPaymentComplete = true
     } else {
@@ -380,7 +381,7 @@ export async function calculateExistingQuotation(
 
   const shipment = await ShipmentModel.findById(shipmentId).session(session)
 
-  const latestQuotation = last(sortBy(shipment.quotations, ['createdAt'])) as Quotation | undefined
+  const latestQuotation = last(sortBy(shipment.quotations as Quotation[], ['createdAt']).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
   let _isPaymentComplete = false
   if (latestQuotation) {
     if (shipment.paymentMethod === EPaymentMethod.CREDIT) {

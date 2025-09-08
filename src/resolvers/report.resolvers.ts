@@ -17,7 +17,7 @@ import { CreditorReportPayload, CreditorReportResponse } from '@payloads/report.
 import { PaginationArgs } from '@inputs/query.input'
 import { reformPaginate } from '@utils/pagination.utils'
 import Aigle from 'aigle'
-import lodash, { find, last } from 'lodash'
+import lodash, { find, includes, last } from 'lodash'
 import { User } from '@models/user.model'
 import { GetDriverPaymentArgs } from '@inputs/driver-payment.input'
 import DriverPaymentModel from '@models/driverPayment.model'
@@ -29,6 +29,7 @@ import { EStepDefinition, EStepStatus, StepDefinition } from '@models/shipmentSt
 import { Quotation } from '@models/finance/quotation.model'
 import { fDate } from '@utils/formatTime'
 import { WithTransaction } from '@middlewares/RetryTransaction'
+import { EQuotationStatus } from '@enums/shipments'
 
 Aigle.mixin(lodash, {})
 
@@ -98,7 +99,7 @@ export default class ReportResolver {
           step: EStepDefinition.FINISH,
           stepStatus: EStepStatus.DONE,
         })
-        const quotation = last(shipment.quotations as Quotation[])
+        const quotation = last(((shipment.quotations || []) as Quotation[]).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status)))
         return {
           shipmentNo: shipment.trackingNumber,
           finishedDate: finishStep ? fDate(finishStep.updatedAt, 'dd/MM/yyyy') : '-',
