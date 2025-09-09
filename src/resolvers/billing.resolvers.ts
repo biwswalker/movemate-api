@@ -41,7 +41,7 @@ import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 't
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import BillingDocumentModel, { BillingDocument } from '@models/finance/documents.model'
 import UserModel, { User } from '@models/user.model'
-import { addDays, endOfMonth, format, parse, startOfMonth } from 'date-fns'
+import { addDays, endOfDay, endOfMonth, format, parse, startOfDay, startOfMonth } from 'date-fns'
 import { th } from 'date-fns/locale'
 import path from 'path'
 import addEmailQueue from '@utils/email.utils'
@@ -394,9 +394,9 @@ export default class BillingResolver {
     const customerId = ctx.req.user_id
     try {
       const currentday = new Date()
-      const today = currentday.setHours(0, 0, 0, 0)
-      const threeDaysLater = addDays(currentday, 3).setHours(23, 59, 59, 999)
-      const billingCycleModel = await BillingModel.find({
+      const today = startOfDay(currentday)
+      const threeDaysLater = endOfDay(addDays(currentday, 3))
+      const billingCycleModel = await BillingModel.countDocuments({
         user: customerId,
         state: EBillingState.CURRENT,
         status: EBillingStatus.PENDING,
@@ -404,8 +404,32 @@ export default class BillingResolver {
           $gte: today, // paymentDueDate หลังจากหรือเท่ากับวันนี้
           $lte: threeDaysLater, // และก่อนหรือเท่ากับในอีก 3 วันข้างหน้า
         },
-      }).lean()
-      return billingCycleModel.length > 0
+      })
+      return billingCycleModel > 0
+    } catch (error) {
+      console.log(error)
+      throw error
+    }
+  }
+
+  @Query(() => Boolean)
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
+  async isTodayDuedate(@Ctx() ctx: GraphQLContext): Promise<boolean> {
+    const customerId = ctx.req.user_id
+    try {
+      const currentday = new Date()
+      const startToday = startOfDay(currentday)
+      const endToday = endOfDay(currentday)
+      const billingCycleModel = await BillingModel.countDocuments({
+        user: customerId,
+        state: EBillingState.CURRENT,
+        status: EBillingStatus.PENDING,
+        paymentDueDate: {
+          $gte: startToday,
+          $lte: endToday,
+        },
+      })
+      return billingCycleModel > 0
     } catch (error) {
       console.log(error)
       throw error
