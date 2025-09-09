@@ -301,7 +301,7 @@ export async function notifyNearbyDuedate(beforeDuedateDay: number) {
       await addEmailQueue({
         from: process.env.MAILGUN_SMTP_EMAIL,
         to: emails,
-        subject: `[Auto Email] Movemate Thailand ใกล้ถึงกำหนดชำระค่าบริการ ${billing.billingNumber}`,
+        subject: `[Auto Email] Movemate Thailand ${title}ค่าบริการ ${billing.billingNumber}`,
         template: 'nearby_duedate',
         context: {
           business_name: customer.fullname,
