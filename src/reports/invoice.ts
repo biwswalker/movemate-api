@@ -162,6 +162,7 @@ export async function generateInvoice(
 
   await doc.addPage()
   nomoredata = false
+  currentPage = 1
   await HeaderComponent(doc, billing, 'invoice', currentPage, currentPage, isOiginal)
 
   await doc.table(table, {

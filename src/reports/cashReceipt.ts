@@ -148,6 +148,7 @@ export async function generateCashReceipt(
   // // Copy section
   await doc.addPage()
   nomoredata = false
+  currentPage = 1
   CashReceiptHeaderComponent(doc, _user, receipt, currentPage, currentPage, isOiginal)
 
   await doc.table(table, {

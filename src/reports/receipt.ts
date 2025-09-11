@@ -179,6 +179,7 @@ export async function generateReceipt(
 
   // Copy section
   await doc.addPage()
+  currentPage = 1
   nomoredata = false
   await HeaderComponent(doc, billing, 'receipt', currentPage, currentPage, isOiginal)
 
