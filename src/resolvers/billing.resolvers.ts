@@ -41,7 +41,7 @@ import { Arg, Args, Ctx, Int, Mutation, Query, Resolver, UseMiddleware } from 't
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import BillingDocumentModel, { BillingDocument } from '@models/finance/documents.model'
 import UserModel, { User } from '@models/user.model'
-import { addDays, endOfDay, endOfMonth, format, parse, startOfDay, startOfMonth } from 'date-fns'
+import { addDays, endOfDay, endOfMonth, format, isBefore, parse, startOfDay, startOfMonth } from 'date-fns'
 import { th } from 'date-fns/locale'
 import path from 'path'
 import addEmailQueue from '@utils/email.utils'
@@ -72,6 +72,7 @@ import { GraphQLJSONObject } from 'graphql-type-json'
 import { generateCashReceipt } from 'reports/cashReceipt'
 import RefundNoteModel from '@models/finance/refundNote.model'
 import { generateRefundReceipt } from 'reports/refundReceipt'
+import StepDefinitionModel, { EStepDefinition } from '@models/shipmentStepDefinition.model'
 
 @Resolver()
 export default class BillingResolver {
@@ -554,6 +555,8 @@ export default class BillingResolver {
         const _shipment = await ShipmentModel.findOne({ trackingNumber: _billing.billingNumber })
           .session(session)
           .lean()
+
+        const currentStep = await StepDefinitionModel.findById(_shipment.currentStepId).lean()
         if (_shipment.status === EShipmentStatus.DELIVERED) {
           /**
            * Handle If shipment complete
@@ -562,7 +565,20 @@ export default class BillingResolver {
           const lastReceipt = last(sortBy(_billing.receipts, 'createdAt')) as Receipt
           const documentId = await generateBillingReceipt(_billing._id, true, session)
           await ReceiptModel.findByIdAndUpdate(lastReceipt._id, { document: documentId }, { session })
-        } else if (_shipment.status === EShipmentStatus.IDLE) {
+        } else if (
+          _shipment.status === EShipmentStatus.IDLE ||
+          (isBefore(new Date(), _shipment.bookingDateTime) &&
+            includes(
+              [
+                EStepDefinition.CREATED,
+                EStepDefinition.CASH_VERIFY,
+                EStepDefinition.DRIVER_ACCEPTED,
+                EStepDefinition.CONFIRM_DATETIME,
+                EStepDefinition.ASSIGN_SHIPMENT,
+              ],
+              currentStep.step,
+            ))
+        ) {
           // 1. สร้าง "ใบรับเงินล่วงหน้า" เสมอ
           const _advanceReceiptNumber = await generateMonthlySequenceNumber('advancereceipt') // แนะนำให้ใช้ sequence แยก
           const _advanceReceipt = new ReceiptModel({
@@ -790,7 +806,11 @@ export default class BillingResolver {
       }
     } else {
       // No direct billing record found, determine the reason
-      const latestQuotation = last(sortBy(shipment.quotations as Quotation[], ['createdAt']).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
+      const latestQuotation = last(
+        sortBy(shipment.quotations as Quotation[], ['createdAt']).filter((_quotation) =>
+          includes([EQuotationStatus.ACTIVE], _quotation.status),
+        ),
+      ) as Quotation | undefined
 
       if (!latestQuotation) {
         // This case should ideally not happen if a shipment exists and was priced
