@@ -10,10 +10,10 @@ import { Receipt } from '@models/finance/receipt.model'
 
 export async function ReceiptFooterComponent(
   doc: PDFDocument,
-  quotation: Quotation,
+  // quotation: Quotation,
   receipt: Receipt,
   isReceiveWHTDocument?: boolean,
-  isAdditionalPaid?: boolean,
+  // isAdditionalPaid?: boolean,
 ) {
   const marginLeft = doc.page.margins.left
   const marginRight = doc.page.margins.right
@@ -70,21 +70,21 @@ export async function ReceiptFooterComponent(
    * Shipment เสร็จสิ้นแล้ว และชำระก่อนหน้านี้แล้ว
    * มีค่าใช้จ่ายเพิ่ม จะต้อง แสดงส่วนต่าง
    */
-  if (isAdditionalPaid) {
-    const _price = quotation.price
-    const _paidBefore = sum([_price.total || 0, -_price.acturePrice || 0])
+  // if (isAdditionalPaid) {
+  //   const _price = quotation.price
+  //   const _paidBefore = sum([_price.total || 0, -_price.acturePrice || 0])
 
-    doc
-      .fontSize(8)
-      .font(FONTS.SARABUN_MEDIUM)
-      .text('ชำระก่อนหน้า :', 0, doc.y - 10, { width: 400, align: 'right' })
-    doc
-      .font(FONTS.SARABUN_LIGHT)
-      .fontSize(8)
-      .text(fCurrency(-_paidBefore, true), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
+  //   doc
+  //     .fontSize(8)
+  //     .font(FONTS.SARABUN_MEDIUM)
+  //     .text('ชำระก่อนหน้า :', 0, doc.y - 10, { width: 400, align: 'right' })
+  //   doc
+  //     .font(FONTS.SARABUN_LIGHT)
+  //     .fontSize(8)
+  //     .text(fCurrency(-_paidBefore, true), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
 
-    doc.moveDown(2.6)
-  }
+  //   doc.moveDown(2.6)
+  // }
 
   doc
     .fontSize(8)

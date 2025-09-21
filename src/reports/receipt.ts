@@ -30,13 +30,13 @@ export async function generateReceipt(
   receipt?: Receipt,
   session?: ClientSession,
 ): Promise<GenerateReceiptResponse> {
+  // const _quotation = billing.quotation as Quotation
+  // if (!_quotation) {
+    //   const message = 'ไม่พบข้อมูลใบเสนอราคา'
+    //   throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    // }
   const _receipts = billing.receipts as Receipt[]
-  const _quotation = billing.quotation as Quotation
   const _receipt = receipt ? receipt : (last(sortBy(_receipts, 'createdAt')) as Receipt | undefined)
-  if (!_quotation) {
-    const message = 'ไม่พบข้อมูลใบเสนอราคา'
-    throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
-  }
   if (!_receipt) {
     const message = 'ไม่พบข้อมูลใบเสร็จ'
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -174,7 +174,7 @@ export async function generateReceipt(
   })
 
   nomoredata = true
-  await ReceiptFooterComponent(doc, _quotation, _receipt, isReceiveWHTDocument, isAdditionalPaid)
+  await ReceiptFooterComponent(doc, _receipt, isReceiveWHTDocument)
   isOiginal = false
 
   // Copy section
@@ -193,7 +193,7 @@ export async function generateReceipt(
     prepareHeader: () => doc.font(FONTS.SARABUN_MEDIUM).fontSize(7),
   })
   nomoredata = true
-  await ReceiptFooterComponent(doc, _quotation, _receipt, isReceiveWHTDocument, isAdditionalPaid)
+  await ReceiptFooterComponent(doc, _receipt, isReceiveWHTDocument)
 
   doc.end()
   await new Promise((resolve) => writeStream.on('finish', resolve))

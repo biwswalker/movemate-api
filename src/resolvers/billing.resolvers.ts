@@ -252,7 +252,10 @@ export default class BillingResolver {
     )
     // Regenerate receipt
     const _receipt = await ReceiptModel.findById(receiptId).session(session)
-    const { document, fileName, filePath } = await generateReceipt(_billing, _receipt, session)
+    const { document, fileName, filePath } =
+      _billing.paymentMethod === EPaymentMethod.CASH
+        ? await generateCashReceipt(_billing, _receipt, session)
+        : await generateReceipt(_billing, _receipt, session)
 
     const _customerId = get(_billing, 'user._id', '')
     const _customer = await UserModel.findById(_customerId).session(session)

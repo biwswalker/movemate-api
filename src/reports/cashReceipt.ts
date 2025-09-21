@@ -29,12 +29,12 @@ export async function generateCashReceipt(
   receipt: Receipt,
   session?: ClientSession,
 ): Promise<GenerateReceiptResponse> {
-  const _quotation = billing.quotation as Quotation
+  // const _quotation = billing.quotation as Quotation
+  // if (!_quotation) {
+    //   const message = 'ไม่พบข้อมูลใบเสนอราคา'
+    //   throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    // }
   const _user = billing.user as User
-  if (!_quotation) {
-    const message = 'ไม่พบข้อมูลใบเสนอราคา'
-    throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
-  }
   if (!_user) {
     const message = 'ไม่พบข้อมูลลูกค้า'
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
