@@ -374,12 +374,21 @@ export const GET_DRIVER_TRANSACTION_SUMMARY = (filters: GetDriverTransactionInpu
         profileImage: { $first: '$driverInfo.profileImage.filename' },
         driverType: { $first: '$driverInfo.userType' },
 
+        // netTotalAmount: {
+        //   $sum: {
+        //     $cond: {
+        //       if: { $eq: ['$transactionType', ETransactionType.INCOME] },
+        //       then: '$amount',
+        //       else: { $multiply: ['$amount', -1] }, // Subtract amount for OUTCOME
+        //     },
+        //   },
+        // },
         netTotalAmount: {
           $sum: {
             $cond: {
-              if: { $eq: ['$transactionType', ETransactionType.INCOME] },
+              if: { $ne: ['$status', ETransactionStatus.COMPLETE] },
               then: '$amount',
-              else: { $multiply: ['$amount', -1] }, // Subtract amount for OUTCOME
+              else: 0,
             },
           },
         },

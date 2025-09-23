@@ -191,7 +191,8 @@ export class Transaction extends TimeStamps {
     paginate: PaginationArgs,
   ): Promise<TransactionDriversAggregatePayload> {
     const { sort = {}, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
-    const aggregate = TransactionModel.aggregate(GET_DRIVER_TRANSACTION_SUMMARY(query, sort))
+    const aggregatePipeline = GET_DRIVER_TRANSACTION_SUMMARY(query, sort)
+    const aggregate = TransactionModel.aggregate(aggregatePipeline)
     const drivers = (await TransactionModel.aggregatePaginate(
       aggregate,
       reformSorts,
@@ -207,7 +208,8 @@ export class Transaction extends TimeStamps {
   ): Promise<DriverTransactionsAggregatePayload> {
     const { sort = {}, ...reformSorts }: PaginateOptions = reformPaginate(paginate)
     const driver = await UserModel.findOne({ userNumber: driverNumber })
-    const aggregate = TransactionModel.aggregate(DRIVER_TRANSACTIONS(driver._id.toString(), query, sort))
+    const aggregatePipeline = DRIVER_TRANSACTIONS(driver._id.toString(), query, sort)
+    const aggregate = TransactionModel.aggregate(aggregatePipeline)
     const transactions = (await TransactionModel.aggregatePaginate(
       aggregate,
       reformSorts,
