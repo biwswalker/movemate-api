@@ -163,7 +163,7 @@ export const DRIVER_TRANSACTIONS = (driverId: string, queries: GetTransactionsAr
       ownerId: driverId,
       refType: ref,
       ownerType: ETransactionOwner.DRIVER,
-      ...(transactionStatus ? { status: transactionStatus } : {}),
+      ...(transactionStatus ? { status: transactionStatus === ETransactionStatus.PENDING ? { $in: [ETransactionStatus.PENDING, ETransactionStatus.OUTSTANDING] } : transactionStatus } : {}),
       ...(transactionType ? { transactionType } : {}),
       ...(startOfCreated || endOfCreated
         ? {
@@ -386,7 +386,10 @@ export const GET_DRIVER_TRANSACTION_SUMMARY = (filters: GetDriverTransactionInpu
         netTotalAmount: {
           $sum: {
             $cond: {
-              if: { $ne: ['$status', ETransactionStatus.COMPLETE] },
+              if: { $or: [
+                { $eq: ['$status', ETransactionStatus.PENDING] },
+                { $eq: ['$status', ETransactionStatus.OUTSTANDING] }
+              ] },
               then: '$amount',
               else: 0,
             },

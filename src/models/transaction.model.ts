@@ -30,7 +30,7 @@ export enum ETransactionStatus {
   COMPLETE = 'COMPLETE',
   PENDING = 'PENDING',
   CANCELED = 'CANCELED',
-  OUTSTANDING = 'ค้างชำระ',
+  OUTSTANDING = 'OUTSTANDING',
 }
 registerEnumType(ETransactionStatus, {
   name: 'ETransactionStatus',
@@ -264,7 +264,9 @@ export class Transaction extends TimeStamps {
     // ])
 
     const monthly = get(monthlyTransactions, '0', { amount: 0, count: 0 }) || { amount: 0, count: 0 }
-    const pending = transactions.find((t) => t._id === ETransactionStatus.PENDING) || { amount: 0, count: 0 }
+    const pending = transactions.find(
+      (t) => t._id === ETransactionStatus.PENDING || t._id === ETransactionStatus.OUTSTANDING,
+    ) || { amount: 0, count: 0 }
     const paid = transactions.find((t) => t._id === ETransactionStatus.COMPLETE) || { amount: 0, count: 0 }
     // const all = get(allTransactions, '0', { amount: 0, count: 0 }) || { amount: 0, count: 0 }
     const all = { amount: sum([pending.amount, paid.amount]), count: sum([pending.count, paid.count]) }
