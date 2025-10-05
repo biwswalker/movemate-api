@@ -62,7 +62,7 @@ import { CreateAdjustmentNoteInput } from '@inputs/billingAdjustmentNote.input'
 import { createAdjustmentNote } from '@controllers/billingAdjustment'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import { Invoice } from '@models/finance/invoice.model'
-import { updateCustomerCreditUsageBalance } from '@controllers/customer'
+import { recalculateCustomerCredit } from '@controllers/customer'
 import { Quotation } from '@models/finance/quotation.model'
 import PaymentModel from '@models/finance/payment.model'
 import ReceiptModel, { Receipt } from '@models/finance/receipt.model'
@@ -702,12 +702,8 @@ export default class BillingResolver {
       const _invoice = _billing.invoice as Invoice | undefined
       const typeText = adjustmentNote.adjustmentType === EAdjustmentNoteType.CREDIT_NOTE ? 'ใบเพิ่มหนี้' : 'ใบลดหนี้'
 
-      // Update user credit usage
-      const amountToAdjustCredit =
-        adjustmentNote.adjustmentType === EAdjustmentNoteType.CREDIT_NOTE
-          ? -adjustmentNote.adjustmentSubTotal // ใบลดหนี้ (Credit Note) -> ลดหนี้ (ใช้ค่าลบ)
-          : adjustmentNote.adjustmentSubTotal // ใบเพิ่มหนี้ (Debit Note) -> เพิ่มหนี้ (ใช้ค่าบวก)
-      await updateCustomerCreditUsageBalance(_user._id.toString(), amountToAdjustCredit, session)
+      // (Update/Recalculate) user credit usage
+      await recalculateCustomerCredit(_user._id.toString(), session)
 
       if (_invoice) {
         await NotificationModel.sendNotification(

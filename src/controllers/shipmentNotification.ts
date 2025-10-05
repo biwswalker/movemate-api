@@ -297,6 +297,8 @@ export const cancelShipmentIfNotInterested = async (
         | undefined
       if (creditDetail) {
         const newCreditBalance = sum([creditDetail.creditUsage, -total])
+
+        // TODO: check
         await BusinessCustomerCreditPaymentModel.findByIdAndUpdate(
           creditDetail._id,
           {

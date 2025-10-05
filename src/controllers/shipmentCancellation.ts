@@ -29,7 +29,7 @@ import { GraphQLError } from 'graphql'
 import lodash, { filter, find, get, includes, last } from 'lodash'
 import { ClientSession } from 'mongoose'
 import { publishDriverMatchingShipment } from './shipmentGet'
-import { EUserRole, EUserType } from '@enums/users'
+import { EDriverStatus, EUserRole, EUserType } from '@enums/users'
 import { getAdminMenuNotificationCount } from '@resolvers/notification.resolvers'
 import { initialStepDefinition } from './steps'
 import { clearShipmentJobQueues } from './shipmentJobQueue'
@@ -43,7 +43,11 @@ Aigle.mixin(lodash, {})
 // ฟังก์ชันคำนวณค่าปรับจากการยกเลิก (Refactored for clarity)
 export function calculateCancellationFee(shipment: Shipment, isPaymentComplete: boolean) {
   const cancellationTime = new Date()
-  const latestQuotation = lodash.last(lodash.sortBy(shipment.quotations as Quotation[], ['createdAt']).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
+  const latestQuotation = lodash.last(
+    lodash
+      .sortBy(shipment.quotations as Quotation[], ['createdAt'])
+      .filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status)),
+  ) as Quotation | undefined
 
   if (!latestQuotation) {
     throw new GraphQLError('ไม่พบข้อมูลใบเสนอราคา', {
@@ -85,16 +89,18 @@ export function calculateCancellationFee(shipment: Shipment, isPaymentComplete: 
     }
   } else if (isDonePickup) {
     // คิดค่าบริการ 100% -> คืนเงิน 0%
+    // 01/10/25 เปลี่ยนจ่ายคนขับไม่เกิน 50% ของค่าจ้าง
     return {
-      forDriver: totalPayCost,
+      forDriver: totalPayCost * 0.5,
       forCustomer: 0,
       description: `ผู้ใช้ยกเลิกงานขนส่งหลังรับสินค้าแล้ว`,
       state: 'FULL_CHARGE',
     }
   } else if (timeDifferenceInMinutes <= urgentCancellingTime) {
     // คิดค่าบริการ 100% -> คืนเงิน 0%
+    // 01/10/25 เปลี่ยนจ่ายคนขับไม่เกิน 50% ของค่าจ้าง
     return {
-      forDriver: totalPayCost,
+      forDriver: totalPayCost * 0.5,
       forCustomer: 0,
       description: `ผู้ใช้ยกเลิกงานขนส่งก่อนเวลาน้อยกว่า ${urgentCancellingTime} นาที`,
       state: 'FULL_CHARGE',
@@ -137,7 +143,11 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
   }
 
-  const latestQuotation = lodash.last(lodash.sortBy(_shipment.quotations as Quotation[], ['createdAt']).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
+  const latestQuotation = lodash.last(
+    lodash
+      .sortBy(_shipment.quotations as Quotation[], ['createdAt'])
+      .filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status)),
+  ) as Quotation | undefined
   if (!latestQuotation) {
     throw new GraphQLError('ไม่พบข้อมูลใบเสนอราคา', { extensions: { code: REPONSE_NAME.NOT_FOUND } })
   }
@@ -167,7 +177,11 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
   //   await StepDefinitionModel.findByIdAndUpdate(step._id, { stepStatus: EStepStatus.CANCELLED }, { session })
   // })
 
-  await StepDefinitionModel.updateMany({ _id: { $in: deniedStepIds }}, { stepStatus: EStepStatus.CANCELLED }, { session })
+  await StepDefinitionModel.updateMany(
+    { _id: { $in: deniedStepIds } },
+    { stepStatus: EStepStatus.CANCELLED },
+    { session },
+  )
 
   /**
    * New Step
@@ -354,7 +368,13 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
     // Credit logic
     if (forCustomer > 0) {
       // ใช้ addCustomerCreditUsage โดยส่งค่าเป็นลบ เพื่อลด Credit Usage ลง
-      await addCustomerCreditUsage(lodash.get(_shipment, 'customer._id', ''), -forCustomer, session)
+      // forCustomer คือ subtotal ที่ยังไม่ได้หักภาษี เพราะฉนั้นต้องหักภาษีออกก่อน 1% เพื่อคืนยอดตามจริง
+      const tax = forCustomer * 0.01
+      const acturePaid = forCustomer - tax
+      /**
+       * WAIT TO RETEST
+       */
+      await addCustomerCreditUsage(lodash.get(_shipment, 'customer._id', ''), -acturePaid, session)
     }
   }
 
@@ -381,7 +401,11 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
 
   // Add driver's transaction if they had accepted the job
   if (isDriverAccepted && _shipment.driver && forDriver > 0) {
+    const agentDriver = _shipment.agentDriver
     const driverId = lodash.get(_shipment, 'driver._id', '')
+    const ownerDriveId = agentDriver
+      ? lodash.get(_shipment, 'agentDriver._id', '')
+      : lodash.get(_shipment, 'driver._id', '')
     const driverSubtotal = forDriver
     const driverTax = driverSubtotal * 0.01
     const driverTotal = lodash.sum([driverSubtotal, -driverTax])
@@ -391,7 +415,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
       amountTax: driverTax, // WHT
       amountBeforeTax: driverSubtotal,
       amount: driverTotal,
-      ownerId: driverId,
+      ownerId: ownerDriveId,
       ownerType: ETransactionOwner.DRIVER,
       description: `ค่าชดเชยงาน #${_shipment.trackingNumber} ${description}`,
       refId: _shipment._id,
@@ -407,7 +431,7 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
         amountTax: driverTax, // WHT
         amountBeforeTax: driverSubtotal,
         amount: driverTotal,
-        ownerId: driverId,
+        ownerId: ownerDriveId,
         ownerType: ETransactionOwner.DRIVER,
         description: `ค่าชดเชยงาน #${_shipment.trackingNumber} ${description}`,
         refId: _shipment._id,
@@ -418,10 +442,13 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
       await driverTransaction.save({ session })
     }
 
+    // Change Driver Status
+    await UserModel.findOneAndUpdate({ _id: driverId }, { drivingStatus: EDriverStatus.IDLE })
+
     // Driver Notification
     await NotificationModel.sendNotification(
       {
-        userId: driverId,
+        userId: ownerDriveId,
         varient: ENotificationVarient.ERROR,
         title: 'งานขนส่งของท่านถูกยกเลิก',
         message: [
@@ -435,6 +462,25 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
       true,
       { navigation: ENavigationType.SHIPMENT, trackingNumber: _shipment.trackingNumber },
     )
+
+    if (agentDriver) {
+      await NotificationModel.sendNotification(
+        {
+          userId: driverId,
+          varient: ENotificationVarient.ERROR,
+          title: 'งานขนส่งของท่านถูกยกเลิก',
+          message: [
+            `เราขอแจ้งให้ท่านทราบว่าการจองหมายเลข ${_shipment.trackingNumber} ของท่านได้ยกเลิกแล้วโดย${
+              isCancelledByAdmin ? 'ผู้ดูแลระบบ' : 'ลูกค้า'
+            } เหตุผล: ${reason}`,
+            `กรุณาตรวจสอบรายละเอียดงานขนส่งของท่าน`,
+          ],
+        },
+        session,
+        true,
+        { navigation: ENavigationType.SHIPMENT, trackingNumber: _shipment.trackingNumber },
+      )
+    }
   }
 
   const cashMessage =

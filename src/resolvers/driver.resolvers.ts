@@ -35,6 +35,7 @@ import { addSeconds } from 'date-fns'
 import { Types } from 'mongoose'
 import { WithTransaction } from '@middlewares/RetryTransaction'
 import pubsub, { USERS } from '@configs/pubsub'
+import { EShipmentStatus } from '@enums/shipments'
 
 @Resolver(User)
 export default class DriverResolver {
@@ -1091,6 +1092,7 @@ export default class DriverResolver {
       $or: [
         {
           bookingDateTime: { $lt: endDatetime },
+          status: EShipmentStatus.PROGRESSING,
           $expr: {
             $gt: [{ $add: ['$bookingDateTime', { $multiply: ['$displayTime', 1000] }] }, startDatetime],
           },

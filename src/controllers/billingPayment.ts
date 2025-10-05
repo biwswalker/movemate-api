@@ -10,7 +10,7 @@ import { GraphQLError } from 'graphql'
 import lodash, { filter, get, includes } from 'lodash'
 import { ClientSession, Types } from 'mongoose'
 import { markShipmentAsNoRefund, markShipmentAsRefunded, markShipmentVerified } from './shipmentVerify'
-import { addCustomerCreditUsage, updateCustomerCreditUsageBalance } from './customer'
+import { addCustomerCreditUsage, recalculateCustomerCredit } from './customer'
 import TransactionModel, {
   ERefType,
   ETransactionOwner,
@@ -164,9 +164,8 @@ export async function markBillingAsPaid(
      * Update Customer credit and balance
      * Only credit user
      */
-    const amount = -_payment.total
     const customerId = get(_billing, 'user._id', '')
-    await updateCustomerCreditUsageBalance(customerId, amount, session)
+    await recalculateCustomerCredit(customerId, session)
     await UserModel.findOneAndUpdate(
       { _id: customerId, status: { $in: [EUserStatus.INACTIVE, EUserStatus.BANNED] } },
       { status: EUserStatus.ACTIVE },

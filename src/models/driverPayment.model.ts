@@ -33,6 +33,10 @@ export class DriverPayment {
   @Property({ required: false })
   whtBookNo: string
 
+  @Field(() => Date, { nullable: true })
+  @Property({ required: false })
+  receiveReceiptDate: Date
+
   @Field(() => User)
   @Property({ ref: () => User, autopopulate: true })
   driver: Ref<User>

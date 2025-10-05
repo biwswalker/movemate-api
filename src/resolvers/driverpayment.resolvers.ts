@@ -5,7 +5,7 @@ import { AuthGuard } from '@guards/auth.guards'
 import { CreateDriverPaymentInput, GetDriverPaymentArgs } from '@inputs/driver-payment.input'
 import { PaginationArgs } from '@inputs/query.input'
 import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
-import DriverPaymentModel from '@models/driverPayment.model'
+import DriverPaymentModel, { DriverPayment } from '@models/driverPayment.model'
 import FileModel from '@models/file.model'
 import TransactionModel, {
   ERefType,
@@ -159,5 +159,26 @@ export default class DriverPaymentResolver {
     const driverPayments = await DriverPaymentModel.aggregate(DRIVER_PAYMENTS(queries, {}))
     const ids = map(driverPayments, ({ _id }) => _id)
     return ids
+  }
+
+  @Query(() => DriverPayment)
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async getDriverPaymentByPaymentNumber(@Arg('paymentNumber') paymentNumber: string): Promise<DriverPayment> {
+    const driverPayments = await DriverPaymentModel.findOne({ paymentNumber })
+    return driverPayments
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async confirmReceiveReceiptDocument(
+    @Arg('paymentNumber') paymentNumber: string,
+    @Arg('documentNumber') documentNumber: string,
+    @Arg('receiveDate') receiveDate: Date,
+  ): Promise<boolean> {
+    await DriverPaymentModel.findOneAndUpdate(
+      { paymentNumber },
+      { whtBookNo: documentNumber, receiveReceiptDate: receiveDate },
+    )
+    return true
   }
 }

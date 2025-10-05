@@ -372,7 +372,7 @@ export async function getAdminDriverReport(ids: string[]) {
       email: driver.email,
       status: getUserStatus(driver.status),
       vehicleType: _vehicle.map((vehicle) => vehicle.name).join(', '),
-      licensePlate: '',
+      licensePlate: `${_driverDetail?.licensePlateNumber || ''}${_driverDetail?.licensePlateProvince ? ' (' + _driverDetail.licensePlateProvince + ')' : ''}`,
       registeredDate: driver.createdAt ? fDate(driver.createdAt, 'dd/MM/yyyy HH:mm') : '',
       lastActiveDate: '',
       lastShipmentDate: '',
@@ -448,12 +448,12 @@ export async function getDebtorReport(ids: string[]) {
       invoiceNo: _invoice?.invoiceNumber ?? '-',
       invoiceTotal: _invoice?.total || null,
       invoiceDate: fDate(_invoice?.invoiceDate, 'dd/MM/yyyy'),
-      ajustmentDecreaseNo: debitnote.map((note) => note.adjustmentNumber).join(', '),
-      ajustmentDecreaseTotal: _lastDebitnote?.totalAmount || 0,
-      ajustmentDecreaseDate: _lastDebitnote ? fDate(_lastDebitnote.issueDate, 'dd/MM/yyyy') : null,
-      ajustmentIncreaseNo: creditnote.map((note) => note.adjustmentNumber).join(', '),
-      ajustmentIncreaseTotal: _lastCreditnote?.totalAmount || 0,
-      ajustmentIncreaseDate: _lastCreditnote ? fDate(_lastCreditnote.issueDate, 'dd/MM/yyyy') : null,
+      ajustmentDecreaseNo: creditnote.map((note) => note.adjustmentNumber).join(', '),
+      ajustmentDecreaseTotal: _lastCreditnote?.totalAmount || 0,
+      ajustmentDecreaseDate: _lastCreditnote ? fDate(_lastCreditnote.issueDate, 'dd/MM/yyyy') : null,
+      ajustmentIncreaseNo: debitnote.map((note) => note.adjustmentNumber).join(', '),
+      ajustmentIncreaseTotal: _lastDebitnote?.totalAmount || 0,
+      ajustmentIncreaseDate: _lastDebitnote ? fDate(_lastDebitnote.issueDate, 'dd/MM/yyyy') : null,
       receiptNo: _receipts.map((receipt) => receipt.receiptNumber).join(', '),
       paymentDate: _payment.map((payment) => fDate(payment.createdAt, 'dd/MM/yyyy')).join(', '),
       receiptDate: _receipts.map((receipt) => fDate(receipt.receiptDate, 'dd/MM/yyyy')).join(', '),
@@ -515,15 +515,15 @@ export async function getCreditorReport(ids: string[]) {
       email: _driver?.email,
       contactNumber: _driver?.contactNumber,
       workingPeriod: '',
-      duedate: '',
-      overdueCount: '',
+      duedate: '', //
+      overdueCount: '', //
       shipments: _creditorShipments,
       subtotal: creditor.subtotal,
       whtValue: creditor.tax,
       total: creditor.total,
       paymentDate: fDate(creditor.paymentDate, 'dd/MM/yyyy'),
-      receiptNo: '',
-      whtNo: '',
+      receiptNo: '', //
+      whtNo: '', //
     }
   })
 
