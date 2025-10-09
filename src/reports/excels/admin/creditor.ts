@@ -52,7 +52,8 @@ export async function generateCreditorReport(data: CreditorReport[]): Promise<Wo
       { header: 'ภาษีหัก ณ ที่จ่าย 1%', key: 'whtValue', width: 20, style: _numberFormatStyle },
       { header: 'มูลค่าที่ต้องชำระสุทธิ', key: 'total', width: 18, style: _numberFormatStyle },
       { header: 'Payment Date', key: 'paymentDate', width: 18 },
-      { header: 'Receipt/Payment Voucher No.', key: 'receiptNo', width: 18 },
+      { header: 'Payment Voucher No.', key: 'voucherNo', width: 18 },
+      { header: 'Receipt No.', key: 'receiptNo', width: 18 },
       { header: 'WHT No.', key: 'whtNo', width: 18 },
     ]
     worksheet.getRow(1).height = 20

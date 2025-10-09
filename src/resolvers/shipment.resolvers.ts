@@ -44,6 +44,7 @@ import { differenceInMinutes } from 'date-fns'
 import { handleUpdateBookingTime } from '@controllers/shipmentOperation'
 import { StepDefinition } from '@models/shipmentStepDefinition.model'
 import { Destination } from '@models/shipment/objects'
+import NotificationModel, { ENavigationType, ENotificationVarient } from '@models/notification.model'
 
 Aigle.mixin(lodash, {})
 
@@ -494,6 +495,44 @@ export default class ShipmentResolver {
 
     if (updatedShipment.driverAcceptanceStatus !== EDriverAcceptanceStatus.ACCEPTED) {
       await shipmentNotify(shipmentId)
+    } else {
+      if (
+        updatedShipment.status === EShipmentStatus.PROGRESSING &&
+        (updatedShipment.driver || updatedShipment.agentDriver)
+      ) {
+        const agentDriverId = get(updatedShipment, 'agentDriver._id', '')
+        if (agentDriverId) {
+          await NotificationModel.sendNotification(
+            {
+              userId: agentDriverId,
+              varient: ENotificationVarient.INFO,
+              title: 'งานขนส่งมีการเปลี่ยนแปลงเวลา',
+              message: [
+                `เราขอแจ้งให้ท่านทราบว่างานขนส่งหมายเลข ${updatedShipment.trackingNumber} มีการเปลี่ยนแปลงเวลาการดำเนินการโปรดตรวจสอบ หากผิดข้อผิดพลาดกรุณาแจ้งผู้ดูแล`,
+              ],
+            },
+            session,
+            true,
+            { navigation: ENavigationType.SHIPMENT, trackingNumber: updatedShipment.trackingNumber },
+          )
+        }
+        const driverId = get(updatedShipment, 'driver._id', '')
+        if (driverId) {
+          await NotificationModel.sendNotification(
+            {
+              userId: driverId,
+              varient: ENotificationVarient.INFO,
+              title: 'งานขนส่งมีการเปลี่ยนแปลง',
+              message: [
+                `เราขอแจ้งให้ท่านทราบว่างานขนส่งหมายเลข ${updatedShipment.trackingNumber} มีการเปลี่ยนแปลงโปรดตรวจสอบ หากผิดข้อผิดพลาดกรุณาแจ้งผู้ดูแล`,
+              ],
+            },
+            session,
+            true,
+            { navigation: ENavigationType.SHIPMENT, trackingNumber: updatedShipment.trackingNumber },
+          )
+        }
+      }
     }
 
     return true

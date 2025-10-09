@@ -73,6 +73,7 @@ import { generateCashReceipt } from 'reports/cashReceipt'
 import RefundNoteModel from '@models/finance/refundNote.model'
 import { generateRefundReceipt } from 'reports/refundReceipt'
 import StepDefinitionModel, { EStepDefinition } from '@models/shipmentStepDefinition.model'
+import BillingAdjustmentNoteModel from '@models/finance/billingAdjustmentNote.model'
 
 @Resolver()
 export default class BillingResolver {
@@ -329,7 +330,7 @@ export default class BillingResolver {
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async resentBillingDocumentToEmail(
-    @Arg('type') type: 'invoice' | 'receipt',
+    @Arg('type') type: 'invoice' | 'receipt' | 'adjustmentnote',
     @Arg('billingId') billingId: string,
     @Arg('documentId') documentId: string,
   ): Promise<boolean> {
@@ -383,6 +384,34 @@ export default class BillingResolver {
             attachments: [{ filename: path.basename(filePath), path: filePath }],
           })
           await BillingDocumentModel.findByIdAndUpdate(documentId, { emailTime: new Date() })
+        } else if (type === 'adjustmentnote') {
+          const adjustment = await BillingAdjustmentNoteModel.findOne({ document: documentId }).lean()
+          if (adjustment) {
+            const filePath = path.join(__dirname, '..', '..', 'generated/adjustmentnote', _document.filename)
+            const typeText = adjustment.adjustmentType === EAdjustmentNoteType.CREDIT_NOTE ? 'ใบเพิ่มหนี้' : 'ใบลดหนี้'
+
+            const subject = `[Auto Email] Movemate Thailand เอกสาร${typeText} เลขที่ ${adjustment.adjustmentNumber}`
+            await addEmailQueue({
+              from: process.env.MAILGUN_SMTP_EMAIL,
+              to: emails,
+              subject: subject,
+              template: 'notify_adjustment_note', // ชื่อ template ใหม่
+              context: {
+                customer_name: _customer.fullname,
+                document_title: typeText,
+                adjustment_number: adjustment.adjustmentNumber,
+                contact_number: '02-xxx-xxxx', // ควรมาจาก config
+                movemate_link: 'https://www.movematethailand.com',
+              },
+              attachments: [
+                {
+                  filename: path.basename(filePath),
+                  path: filePath,
+                },
+              ],
+            })
+            await BillingDocumentModel.findByIdAndUpdate(documentId, { emailTime: new Date() })
+          }
         }
       }
       return true
@@ -720,42 +749,6 @@ export default class BillingResolver {
           session,
         )
       }
-
-      const _document = adjustmentNote.document as BillingDocument | undefined
-
-      if (!_document) {
-        console.error('No document found for adjustment note')
-        return
-      }
-
-      const subject = `[Auto Email] Movemate Thailand เอกสาร${typeText} เลขที่ ${adjustmentNote.adjustmentNumber}`
-      const financialEmails = get(_user, 'businessDetail.creditPayment.financialContactEmails', [])
-      const emails = uniq([_user.email, ...financialEmails]).filter(Boolean)
-      if (emails.length === 0) {
-        console.error(`No email address for customer ${_user.userNumber} to send adjustment note.`)
-        return
-      }
-
-      // 4. เพิ่มเข้าคิวส่งอีเมล
-      await addEmailQueue({
-        from: process.env.MAILGUN_SMTP_EMAIL,
-        to: emails,
-        subject: subject,
-        template: 'notify_adjustment_note', // ชื่อ template ใหม่
-        context: {
-          customer_name: _user.fullname,
-          document_title: typeText,
-          adjustment_number: adjustmentNote.adjustmentNumber,
-          contact_number: '02-xxx-xxxx', // ควรมาจาก config
-          movemate_link: 'https://www.movematethailand.com',
-        },
-        attachments: [
-          {
-            filename: fileName,
-            path: filePath,
-          },
-        ],
-      })
     }
     return true
   }

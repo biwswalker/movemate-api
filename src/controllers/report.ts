@@ -1,5 +1,5 @@
 import { BookingReport, generateBookingReport, generateCustomerBookingReport } from 'reports/excels/admin/booking'
-import { fDate, fDateTime } from '@utils/formatTime'
+import { fDate, fDateTime, fRage } from '@utils/formatTime'
 import path from 'path'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import Aigle from 'aigle'
@@ -25,7 +25,7 @@ import { Receipt } from '@models/finance/receipt.model'
 import { Invoice } from '@models/finance/invoice.model'
 import { EAdjustmentNoteType, EBillingState, EBillingStatus } from '@enums/billing'
 import { BillingDocument } from '@models/finance/documents.model'
-import { differenceInDays } from 'date-fns'
+import { differenceInDays, min as minDate, max as maxDate } from 'date-fns'
 import DriverPaymentModel from '@models/driverPayment.model'
 import { CreditorReport, generateCreditorReport } from 'reports/excels/admin/creditor'
 import { Transaction } from '@models/transaction.model'
@@ -235,7 +235,11 @@ export async function getAdminBookingReport(ids: string[]) {
     const _shipmentResolver = new ShipmentResolver()
     const _calculated = await _shipmentResolver.getCalculationDetail(booking._id)
 
-    const _quotation = last(((booking.quotations || []) as Quotation[]).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation
+    const _quotation = last(
+      ((booking.quotations || []) as Quotation[]).filter((_quotation) =>
+        includes([EQuotationStatus.ACTIVE], _quotation.status),
+      ),
+    ) as Quotation
     const _cost = _quotation.cost
     const _price = _quotation.price
     const _discount = reduce(
@@ -372,7 +376,9 @@ export async function getAdminDriverReport(ids: string[]) {
       email: driver.email,
       status: getUserStatus(driver.status),
       vehicleType: _vehicle.map((vehicle) => vehicle.name).join(', '),
-      licensePlate: `${_driverDetail?.licensePlateNumber || ''}${_driverDetail?.licensePlateProvince ? ' (' + _driverDetail.licensePlateProvince + ')' : ''}`,
+      licensePlate: `${_driverDetail?.licensePlateNumber || ''}${
+        _driverDetail?.licensePlateProvince ? ' (' + _driverDetail.licensePlateProvince + ')' : ''
+      }`,
       registeredDate: driver.createdAt ? fDate(driver.createdAt, 'dd/MM/yyyy HH:mm') : '',
       lastActiveDate: '',
       lastShipmentDate: '',
@@ -490,7 +496,11 @@ export async function getCreditorReport(ids: string[]) {
 
     const _creditorShipments = _shipments.map((shipment) => {
       const _step = find(shipment.steps, ['step', EStepDefinition.FINISH]) as StepDefinition | undefined
-      const _qoutation = last(((shipment.quotations || []) as Quotation[]).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
+      const _qoutation = last(
+        ((shipment.quotations || []) as Quotation[]).filter((_quotation) =>
+          includes([EQuotationStatus.ACTIVE], _quotation.status),
+        ),
+      ) as Quotation | undefined
       if (_step && _step.stepStatus === EStepStatus.DONE) {
         return {
           shipmentNo: shipment.trackingNumber,
@@ -505,6 +515,9 @@ export async function getCreditorReport(ids: string[]) {
       }
     })
 
+    const mindate = minDate(_shipments.map((_shipments) => _shipments.bookingDateTime))
+    const maxdate = maxDate(_shipments.map((_shipments) => _shipments.bookingDateTime))
+
     return {
       userId: _driver?.userNumber,
       userType: getDriverType(_driver?.userType),
@@ -514,7 +527,7 @@ export async function getCreditorReport(ids: string[]) {
       address: _driver?.address,
       email: _driver?.email,
       contactNumber: _driver?.contactNumber,
-      workingPeriod: '',
+      workingPeriod: fRage(mindate, maxdate),
       duedate: '', //
       overdueCount: '', //
       shipments: _creditorShipments,
@@ -522,8 +535,9 @@ export async function getCreditorReport(ids: string[]) {
       whtValue: creditor.tax,
       total: creditor.total,
       paymentDate: fDate(creditor.paymentDate, 'dd/MM/yyyy'),
-      receiptNo: '', //
-      whtNo: '', //
+      voucherNo: creditor.paymentNumber,
+      receiptNo: creditor.whtBookNo,
+      whtNo: creditor.whtNumber,
     }
   })
 
@@ -550,7 +564,11 @@ export async function getCustomerBookingReport(ids: string[], customerId: string
     const destinations = tail(booking.destinations || [])
     const vehicle = booking.vehicleId as VehicleType | undefined
 
-    const _quotation = last(((booking.quotations || []) as Quotation[]).filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
+    const _quotation = last(
+      ((booking.quotations || []) as Quotation[]).filter((_quotation) =>
+        includes([EQuotationStatus.ACTIVE], _quotation.status),
+      ),
+    ) as Quotation | undefined
     const _price = _quotation?.price
     const _discount = reduce(
       _quotation?.detail?.discounts || [],

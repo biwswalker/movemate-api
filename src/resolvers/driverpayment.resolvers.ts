@@ -38,7 +38,7 @@ export default class DriverPaymentResolver {
   ): Promise<boolean> {
     const session = ctx.session
     const userId = ctx.req.user_id
-    if (!userId) {
+    if (!driverId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
@@ -103,10 +103,11 @@ export default class DriverPaymentResolver {
 
     await driverPayment.save({ session })
 
-    const _newDriverPayment = await DriverPaymentModel.findById(driverPayment._id)
+    const _newDriverPayment = await DriverPaymentModel.findById(driverPayment._id).session(session)
+
     const { document } = await generateDriverReceipt(_newDriverPayment, session)
     if(document) {
-      await _newDriverPayment.updateOne({ receiptDocument: document })
+      await _newDriverPayment.updateOne({ receiptDocument: document }, { session })
     }
 
     // Add transaction For Driver

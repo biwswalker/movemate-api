@@ -405,8 +405,12 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
   const _customer = _shipment.customer as User | undefined
   if (!_customer) throw new GraphQLError('ไม่พบข้อมูลลูกค้าในงานขนส่ง')
 
-  const _oldQuotation = last(sortBy(_shipment.quotations as Quotation[], 'createdAt').filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation
-  
+  const _oldQuotation = last(
+    sortBy(_shipment.quotations as Quotation[], 'createdAt').filter((_quotation) =>
+      includes([EQuotationStatus.ACTIVE], _quotation.status),
+    ),
+  ) as Quotation
+
   if (!_oldQuotation) throw new GraphQLError('ไม่พบข้อมูลใบเสนอราคาเดิม')
 
   // --- 1. คำนวณราคาและเส้นทางใหม่ ---
@@ -462,7 +466,11 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
   } else {
     // ** LOGIC สำหรับงานเงินสด **
     const _cashBilling = await BillingModel.findOne({ billingNumber: _shipment.trackingNumber }).session(session)
-    const _lastPayment = last(sortBy(_cashBilling.payments as Payment[], 'createdAt').filter(_payment => !includes([EPaymentStatus.CANCELLED], _payment.status)))
+    const _lastPayment = last(
+      sortBy(_cashBilling.payments as Payment[], 'createdAt').filter(
+        (_payment) => !includes([EPaymentStatus.CANCELLED], _payment.status),
+      ),
+    )
 
     if (_lastPayment && _lastPayment.status === EPaymentStatus.COMPLETE) {
       // ** กรณีจ่ายเงินแล้ว: สร้าง Payment ใหม่ "เฉพาะส่วนต่าง" **
@@ -573,8 +581,8 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
           { status: EPaymentStatus.CANCELLED, updatedBy: adminId },
           { session },
         )
-        const _qoutationIds = ((_lastPayment?.quotations || []) as Quotation[]).map(_quotation => _quotation._id)
-        await QuotationModel.updateMany({ _id: { $in: _qoutationIds }}, { status: EQuotationStatus.VOID })
+        const _qoutationIds = ((_lastPayment?.quotations || []) as Quotation[]).map((_quotation) => _quotation._id)
+        await QuotationModel.updateMany({ _id: { $in: _qoutationIds } }, { status: EQuotationStatus.VOID })
       }
 
       const _paymentNumber = await generateTrackingNumber(`PAYCAS${generateMonth}`, 'payment', 3)
@@ -845,38 +853,38 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
     session,
   )
 
-  if (_shipment.status === EShipmentStatus.PROGRESSING && (_shipment.driver || _shipment.agentDriver)) {
-    const agentDriverId = get(_shipment, 'agentDriver._id', '')
-    if (agentDriverId) {
-      await NotificationModel.sendNotification(
-        {
-          userId: agentDriverId,
-          varient: ENotificationVarient.INFO,
-          title: 'งานขนส่งมีการเปลี่ยนแปลง',
-          message: [
-            `เราขอแจ้งให้ท่านทราบว่างานขนส่งหมายเลข ${_shipment.trackingNumber} มีการเปลี่ยนแปลงโปรดตรวจสอบ หากผิดข้อผิดพลาดกรุณาแจ้งผู้ดูแล`,
-          ],
-        },
-        session,
-        true,
-        { navigation: ENavigationType.SHIPMENT, trackingNumber: _shipment.trackingNumber },
-      )
-    }
-    const driverId = get(_shipment, 'driver._id', '')
-    if (driverId) {
-      await NotificationModel.sendNotification(
-        {
-          userId: driverId,
-          varient: ENotificationVarient.INFO,
-          title: 'งานขนส่งมีการเปลี่ยนแปลง',
-          message: [
-            `เราขอแจ้งให้ท่านทราบว่างานขนส่งหมายเลข ${_shipment.trackingNumber} มีการเปลี่ยนแปลงโปรดตรวจสอบ หากผิดข้อผิดพลาดกรุณาแจ้งผู้ดูแล`,
-          ],
-        },
-        session,
-        true,
-        { navigation: ENavigationType.SHIPMENT, trackingNumber: _shipment.trackingNumber },
-      )
-    }
+  // if (_shipment.status === EShipmentStatus.PROGRESSING) {
+  const agentDriverId = get(_shipment, 'agentDriver._id', '')
+  if (agentDriverId) {
+    await NotificationModel.sendNotification(
+      {
+        userId: agentDriverId,
+        varient: ENotificationVarient.INFO,
+        title: 'งานขนส่งมีการเปลี่ยนแปลง',
+        message: [
+          `เราขอแจ้งให้ท่านทราบว่างานขนส่งหมายเลข ${_shipment.trackingNumber} มีการเปลี่ยนแปลงโปรดตรวจสอบ หากผิดข้อผิดพลาดกรุณาแจ้งผู้ดูแล`,
+        ],
+      },
+      session,
+      true,
+      { navigation: ENavigationType.SHIPMENT, trackingNumber: _shipment.trackingNumber },
+    )
   }
+  const driverId = get(_shipment, 'driver._id', '')
+  if (driverId) {
+    await NotificationModel.sendNotification(
+      {
+        userId: driverId,
+        varient: ENotificationVarient.INFO,
+        title: 'งานขนส่งมีการเปลี่ยนแปลง',
+        message: [
+          `เราขอแจ้งให้ท่านทราบว่างานขนส่งหมายเลข ${_shipment.trackingNumber} มีการเปลี่ยนแปลงโปรดตรวจสอบ หากผิดข้อผิดพลาดกรุณาแจ้งผู้ดูแล`,
+        ],
+      },
+      session,
+      true,
+      { navigation: ENavigationType.SHIPMENT, trackingNumber: _shipment.trackingNumber },
+    )
+  }
+  // }
 }
