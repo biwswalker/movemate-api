@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { get, reduce, head, tail, clone, round } from 'lodash'
+import { get, reduce, head, tail, clone, round, toNumber } from 'lodash'
 import PDFDocument, { Table, DataOptions } from 'pdfkit-table'
 import { fCurrency } from '@utils/formatNumber'
 import { fDate } from '@utils/formatTime'
@@ -90,10 +90,13 @@ export async function generateAdvanceReceipt(
       '',
     )}`
     amount = receipt.subTotal
+    const issueInBEDateMonth = fDate(shipment.bookingDateTime, 'dd/MM')
+    const issueInBEYear = toNumber(fDate(shipment.bookingDateTime, 'yyyy')) + 543
+    const displayDate = `${issueInBEDateMonth}/${issueInBEYear}`
 
     return {
       no: { label: String(no), options },
-      bookingDateTime: { label: fDate(shipment.bookingDateTime, 'dd/MM/yyyy'), options },
+      bookingDateTime: { label: displayDate, options },
       trackingNumber: { label: shipment.trackingNumber, options },
       details: { label: details, options: { ...options, align: 'left' } },
       subtotal: { label: fCurrency(amount, true), options },

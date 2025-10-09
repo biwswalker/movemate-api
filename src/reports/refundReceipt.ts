@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { get, reduce, head, tail, clone, round } from 'lodash'
+import { get, reduce, head, tail, clone, round, toNumber } from 'lodash'
 import PDFDocument, { Table, DataOptions } from 'pdfkit-table'
 import { fCurrency } from '@utils/formatNumber'
 import { fDate } from '@utils/formatTime'
@@ -89,9 +89,13 @@ export async function generateRefundReceipt(
     )}`
     const amount = refundNote.subtotal || 0
 
+    const issueInBEDateMonth = fDate(shipment.bookingDateTime, 'dd/MM')
+    const issueInBEYear = toNumber(fDate(shipment.bookingDateTime, 'yyyy')) + 543
+    const displayDate = `${issueInBEDateMonth}/${issueInBEYear}`
+
     return {
       no: { label: String(no), options },
-      bookingDateTime: { label: fDate(shipment.bookingDateTime, 'dd/MM/yyyy'), options },
+      bookingDateTime: { label: displayDate, options },
       trackingNumber: { label: shipment.trackingNumber, options },
       details: { label: details, options: { ...options, align: 'left' } },
       subtotal: { label: fCurrency(amount, true), options },
@@ -127,12 +131,28 @@ export async function generateRefundReceipt(
   let isOiginal = true
   let currentPage = 1
   const headerHeight = clone(doc.y - doc.page.margins.top)
-  NonTaxRefundReceiptHeaderComponent(doc, _user, refundNote, _previousRefAdvanceReceiptNumber, currentPage, currentPage, isOiginal)
+  NonTaxRefundReceiptHeaderComponent(
+    doc,
+    _user,
+    refundNote,
+    _previousRefAdvanceReceiptNumber,
+    currentPage,
+    currentPage,
+    isOiginal,
+  )
 
   await doc.on('pageAdded', () => {
     currentPage++
     if (!nomoredata) {
-      NonTaxRefundReceiptHeaderComponent(doc, _user, refundNote, _previousRefAdvanceReceiptNumber, currentPage, currentPage, isOiginal)
+      NonTaxRefundReceiptHeaderComponent(
+        doc,
+        _user,
+        refundNote,
+        _previousRefAdvanceReceiptNumber,
+        currentPage,
+        currentPage,
+        isOiginal,
+      )
       doc.moveDown(2)
     } else {
       doc.moveDown(10)

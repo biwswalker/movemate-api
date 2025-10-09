@@ -4,7 +4,7 @@ import { EUserRole } from '@enums/users'
 import { AuthGuard } from '@guards/auth.guards'
 import { CreateDriverPaymentInput, GetDriverPaymentArgs } from '@inputs/driver-payment.input'
 import { PaginationArgs } from '@inputs/query.input'
-import RetryTransactionMiddleware from '@middlewares/RetryTransaction'
+import RetryTransactionMiddleware, { WithTransaction } from '@middlewares/RetryTransaction'
 import DriverPaymentModel, { DriverPayment } from '@models/driverPayment.model'
 import FileModel from '@models/file.model'
 import TransactionModel, {
@@ -17,7 +17,7 @@ import TransactionModel, {
 import UserModel from '@models/user.model'
 import { DriverPaymentAggregatePayload } from '@payloads/driverPayment.payloads'
 import { DRIVER_PAYMENTS } from '@pipelines/driverPayment.pipeline'
-import { generateTrackingNumber } from '@utils/string.utils'
+import { generateMonthlySequenceNumber, generateTrackingNumber } from '@utils/string.utils'
 import { REPONSE_NAME } from 'constants/status'
 import { format } from 'date-fns'
 import { GraphQLError } from 'graphql'
@@ -25,6 +25,7 @@ import { isEmpty, map } from 'lodash'
 import { Arg, Args, Ctx, Mutation, Query, Resolver, UseMiddleware } from 'type-graphql'
 import { getAdminMenuNotificationCount } from './notification.resolvers'
 import pubsub, { NOTFICATIONS } from '@configs/pubsub'
+import { generateDriverReceipt } from 'reports/driverReceipt'
 
 @Resolver()
 export default class DriverPaymentResolver {
@@ -80,7 +81,8 @@ export default class DriverPaymentResolver {
     const today = new Date()
     const generateMonth = format(today, 'yyMM')
     const generateFullYearMonth = format(today, 'yyyyMM')
-    const _paymentNumber = await generateTrackingNumber(`PDRIV${generateMonth}`, 'payment', 3)
+    // GENERATE PaymentNumber
+    const _paymentNumber = await generateMonthlySequenceNumber('driver-receipt')
     const _whtNumber = await generateTrackingNumber(`WHT-TE${generateFullYearMonth}`, 'wht', 3)
 
     // Create driver payment detail
@@ -88,7 +90,6 @@ export default class DriverPaymentResolver {
       driver: driverId,
       paymentNumber: _paymentNumber,
       whtNumber: _whtNumber,
-      // whtBookNo: data.whtBookNo,
       imageEvidence,
       transactions: transactionsInDB,
       shipments,
@@ -101,6 +102,12 @@ export default class DriverPaymentResolver {
     })
 
     await driverPayment.save({ session })
+
+    const _newDriverPayment = await DriverPaymentModel.findById(driverPayment._id)
+    const { document } = await generateDriverReceipt(_newDriverPayment, session)
+    if(document) {
+      await _newDriverPayment.updateOne({ receiptDocument: document })
+    }
 
     // Add transaction For Driver
     const descriptionForDriver = `ได้รับค่างานขนส่ง ${shipments.length} รายการ`
@@ -179,6 +186,24 @@ export default class DriverPaymentResolver {
       { paymentNumber },
       { whtBookNo: documentNumber, receiveReceiptDate: receiveDate },
     )
+    return true
+  }
+
+  @Mutation(() => Boolean)
+  @WithTransaction()
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async regenerateDriverReceipt(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('paymentNumber') paymentNumber: string,
+  ): Promise<boolean> {
+    const session = ctx.session
+    const _driverPayment = await DriverPaymentModel.findOne({ paymentNumber }).session(session)
+    if (_driverPayment) {
+      const { document } = await generateDriverReceipt(_driverPayment, session)
+      if (isEmpty(_driverPayment.receiptDocument)) {
+        await DriverPaymentModel.findOneAndUpdate({ paymentNumber }, { receiptDocument: document }).session(session)
+      }
+    }
     return true
   }
 }

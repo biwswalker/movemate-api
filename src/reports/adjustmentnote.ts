@@ -1,4 +1,4 @@
-import { findIndex, round } from 'lodash'
+import { findIndex, round, toNumber } from 'lodash'
 import PDFDocument, { Table, DataOptions } from 'pdfkit-table'
 import fs from 'fs'
 import path from 'path'
@@ -63,9 +63,14 @@ export async function generateAdjustmentNote(
       fontSize: 8,
       separation: false,
     }
+
+    const issueInBEDateMonth = fDate(item.serviceDate, 'dd/MM')
+    const issueInBEYear = toNumber(fDate(item.serviceDate, 'yyyy')) + 543
+    const displayDate = `${issueInBEDateMonth}/${issueInBEYear}`
+
     return {
       no: { label: String(index + 1), options },
-      serviceDate: { label: item.serviceDate ? fDate(item.serviceDate, 'dd/MM/yyyy') : '-', options },
+      serviceDate: { label: item.serviceDate ? displayDate : '-', options },
       shipmentNumber: { label: item.shipmentNumber || '-', options },
       details: { label: item.description, options: { ...options, align: 'left' } },
       amount: { label: fCurrency(item.amount), options },

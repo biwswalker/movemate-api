@@ -87,6 +87,10 @@ export class DriverPayment {
 
   @Field(() => BillingDocument, { nullable: true })
   @Property({ ref: () => BillingDocument, autopopulate: true })
+  receiptDocument: Ref<BillingDocument>
+
+  @Field(() => BillingDocument, { nullable: true })
+  @Property({ ref: () => BillingDocument, autopopulate: true })
   document: Ref<BillingDocument>
 
   static aggregatePaginate: mongoose.AggregatePaginateModel<typeof DriverPayment>['aggregatePaginate']

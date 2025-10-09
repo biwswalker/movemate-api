@@ -82,6 +82,10 @@ export async function generateMonthlySequenceNumber(docType: TDocumentType, leng
       prefix = 'RE'
       redisKeyType = 'receipt_monthly_seq'
       break
+    case 'driver-receipt':
+      prefix = 'RE'
+      redisKeyType = 'receipt_driver_monthly_seq'
+      break
     case 'creditnote':
       prefix = 'CR' // Assuming 'ADJ' as a prefix for creditnote documents
       redisKeyType = 'creditnote_monthly_seq'

@@ -17,6 +17,7 @@ export const ASSETS = {
   SIGNATURE: path.join(__dirname, '..', '..', 'assets/images/secures/theppawnchai-sign.png'),
   THEPPAWNCHAI: path.join(__dirname, '..', '..', 'assets/images/secures/theppawnchai-logo.png'),
   THEPPAWNCHAI_CREDENTIAL: path.join(__dirname, '..', '..', 'assets/images/secures/theppawnchai-sign-combination.png'),
+  THEPPAWNCHAI_CREDENTIAL_2: path.join(__dirname, '..', '..', 'assets/images/secures/theppawnchai-sign-combination_2.png'),
   BANK: {
     KBANK: path.join(__dirname, '..', '..', 'assets/images/kbank-full.png'),
   },
