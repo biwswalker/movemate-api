@@ -760,6 +760,7 @@ export default class UserResolver {
             message: messages,
           },
           session,
+          true,
         )
         await pubsub.publish(USERS.STATUS, user._id, status)
       }

@@ -360,6 +360,7 @@ export default class DriverResolver {
           ],
         },
         session,
+        true,
       )
 
       await NotificationModel.sendNotificationToAdmins(
@@ -687,6 +688,7 @@ export default class DriverResolver {
           message: [`คุณได้ส่งข้อมูลเพื่อสมัคคนขับ Movemate อีกครั้ง โปรดรอเจ้าหน้าที่ตรวจสอบบัญชีของท่าน`],
         },
         session,
+        true
       )
 
       return true
@@ -848,7 +850,7 @@ export default class DriverResolver {
         message: [
           `ยินดีต้อนรับ คุณ ${driverDetailModel.fullname} เข้าสู่ทีมขับรถของเรา โปรดรอเจ้าหน้าที่ตรวจสอบบัญชีของท่าน`,
         ],
-      })
+      }, session, true)
 
       return {
         phoneNumber: detail.phoneNumber,
