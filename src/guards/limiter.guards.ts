@@ -17,7 +17,7 @@ export const RequestLimiterGuard: MiddlewareFn<GraphQLContext> = async (
     const userModel = await UserModel.findById(user_id)
     if (userModel) {
       if (userModel.userType === EUserType.BUSINESS) {
-        if (userModel.status !== EUserStatus.ACTIVE) {
+        if (![EUserStatus.ACTIVE, EUserStatus.OVERDUE].includes(userModel.status)) {
           const message = `คุณไม่สามารถใช้ฟังก์ชั่นการค้นหาราคาได้เนื่องจาก บัญชีของคุณโดนระงับ กรุณาติดต่อเจ้าหน้าที่`
           throw new GraphQLError(message, {
             extensions: { code: REPONSE_NAME.SEARCH_BANNED, errors: [{ message }] },

@@ -42,10 +42,12 @@ export default class AuthResolver {
         await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
         const message = `บัญชี ${email} ยังไม่ได้ยืนยันอีเมล โปรดยืนยันอีเมลก่อน หากไม่ได้รับอีเมลโปรดติดต่อเจ้าหน้าที่`
         throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })
-      } else if (user.status === EUserStatus.INACTIVE) {
+      } else if (user.status === EUserStatus.OVERDUE) {
         // TODO: ยังสามารถใช้งานได้ปกติ
+      } else if (user.status === EUserStatus.INACTIVE) {
+        // TODO: ยังสามารถใช้งานได้ปกติ  แต่ไม่สามารถจองได้
       } else if (user.status === EUserStatus.BANNED && user.userRole === EUserRole.CUSTOMER) {
-        // TODO: สามารถ login ได้ แต่ แจ้งชำระ และ ดูประวัติงานเก่าได้
+        // TODO: ไม่สามารถ login ได้
         await AuditLog.createLog(user._id, EAuditActions.LOGIN_FAILED, 'User', user._id, ctx.ip)
         const message = `บัญชีของท่านโดนระงับการใช้งานจากผู้ดูแลระบบ โปรดติดต่อเจ้าหน้าที่หากมีข้อสงสัย`
         throw new GraphQLError(message, { extensions: { code: 'VERIFY_EMAIL_REQUIRE', message } })

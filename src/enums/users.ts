@@ -32,6 +32,7 @@ registerEnumType(EUserCriterialType, {
 export enum EUserStatus {
   PENDING = 'PENDING',
   ACTIVE = 'ACTIVE',
+  OVERDUE = 'OVERDUE',
   INACTIVE = 'INACTIVE',
   BANNED = 'BANNED',
   DENIED = 'DENIED',

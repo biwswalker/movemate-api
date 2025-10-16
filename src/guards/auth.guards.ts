@@ -5,7 +5,7 @@ import UserModel from '@models/user.model'
 import { NextFunction, Request, Response } from 'express'
 import { TokenExpiredError } from 'jsonwebtoken'
 import { includes } from 'lodash'
-import { EUserRole, EUserType } from '@enums/users'
+import { EUserRole, EUserStatus, EUserType } from '@enums/users'
 
 export const AuthGuard: (roles?: EUserRole[]) => MiddlewareFn<GraphQLContext> =
   (roles = [EUserRole.CUSTOMER]) =>
@@ -16,7 +16,7 @@ export const AuthGuard: (roles?: EUserRole[]) => MiddlewareFn<GraphQLContext> =
     if (!authorization || !authorization.startsWith('Bearer ')) {
       throw new AuthenticationError('รหัสระบุตัวตนไม่สมบูรณ์')
     }
-    
+
     try {
       const token = authorization.split(' ')[1]
       const decodedToken = verifyAccessToken(token)
@@ -26,23 +26,27 @@ export const AuthGuard: (roles?: EUserRole[]) => MiddlewareFn<GraphQLContext> =
       const user_id = decodedToken.user_id
       const user_role = decodedToken.user_role
       const user = await UserModel.findById(user_id).lean()
-      
+
       if (!user) {
         throw new AuthenticationError('ไม่พบผู้ใช้')
       }
-      
+
+      if ([EUserStatus.BANNED].includes(user.status)) {
+        throw new AuthenticationError('ถูกห้ามใช้งาน')
+      }
+
       if (!includes(roles, user_role)) {
         throw new AuthenticationError('ไม่สามารถใช้งานฟังก์ชั้นนี้ได้ เนื่องจากจำกัดสิทธิ์การเข้าถึง')
       }
-      
+
       const limit =
-      user.userRole === EUserRole.DRIVER
-      ? Infinity
-      : user.userType === EUserType.BUSINESS
-      ? Infinity
-      : user.userType === EUserType.INDIVIDUAL
-      ? 20
-      : 10
+        user.userRole === EUserRole.DRIVER
+          ? Infinity
+          : user.userType === EUserType.BUSINESS
+          ? Infinity
+          : user.userType === EUserType.INDIVIDUAL
+          ? 20
+          : 10
       req.user_id = user_id
       req.user_role = user_role
       req.limit = limit

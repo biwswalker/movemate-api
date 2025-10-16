@@ -75,6 +75,30 @@ export default class ShipmentResolver {
     }
   }
 
+  @Query(() => Shipment)
+  @UseMiddleware(AuthGuard([EUserRole.CUSTOMER, EUserRole.ADMIN]))
+  async getShipmentByTrackingLookup(
+    @Ctx() ctx: GraphQLContext,
+    @Arg('trackingNumber') trackingNumber: string,
+  ): Promise<Shipment> {
+    const user_id = ctx.req.user_id
+    const user_role = ctx.req.user_role
+    try {
+      const shipment = await ShipmentModel.findOne({
+        trackingNumber: { $regex: trackingNumber, $options: 'i' },
+        ...(user_role === EUserRole.CUSTOMER ? { customer: user_id } : {}),
+      })
+      if (!shipment) {
+        const message = `ไม่สามารถเรียกข้อมูลงานขนส่งได้`
+        throw new GraphQLError(message, { extensions: { code: 'NOT_FOUND', errors: [{ message }] } })
+      }
+      return shipment
+    } catch (error) {
+      console.log(error)
+      throw error
+    }
+  }
+
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.CUSTOMER]))
   async continueMatchingShipment(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {

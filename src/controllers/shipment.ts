@@ -25,7 +25,7 @@ import { extractThaiAddress, getPlaceDetail } from '@services/maps/location'
 import { calculateExistingQuotation, calculateQuotation } from './quotation'
 import { EPaymentMethod, EPaymentStatus, EPaymentType } from '@enums/payments'
 import { REPONSE_NAME } from 'constants/status'
-import { EDriverStatus, EUserRole } from '@enums/users'
+import { EDriverStatus, EUserRole, EUserStatus } from '@enums/users'
 import AdditionalServiceCostPricingModel from '@models/additionalServiceCostPricing.model'
 import ShipmentAdditionalServicePriceModel, {
   ShipmentAdditionalServicePrice,
@@ -70,6 +70,13 @@ export async function createShipment(data: ShipmentInput, customerId: string, se
     const message = 'ไม่สามารถหาข้อมูลลูกค้าได้ เนื่องจากไม่พบผู้ใช้งาน'
     throw new GraphQLError(message, {
       extensions: { code: 'NOT_FOUND', errors: [{ message }] },
+    })
+  }
+
+  if (![EUserStatus.ACTIVE, EUserStatus.OVERDUE].includes(customer.status)) {
+    const message = `คุณไม่สามารถใช้ฟังก์ชั่นการค้นหาราคาได้เนื่องจาก บัญชีของคุณโดนระงับ กรุณาติดต่อเจ้าหน้าที่`
+    throw new GraphQLError(message, {
+      extensions: { code: REPONSE_NAME.SEARCH_BANNED, errors: [{ message }] },
     })
   }
 

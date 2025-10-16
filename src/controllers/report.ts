@@ -108,10 +108,12 @@ function getUserStatus(status: EUserStatus) {
       return 'รอการอนุมัติ'
     case EUserStatus.ACTIVE:
       return 'ใช้งาน'
+    case EUserStatus.OVERDUE:
+      return 'ค้างชำระ'
     case EUserStatus.INACTIVE:
-      return 'ไม่ใช้งาน'
+      return 'ระงับใช้งาน'
     case EUserStatus.BANNED:
-      return 'ระงับการใช้งาน'
+      return 'ห้ามใช้งาน'
     case EUserStatus.DENIED:
       return 'ไม่อนุมัติ'
     default:

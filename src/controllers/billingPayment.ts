@@ -167,7 +167,7 @@ export async function markBillingAsPaid(
     const customerId = get(_billing, 'user._id', '')
     await recalculateCustomerCredit(customerId, session)
     await UserModel.findOneAndUpdate(
-      { _id: customerId, status: { $in: [EUserStatus.INACTIVE, EUserStatus.BANNED] } },
+      { _id: customerId, status: { $in: [EUserStatus.OVERDUE, EUserStatus.INACTIVE, EUserStatus.BANNED] } },
       { status: EUserStatus.ACTIVE },
     )
     /**

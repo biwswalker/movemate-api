@@ -420,9 +420,10 @@ export const GET_USERS = (
             branches: [
               { case: { $eq: ['$status', EUserStatus.PENDING] }, then: 0 },
               { case: { $eq: ['$status', EUserStatus.ACTIVE] }, then: 1 },
-              { case: { $eq: ['$status', EUserStatus.INACTIVE] }, then: 2 },
-              { case: { $eq: ['$status', EUserStatus.BANNED] }, then: 3 },
-              { case: { $eq: ['$status', EUserStatus.DENIED] }, then: 3 },
+              { case: { $eq: ['$status', EUserStatus.OVERDUE] }, then: 2 },
+              { case: { $eq: ['$status', EUserStatus.INACTIVE] }, then: 3 },
+              { case: { $eq: ['$status', EUserStatus.BANNED] }, then: 4 },
+              { case: { $eq: ['$status', EUserStatus.DENIED] }, then: 5 },
             ],
             default: 99,
           },

@@ -492,8 +492,8 @@ export async function checkBillingStatus() {
     await BillingModel.findByIdAndUpdate(billing._id, { state: EBillingState.OVERDUE })
     const customer = await UserModel.findById(billing.user)
     if (customer) {
-      if (!includes([EUserStatus.INACTIVE, EUserStatus.BANNED], customer.status)) {
-        await customer.updateOne({ status: EUserStatus.INACTIVE })
+      if (!includes([EUserStatus.OVERDUE, EUserStatus.INACTIVE, EUserStatus.BANNED], customer.status)) {
+        await customer.updateOne({ status: EUserStatus.OVERDUE })
       }
     }
   })
@@ -516,7 +516,7 @@ export async function checkBillingStatus() {
   await Aigle.forEach(_suspendedBillings, async (suspendedBill) => {
     const customer = await UserModel.findById(suspendedBill.user)
     if (customer) {
-      if (customer.status !== EUserStatus.BANNED) {
+      if (!includes([EUserStatus.INACTIVE, EUserStatus.BANNED], customer.status)) {
         await NotificationModel.sendNotification({
           userId: customer._id,
           varient: ENotificationVarient.ERROR,
@@ -525,7 +525,7 @@ export async function checkBillingStatus() {
           infoLink: `/main/billing?billing_number=${suspendedBill.billingNumber}`,
           infoText: 'คลิกเพื่อดูรายละเอียด',
         })
-        await customer.updateOne({ status: EUserStatus.BANNED })
+        await customer.updateOne({ status: EUserStatus.INACTIVE })
         _bannedCustomer = [..._bannedCustomer, customer._id]
       }
     }
