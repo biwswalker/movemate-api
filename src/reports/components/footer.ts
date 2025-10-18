@@ -159,7 +159,7 @@ export async function ReceiptFooterComponent(
       .moveDown(8)
   } else {
     // Non tax detail
-    doc.moveDown(18)
+    doc.moveDown(8)
     doc
       .font(FONTS.SARABUN_LIGHT)
       .fontSize(7)

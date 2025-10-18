@@ -41,9 +41,10 @@ export async function generateReceipt(
     const message = 'ไม่พบข้อมูลใบเสร็จ'
     throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
   }
+  
   const _document = _receipt.document as BillingDocument | undefined
-  const isReceiveWHTDocument = !isEmpty(_document?.receivedWHTDocumentDate)
-
+  const isReceiveWHTDocument = !!_document?.receivedWHTDocumentDate
+  
   let isAdditionalPaid = false
   if (billing.paymentMethod === EPaymentMethod.CASH) {
     const _receiptsLength = _receipts.length || 0
