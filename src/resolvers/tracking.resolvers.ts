@@ -29,7 +29,7 @@ export default class TrackingResolver {
 
       // 2. บันทึกตำแหน่งล่าสุดลง Redis (เร็วมาก!)
       // ตั้งค่าให้ข้อมูลหมดอายุใน 1 วัน
-      await redis.set(`driver-location:${driverId}`, JSON.stringify(locationData), 'EX', 86400)
+      await redis.set(`driver-location:${driverId}`, JSON.stringify(locationData), 'EX', 604800)
 
       // 3. Publish ข้อมูลไปยังช่องทาง Subscription
       // ใช้ ID ของ Shipment เพื่อให้ส่งข้อมูลถูกช่อง

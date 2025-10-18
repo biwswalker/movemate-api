@@ -28,7 +28,6 @@ import { Shipment } from '@models/shipment.model'
 import { EStepDefinition, EStepStatus, StepDefinition } from '@models/shipmentStepDefinition.model'
 import { Quotation } from '@models/finance/quotation.model'
 import { fDate } from '@utils/formatTime'
-import { WithTransaction } from '@middlewares/RetryTransaction'
 import { EQuotationStatus } from '@enums/shipments'
 
 Aigle.mixin(lodash, {})

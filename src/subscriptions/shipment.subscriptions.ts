@@ -2,7 +2,7 @@ import { AuthContext } from '@configs/graphQL.config'
 import { GetShipmentInput } from '@inputs/shipment.input'
 import ShipmentModel, { Shipment } from '@models/shipment.model'
 import { PaginateOptions } from 'mongoose'
-import { Arg, Args, Ctx, Resolver, Root, Subscription } from 'type-graphql'
+import { Arg, Args, Ctx, Resolver, Root, SubscribeResolverData, Subscription } from 'type-graphql'
 import { ShipmentListPayload } from '@payloads/shipment.payloads'
 import { LoadmoreArgs } from '@inputs/query.input'
 import { reformPaginate } from '@utils/pagination.utils'
@@ -46,6 +46,14 @@ export default class ShipmentSubscription {
     @Args() _loadMores: LoadmoreArgs,
     @Ctx() _ctx: AuthContext,
   ): ShipmentListPayload[] {
+    return payload
+  }
+
+  @Subscription({
+    topics: SHIPMENTS.SHIPMENT_UPDATE_FLAG,
+    topicId: ({ args }: SubscribeResolverData<number, { trackingNumber: string }, AuthContext>) => args.trackingNumber,
+  })
+  getRealtimeShipmentUpdateFlag(@Root() payload: string | 'Y' | 'N', @Arg('trackingNumber') trackingNumber: string): string {
     return payload
   }
 }

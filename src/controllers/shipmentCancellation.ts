@@ -37,6 +37,7 @@ import { addCustomerCreditUsage } from './customer'
 import RefundNoteModel from '@models/finance/refundNote.model'
 import ReceiptModel, { Receipt } from '@models/finance/receipt.model'
 import { generateCashReceipt } from 'reports/cashReceipt'
+import pubsub, { SHIPMENTS } from '@configs/pubsub'
 
 Aigle.mixin(lodash, {})
 
@@ -518,6 +519,8 @@ export async function cancelledShipment(input: CancelledShipmentInput, userId: s
     session,
   )
 
+  // Sent Flag update shipment data into Driver APP
+  await pubsub.publish(SHIPMENTS.SHIPMENT_UPDATE_FLAG, _shipment.trackingNumber, 'Y')
   // Trigger notification badge for Admin
   await getAdminMenuNotificationCount(session)
   // Trigger shipment list for Driver
@@ -612,5 +615,8 @@ export async function driverCancelledShipment(
     session,
   )
 
+  // Sent Flag update shipment data into Driver APP
+  await pubsub.publish(SHIPMENTS.SHIPMENT_UPDATE_FLAG, _shipment.trackingNumber, 'Y')
+  // 
   await publishDriverMatchingShipment(undefined, undefined, session)
 }

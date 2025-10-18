@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import NotificationModel, { ENotificationVarient } from '@models/notification.model'
 import addEmailQueue from '@utils/email.utils'
+import pubsub, { SHIPMENTS } from '@configs/pubsub'
 
 const test_api = Router()
 
@@ -20,6 +21,16 @@ test_api.get('/test/message-notification/:userId', async (req, res) => {
       undefined,
       fcmFlag === 'Y',
     )
+    res.status(200).send(`Successfully Nottfication`)
+  } catch (error) {
+    res.status(500).send(`Error: ${error.message}`)
+  }
+})
+
+test_api.get('/test/shipment-update/:trackingNumber', async (req, res) => {
+  const { trackingNumber } = req.params
+  try {
+    await pubsub.publish(SHIPMENTS.SHIPMENT_UPDATE_FLAG, trackingNumber, 'Y')
     res.status(200).send(`Successfully Nottfication`)
   } catch (error) {
     res.status(500).send(`Error: ${error.message}`)

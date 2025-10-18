@@ -325,7 +325,8 @@ export default class DriverResolver {
       // 4. User
       const password_decryption = decryption(detail.password)
       const hashedPassword = await bcrypt.hash(password_decryption, 10)
-      const userNumber = await generateId(detail.driverType === EDriverType.BUSINESS ? 'MMDB' : 'MMDI', 'driver')
+      const isRandom = true
+      const userNumber = await generateId(detail.driverType === EDriverType.BUSINESS ? 'AG' : 'DR', 'driver', isRandom)
 
       const currentDate = new Date()
       const user = new UserModel({
@@ -422,6 +423,8 @@ export default class DriverResolver {
         await BusinessDriverScema(driverId).validate(detail, { abortEarly: false })
       } else if (driverDetail.driverType.includes(EDriverType.INDIVIDUAL_DRIVER)) {
         await IndividualDriverScema(driverId).validate(detail, { abortEarly: false })
+      } else if (driverDetail.driverType.includes(EDriverType.BUSINESS_DRIVER)) {
+        // None
       } else {
         throw new GraphQLError('ไม่รองรับประเภทคนขับรถนี้')
       }

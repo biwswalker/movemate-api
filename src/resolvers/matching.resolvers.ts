@@ -259,6 +259,10 @@ export default class MatchingResolver {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
     }
+    if (user.status !== EUserStatus.ACTIVE) {
+      const message = 'ไม่สามารถรับงานได้ เนื่องจากท่านถูกระงับการใช้งาน'
+      throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
+    }
     const shipment = await ShipmentModel.findById(shipmentId).session(session)
     if (!shipment) {
       const message = 'ไม่สามารถเรียกข้อมูลงานขนส่งได้ เนื่องจากไม่พบงานขนส่งดังกล่าว'
@@ -346,6 +350,7 @@ export default class MatchingResolver {
   ): Promise<boolean> {
     const session = ctx.session
     const userId = ctx.req.user_id
+    const userRole = ctx.req.user_role
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -365,6 +370,11 @@ export default class MatchingResolver {
       { session },
     )
 
+    if (userRole === EUserRole.ADMIN) {
+      // Sent Flag update shipment data into Driver APP
+      await pubsub.publish(SHIPMENTS.SHIPMENT_UPDATE_FLAG, shipment.trackingNumber, 'Y')
+    }
+
     return true
   }
 
@@ -374,6 +384,7 @@ export default class MatchingResolver {
   async nextShipmentStep(@Ctx() ctx: GraphQLContext, @Arg('data') data: NextShipmentStepInput): Promise<boolean> {
     const session = ctx.session
     const userId = ctx.req.user_id
+    const userRole = ctx.req.user_role
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -386,6 +397,10 @@ export default class MatchingResolver {
 
     await nextStep(shipment._id, data.images || [], session)
 
+    if (userRole === EUserRole.ADMIN) {
+      // Sent Flag update shipment data into Driver APP
+      await pubsub.publish(SHIPMENTS.SHIPMENT_UPDATE_FLAG, shipment.trackingNumber, 'Y')
+    }
     return true
   }
 
@@ -397,6 +412,7 @@ export default class MatchingResolver {
   ): Promise<boolean> {
     const session = ctx.session
     const userId = ctx.req.user_id
+    const userRole = ctx.req.user_role
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -417,13 +433,17 @@ export default class MatchingResolver {
     }
 
     await podSent(shipment._id, data.images || [], data.trackingNumber, data.provider, session)
-
+    if (userRole === EUserRole.ADMIN) {
+      // Sent Flag update shipment data into Driver APP
+      await pubsub.publish(SHIPMENTS.SHIPMENT_UPDATE_FLAG, shipment.trackingNumber, 'Y')
+    }
     return true
   }
 
   @Mutation(() => Boolean)
   @UseMiddleware(AuthGuard([EUserRole.DRIVER, EUserRole.ADMIN]), RetryTransactionMiddleware)
   async markAsFinish(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
+    const userRole = ctx.req.user_role
     const session = ctx.session
 
     const shipment = await ShipmentModel.findById(shipmentId).session(session)
@@ -439,8 +459,12 @@ export default class MatchingResolver {
     if (paymentMethod === EPaymentMethod.CASH) {
       const _billing = await BillingModel.findOne({ billingNumber: shipment.trackingNumber }).session(session)
       if (_billing) {
-        const _payments = sortBy((_billing.payments || []) as Payment[], 'createdAt').filter(_payment => !includes([EPaymentStatus.CANCELLED], _payment.status))
-        const isWaitingPaidOrApproval = _payments.some((_payment) => _payment.status === EPaymentStatus.PENDING && _payment.type !== EPaymentType.REFUND)
+        const _payments = sortBy((_billing.payments || []) as Payment[], 'createdAt').filter(
+          (_payment) => !includes([EPaymentStatus.CANCELLED], _payment.status),
+        )
+        const isWaitingPaidOrApproval = _payments.some(
+          (_payment) => _payment.status === EPaymentStatus.PENDING && _payment.type !== EPaymentType.REFUND,
+        )
         if (isWaitingPaidOrApproval) {
           const message = 'ไม่สามารถดำเนินการสำเร็จได้ เนื่องลูกค้ายังไม่ได้ชำระเงิน'
           throw new GraphQLError(message, {
@@ -454,7 +478,11 @@ export default class MatchingResolver {
 
         const _paymentQoutations = _payments.filter((_payment) => !isEmpty(_payment.quotations))
         const lastPayment = last(_paymentQoutations)
-        const _quotation = last(sortBy(lastPayment.quotations as Quotation[], 'createdAt').filter((_quotation) => includes([EQuotationStatus.ACTIVE], _quotation.status))) as Quotation | undefined
+        const _quotation = last(
+          sortBy(lastPayment.quotations as Quotation[], 'createdAt').filter((_quotation) =>
+            includes([EQuotationStatus.ACTIVE], _quotation.status),
+          ),
+        ) as Quotation | undefined
 
         // if (_quotation?.price?.acturePrice !== _quotation?.price?.total && !(_advanceReceipts.length > 1)) {
         //   const _priceDifference = _quotation.price.acturePrice
@@ -500,6 +528,10 @@ export default class MatchingResolver {
 
     await UserModel.findByIdAndUpdate(shipment.driver, { drivingStatus: EDriverStatus.IDLE }, { session })
 
+    if (userRole === EUserRole.ADMIN) {
+      // Sent Flag update shipment data into Driver APP
+      await pubsub.publish(SHIPMENTS.SHIPMENT_UPDATE_FLAG, shipment.trackingNumber, 'Y')
+    }
     // Sent admin noti count updates
     await getAdminMenuNotificationCount(session)
     return true
@@ -510,6 +542,7 @@ export default class MatchingResolver {
   async markAsCancelled(@Ctx() ctx: GraphQLContext, @Arg('shipmentId') shipmentId: string): Promise<boolean> {
     const session = ctx.session
     const userId = ctx.req.user_id
+    const userRole = ctx.req.user_role
     if (!userId) {
       const message = 'ไม่สามารถหาข้อมูลคนขับได้ เนื่องจากไม่พบผู้ใช้งาน'
       throw new GraphQLError(message, { extensions: { code: REPONSE_NAME.NOT_FOUND, errors: [{ message }] } })
@@ -525,6 +558,10 @@ export default class MatchingResolver {
 
     // Sent admin noti count updates
     await getAdminMenuNotificationCount(session)
+    if (userRole === EUserRole.ADMIN) {
+      // Sent Flag update shipment data into Driver APP
+      await pubsub.publish(SHIPMENTS.SHIPMENT_UPDATE_FLAG, shipment.trackingNumber, 'Y')
+    }
     return true
   }
 

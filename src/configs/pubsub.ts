@@ -18,6 +18,7 @@ export const enum SHIPMENTS {
   GET_MATCHING_SHIPMENT = 'GET_MATCHING_SHIPMENT',
   UPDATE = 'SHIPMENT_UPDATE',
   DRIVER_LOCATION = 'DRIVER_LOCATION_UPDATE',
+  SHIPMENT_UPDATE_FLAG = 'SHIPMENT_UPDATE_FLAG',
 }
 
 export const enum LOCATIONS {
@@ -39,6 +40,7 @@ export default createPubSub<{
   [SHIPMENTS.GET_MATCHING_SHIPMENT]: [Shipment[]]
   [SHIPMENTS.UPDATE]: [string, Shipment]
   [SHIPMENTS.DRIVER_LOCATION]: [string, DriverLocation]
+  [SHIPMENTS.SHIPMENT_UPDATE_FLAG]: [string, string]
   [USERS.STATUS]: [string, EUserStatus]
   [USERS.FORCE_LOGOUT]: [string, string]
 }>()

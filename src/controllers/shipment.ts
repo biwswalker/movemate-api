@@ -61,6 +61,7 @@ import StepDefinitionModel, {
   EStepStatus,
   StepDefinition,
 } from '@models/shipmentStepDefinition.model'
+import pubsub, { SHIPMENTS } from '@configs/pubsub'
 
 Aigle.mixin(lodash, {})
 
@@ -844,6 +845,9 @@ export async function updateShipment(data: UpdateShipmentInput, adminId: string,
       }
     }
   }
+
+  // Sent Flag update shipment data into Driver APP
+  await pubsub.publish(SHIPMENTS.SHIPMENT_UPDATE_FLAG, _shipment.trackingNumber, 'Y')
 
   // Notification
   await NotificationModel.sendNotification(

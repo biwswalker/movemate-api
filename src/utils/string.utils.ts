@@ -4,6 +4,7 @@ import CouterModel from '@models/counter.model'
 import padStart from 'lodash/padStart'
 import { format, fromZonedTime } from 'date-fns-tz'
 import { endOfMonth } from 'date-fns'
+import { length } from 'class-validator'
 
 export function generateRandomNumberPattern(pattern = 'MM##########'): string {
   let trackingNumber: string = ''
@@ -38,12 +39,20 @@ export const generateRef = (length = 4) => {
   return ref
 }
 
-export async function generateId(prefix: string, type: TGenerateIDType) {
+export async function generateId(prefix: string, type: TGenerateIDType, isRandom: boolean = false) {
   const counter = await CouterModel.getNextCouter(type)
   // const nowUTC = utcToZonedTime(new Date(), 'UTC')
   // const datetime_id = format(nowUTC, 'yyMM')
-  const running_id = padStart(`${counter}`, 4, '0')
-  return `${prefix}${running_id}`
+  if (isRandom) {
+    const isMoreThanNine = counter > 9
+    const isMoreThanNineNine = counter > 99
+    const generateNumber = generateOTP(isMoreThanNineNine ? 1 : isMoreThanNine ? 2 : 3)
+    const running_id = padStart(`${isMoreThanNine}${generateNumber}`, 4, '0')
+    return `${prefix}${running_id}`
+  } else {
+    const running_id = padStart(`${counter}`, 4, '0')
+    return `${prefix}${running_id}`
+  }
 }
 
 export async function generateTrackingNumber(prefix: string, type: TGenerateIDType, len = 6, random = false) {
