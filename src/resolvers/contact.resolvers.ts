@@ -42,6 +42,13 @@ export default class ContactResolver {
     return contact
   }
 
+  @Mutation(() => Boolean)
+  @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
+  async markIsContacted(@Arg('id') id: string): Promise<boolean> {
+    await ContactModel.findByIdAndUpdate(id, { isContacted: true, contactDate: new Date() })
+    return true
+  }
+
   @Query(() => Contact)
   @UseMiddleware(AuthGuard([EUserRole.ADMIN]))
   async getContactById(@Arg('id') id: string): Promise<Contact> {

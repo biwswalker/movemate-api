@@ -32,7 +32,15 @@ export class Contact extends TimeStamps {
   @Field()
   @Property({ default: false })
   read: boolean
+
+  @Field({ nullable: true })
+  @Property({ default: false })
+  isContacted: boolean
   
+  @Field({ nullable: true })
+  @Property()
+  contactDate: Date
+
   @Field()
   @Property({ default: Date.now })
   createdAt: Date
