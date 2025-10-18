@@ -51,7 +51,7 @@ export async function ReceiptFooterComponent(
     .fontSize(8)
     .text(fCurrency(receipt.subTotal, true), 400, doc.y - 10, { align: 'right', width: maxWidth - 400 })
     .moveDown(1.5)
-  
+
   if (isTaxInclude) {
     doc
       .fontSize(8)
@@ -110,8 +110,14 @@ export async function ReceiptFooterComponent(
 
   // After transfer detail
   if (isTaxInclude && !isReceiveWHTDocument) {
+    if (receipt.remarks) {
+      doc.font(FONTS.SARABUN_MEDIUM).fontSize(9).text('หมายเหตุ', marginLeft).moveDown(0.8)
+      doc.font(FONTS.SARABUN_LIGHT).fontSize(7).text(receipt.remarks, marginLeft).moveDown(2)
+      // doc.moveDown(16)
+    } else {
+      doc.moveDown(4)
+    }
     // Tax detail
-    doc.moveDown(4)
     doc.font(FONTS.SARABUN_MEDIUM).fontSize(9).text('กรุณาออกเอกสารภาษีหัก ณ ที่จ่าย ในนาม', marginLeft).moveDown(0.8)
     doc
       .font(FONTS.SARABUN_LIGHT)
@@ -159,7 +165,13 @@ export async function ReceiptFooterComponent(
       .moveDown(8)
   } else {
     // Non tax detail
-    doc.moveDown(8)
+    if (receipt.remarks) {
+      doc.font(FONTS.SARABUN_MEDIUM).fontSize(9).text('หมายเหตุ', marginLeft).moveDown(0.8)
+      doc.font(FONTS.SARABUN_LIGHT).fontSize(7).text(receipt.remarks, marginLeft)
+      doc.moveDown(2)
+    } else {
+      doc.moveDown(4)
+    }
     doc
       .font(FONTS.SARABUN_LIGHT)
       .fontSize(7)
@@ -379,17 +391,10 @@ export async function InvoiceFooterComponent(doc: PDFDocument, billing: Billing,
       width: signatureWidth,
       align: 'center',
     })
-  doc
-    .moveDown(1.8)
-    .text(
-      `วันที่ ............... / ............... / ..............`,
-      marginLeft,
-      doc.y - 9,
-      {
-        width: signatureWidth,
-        align: 'center',
-      },
-    )
+  doc.moveDown(1.8).text(`วันที่ ............... / ............... / ..............`, marginLeft, doc.y - 9, {
+    width: signatureWidth,
+    align: 'center',
+  })
   doc.moveDown(1.8)
   doc
     .fillColor(COLORS.TEXT_PRIMARY)
